@@ -63,7 +63,8 @@ export function placeMeta(doc: PlaceDoc | null, locale: Locale, rest: string, ca
   const en = text(place.name_en);
   const zh = text(place.name_zh);
   const name = locale === 'zh' ? (zh ?? en ?? '') : (en ?? zh ?? '');
-  const other = locale === 'zh' ? en : zh;
+  // The other language's name, when there is one: a place with only an English name is not named twice.
+  const other = locale === 'zh' ? (zh ? en : null) : en ? zh : null;
   const category = CATEGORY_LABELS[String(place.category)]?.[locale] ?? '';
   const borough = BOROUGHS[String(place.borough_code)]?.[locale] ?? '';
   const cuisines = (Array.isArray(place.cuisines) ? (place.cuisines as string[]) : []).map((value) => CUISINE_LABELS[value]?.[locale] ?? value);

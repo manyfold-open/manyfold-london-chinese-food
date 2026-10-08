@@ -27,6 +27,8 @@ describe('page meta', () => {
     expect(meta.description).toContain('没有评分');
     const english = placeMeta(doc, 'en', '/place/x', 'https://site/en/place/x');
     expect(english.title).toBe('Example Noodle House (示例面馆) — Restaurant in Westminster · London Chinese Food');
+    const englishOnly = { ...doc, place: { ...doc.place, name_zh: undefined } } as PlaceDoc;
+    expect(placeMeta(englishOnly, 'zh', '/place/x', 'https://site/zh/place/x').title).toBe('Example Noodle House · 餐厅 · 威斯敏斯特 · 伦敦中餐');
   });
 
   it('gives a place structured data with no rating at all', () => {
