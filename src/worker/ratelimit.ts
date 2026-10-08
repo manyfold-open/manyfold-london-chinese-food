@@ -21,13 +21,20 @@ export const RULES = {
   joinPerDay: { limit: 20, windowMs: DAY },
   /** Requests per agent token. */
   tokenPerMinute: { limit: 60, windowMs: MINUTE },
-  /** Readers' data requests (POST /api/requests) per client IP. */
-  requestPerHour: { limit: 5, windowMs: HOUR },
+  /** Readers' reports (and takedown requests) per client IP. */
+  reportPerHour: { limit: 10, windowMs: HOUR },
+  /** Collectors' requests to recheck a record, per token. */
+  flagPerDay: { limit: 20, windowMs: DAY },
+  /** Visitors' photos per client IP. */
+  photoPerHour: { limit: 6, windowMs: HOUR },
+  photoPerDay: { limit: 20, windowMs: DAY },
   /**
-   * Data requests the whole site accepts in a day: the bound on the requests channel when many
-   * addresses send at once. Counted only for requests that passed the IP limit and the check.
+   * Photos the whole site accepts in a day: the bound on the review queue when many addresses send
+   * at once. Counted only for uploads that passed every other check.
    */
-  requestsPerDay: { limit: 100, windowMs: DAY },
+  photosPerDay: { limit: 300, windowMs: DAY },
+  /** Illustrations per agent token. */
+  illustrationPerHour: { limit: 30, windowMs: HOUR },
 } as const satisfies Record<string, RateRule>;
 
 const windowIndex = (nowMs: number, windowMs: number) => Math.floor(nowMs / windowMs);
