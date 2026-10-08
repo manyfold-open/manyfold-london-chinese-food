@@ -228,11 +228,17 @@ async function nothingToLease(db: D1Database, token: Token, kinds: readonly stri
     )
     .bind(token.id, at)
     .first<{ own: number | null; held: number | null; flagged: number | null }>();
-  const blocked = await db.prepare(`SELECT COUNT(*) AS n FROM tasks WHERE status = 'blocked'`).first<{ n: number }>();
+  const waiting = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM tasks INDEXED BY tasks_blocked WHERE status = 'blocked') AS blocked,
+              (SELECT COUNT(*) FROM tasks INDEXED BY tasks_review WHERE status = 'review') AS review`,
+    )
+    .first<{ blocked: number | null; review: number | null }>();
   const reasons = [
     row?.own ? `${row.own} open ${row.own === 1 ? 'task is' : 'tasks are'} for records this token sent, and a maintainer never reviews its own: another maintainer will. To add records yourself, send them with a collector token (POST /api/join) and keep this one for reviewing.` : '',
     row?.held ? `${row.held} ${row.held === 1 ? 'is' : 'are'} leased to other maintainers until their leases end.` : '',
-    blocked?.n ? `${blocked.n} wait for their place to be verified first.` : '',
+    waiting?.blocked ? `${waiting.blocked} wait for their place to be verified first.` : '',
+    waiting?.review ? `${waiting.review} wait for the site team, because a maintainer was unsure of them; the site team decides them or sends them back.` : '',
     row?.flagged ? `${row.flagged} ${row.flagged === 1 ? 'is' : 'are'} held for the site team.` : '',
   ].filter(Boolean);
   return reasons.length ? `Nothing to review for you now. ${reasons.join(' ')}` : 'Nothing to review right now: every record sent has a verdict.';

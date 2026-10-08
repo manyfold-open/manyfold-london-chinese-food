@@ -101,6 +101,11 @@ describe('leasing', () => {
     const leased = await lease(w, other);
     expect(leased.tasks).toHaveLength(1);
     expect((leased as unknown as { note?: string }).note).toBeUndefined();
+    await verdicts(w, other, [{ task_id: leased.tasks[0]!.id, verdict: 'unsure', reason: 'The page does not say what it sells.' }]);
+    const third = await maintainer(w, 'third maintainer');
+    const after = (await w.json<{ tasks: unknown[]; note: string }>('/api/tasks', { token: third })).body;
+    expect(after.tasks).toEqual([]);
+    expect(after.note).toContain('1 wait for the site team, because a maintainer was unsure of them');
   });
 
   it('opens the children when the place is verified', async () => {

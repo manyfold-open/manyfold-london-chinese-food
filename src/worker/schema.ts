@@ -138,6 +138,7 @@ CREATE INDEX IF NOT EXISTS tasks_open_kind ON tasks (record_kind, created_at, id
 CREATE INDEX IF NOT EXISTS tasks_leased ON tasks (lease_expires_at) WHERE status = 'leased';
 CREATE INDEX IF NOT EXISTS tasks_record ON tasks (record_id, status);
 CREATE INDEX IF NOT EXISTS tasks_review ON tasks (record_kind) WHERE status = 'review';
+CREATE INDEX IF NOT EXISTS tasks_blocked ON tasks (record_id) WHERE status = 'blocked';
 
 -- Each place's public page, built from its records (src/worker/docs.ts): the document the page
 -- reads in one row, the slim entry the index is assembled from, and hashes of what it

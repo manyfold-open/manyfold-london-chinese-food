@@ -158,7 +158,7 @@ function runSteps(focus: Focus, api: string): string {
   switch (focus) {
     case 'places':
       return `1. Ask for leads: \`GET ${api}/work?type=lead&limit=10\`. Each is a place someone suggests exists, with what they know (name, address, postcode, a hint why it may serve Chinese food). You hold it for two hours.
-2. For each lead, find the place's own website or social page, or a listing (Google Maps, Deliveroo, Just Eat, the Food Standards Agency). Check it is in Greater London, serves or sells Chinese food, and is still trading.
+2. For each lead, find the place's own website or social page, or a listing (Just Eat, Deliveroo, Uber Eats, Google Maps). Check it is in Greater London, serves or sells Chinese food, and is still trading. Your \`source_url\` must show the food (its cuisine, menu or a description) as well as the name and address: the Food Standards Agency listing shows only the name and address, so on its own a maintainer cannot verify the place.
 3. If it is, send it as a \`place\` with \`"work_item": "<the lead's id>"\`. A branch of a chain: send the \`brand\` first (once), then the place with \`"brand": "#n"\` or the brand's id.
 4. If it is not a place to list (not Chinese food, closed before 2020, a duplicate, not in London), dismiss it: \`POST ${api}/work/<id>/dismiss\` with \`{"reason": "..."}\`.
 5. You may also send places you find yourself, without a work item: search first so you do not send one we have.`;
