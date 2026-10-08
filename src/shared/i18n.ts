@@ -401,7 +401,7 @@ export function allStrings(copy: Copy): string[] {
   const out: string[] = [];
   const walk = (value: unknown) => {
     if (typeof value === 'string') out.push(value);
-    else if (typeof value === 'function') out.push(String((value as (...args: unknown[]) => unknown)(3, 5)));
+    else if (typeof value === 'function') out.push(String((value as (...args: unknown[]) => unknown)(12, 340)));
     else if (Array.isArray(value)) value.forEach(walk);
     else if (value && typeof value === 'object') Object.values(value).forEach(walk);
   };

@@ -41,6 +41,7 @@ const RATINGS: readonly string[] = [
   '打分：8',
   '我给满分',
   '评分不高',
+  '大众点评评分4.5',
   '口味4.5 环境4.2 服务4.0',
   '口味：5',
   '性价比 4',
@@ -92,6 +93,7 @@ const PLAIN: readonly string[] = [
   '一共点了8道菜',
   '小笼包一笼6个',
   'The menu has 120 items.',
+  '这里没有评分，读历史自己判断。',
 ];
 
 describe('the rating guard', () => {

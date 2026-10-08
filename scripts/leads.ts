@@ -82,10 +82,12 @@ const CHINESE_NAME = new RegExp(
     'chinese', 'china', 'wok', 'dragon', 'panda', 'jade', 'lotus', 'bamboo', 'dim ?sum', 'dumpling', 'noodle', 'sichuan', 'szechuan',
     'hunan', 'canton', 'hong ?kong', 'peking', 'beijing', 'shanghai', 'xi.?an', 'taiwan', 'bubble ?tea', 'boba', 'mandarin', 'dynasty',
     'golden (?:dragon|palace|city|house|wok|bowl|china)', 'oriental', 'chopstick', 'hot ?pot', 'mala', 'bao', 'lanzhou', 'dongbei',
-    'yunnan', 'hakka', 'wing yip', 'loon fung', 'see woo', 'tian tian', 'longdan', 'chuan', 'ming', 'jin ', 'xiao', 'fu ', 'lucky',
+    'yunnan', 'hakka', 'wing yip', 'loon fung', 'see woo', 'tian tian', 'longdan', 'chuan', 'xiao long',
   ].join('|'),
   'i',
 );
+/** Businesses whose names match a word above but serve no food. */
+const NOT_FOOD = /pharmacy|chemist|slimming|post office|barber|nails?\b|hair|beauty|salon|launderette|clinic|school|nursery|dental|optician|massage|tattoo|gym|fitness|hotel/i;
 const HAN = /\p{Script=Han}/u;
 
 const FOOD_TYPES = new Set(['Restaurant/Cafe/Canteen', 'Takeaway/sandwich shop', 'Retailers - other', 'Retailers - supermarkets/hypermarkets', 'Other catering premises']);
@@ -118,7 +120,7 @@ async function fsaLeads(): Promise<Lead[]> {
     for (const block of xml.split('<EstablishmentDetail>').slice(1)) {
       const name = tag(block, 'BusinessName');
       const type = tag(block, 'BusinessType');
-      if (!name || !type || !FOOD_TYPES.has(type) || !(CHINESE_NAME.test(name) || HAN.test(name))) continue;
+      if (!name || !type || !FOOD_TYPES.has(type) || !(CHINESE_NAME.test(name) || HAN.test(name)) || NOT_FOOD.test(name)) continue;
       const id = tag(block, 'FHRSID');
       const address = [tag(block, 'AddressLine1'), tag(block, 'AddressLine2'), tag(block, 'AddressLine3')].filter(Boolean).join(', ');
       const postcode = tag(block, 'PostCode');
