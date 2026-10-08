@@ -22,6 +22,67 @@ const ELSEWHERE: Record<string, { district: string; code: string }> = {
   'M1 1AA': { district: 'Manchester', code: 'E08000003' },
 };
 
+/**
+ * A fake image: the bytes "IMG <format> <width> <height>". The fake Images binding reads that
+ * header for info(), and its output is "WEBP <width> <height>" scaled down, so a test can tell
+ * stored renditions from what was sent.
+ */
+export const fakeImage = (format: string, width: number, height: number, padding = 0): Blob =>
+  new Blob([`IMG ${format} ${width} ${height} `, 'x'.repeat(padding)], { type: format });
+
+const readHeader = async (stream: ReadableStream<Uint8Array>) => (await new Response(stream).text()).split(' ');
+
+export function fakeImages(): ImagesBinding {
+  return {
+    async info(stream: ReadableStream<Uint8Array>) {
+      const [tag, format, width, height] = await readHeader(stream);
+      if (tag === 'WEBP') return { format: 'image/webp', fileSize: 10, width: Number(format), height: Number(width) };
+      if (tag !== 'IMG') throw new Error('9412: not an image');
+      return { format: format!, fileSize: 10, width: Number(width), height: Number(height) };
+    },
+    input(stream: ReadableStream<Uint8Array>) {
+      let box: { width?: number; height?: number } = {};
+      const transformer = {
+        transform(transform: { width?: number; height?: number }) {
+          box = transform;
+          return transformer;
+        },
+        async output(options: { format: string }) {
+          const [tag, a, b, c] = await readHeader(stream);
+          const [width, height] = tag === 'WEBP' ? [Number(a), Number(b)] : [Number(b), Number(c)];
+          const scale = Math.min(1, (box.width ?? width) / Math.max(width, height));
+          const body = `${options.format === 'image/jpeg' ? 'JPEG' : 'WEBP'} ${Math.round(width * scale)} ${Math.round(height * scale)}`;
+          return {
+            image: () => new Blob([body]).stream(),
+            response: () => new Response(body, { headers: { 'content-type': options.format } }),
+            contentType: () => options.format,
+          };
+        },
+      };
+      return transformer;
+    },
+  } as unknown as ImagesBinding;
+}
+
+/** A fake R2 bucket: a map of keys to bytes. */
+export function fakeBucket(): R2Bucket & { objects: Map<string, Uint8Array> } {
+  const objects = new Map<string, Uint8Array>();
+  return {
+    objects,
+    async put(key: string, value: Uint8Array | ArrayBuffer) {
+      objects.set(key, value instanceof Uint8Array ? value : new Uint8Array(value));
+      return {} as R2Object;
+    },
+    async get(key: string) {
+      const value = objects.get(key);
+      return value ? ({ body: new Blob([value]).stream() } as unknown as R2ObjectBody) : null;
+    },
+    async delete(keys: string | string[]) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) objects.delete(key);
+    },
+  } as unknown as R2Bucket & { objects: Map<string, Uint8Array> };
+}
+
 export interface Pages {
   /** Text a source page serves, by URL. Unlisted pages serve "page"; URLs containing /gone are 404. */
   [url: string]: string;
@@ -29,6 +90,7 @@ export interface Pages {
 
 export interface World {
   env: Env;
+  media: Map<string, Uint8Array>;
   pages: Pages;
   /** When true, postcodes.io does not answer. */
   postcodesDown: boolean;
@@ -69,13 +131,21 @@ export function world(extra: Partial<Env> = {}): World {
           }),
         });
       }
+      if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+        const answer = (init?.body as FormData).get('response');
+        return Response.json(answer === 'human' ? { success: true, hostname: 'lcf.test', action: 'photo-upload' } : { success: false });
+      }
       if (url.includes('/gone')) return new Response('gone', { status: 404 });
       if (url.includes('/blocked')) return new Response('forbidden', { status: 403 });
       return new Response(pages[url] ?? 'page', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
     }),
   );
+  const bucket = fakeBucket();
   const env = {
     DB: createD1(),
+    MEDIA: bucket,
+    IMAGES: fakeImages(),
+    TURNSTILE_SECRET: 'turnstile-secret',
     ASSETS: { fetch: async () => new Response('asset', { headers: { 'content-type': 'text/plain' } }) } as unknown as Fetcher,
     ADMIN_PASSWORD: ADMIN,
     PUBLIC_URL: SITE,
@@ -92,6 +162,7 @@ export function world(extra: Partial<Env> = {}): World {
   };
   return {
     env,
+    media: bucket.objects,
     pages,
     get postcodesDown() {
       return state.postcodesDown;
