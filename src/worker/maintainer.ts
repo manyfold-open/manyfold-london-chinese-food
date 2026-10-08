@@ -209,7 +209,33 @@ export async function leaseTasks(
       };
     }),
   );
-  return { ...work, leased: tasks.length, tasks };
+  if (tasks.length > 0) return { ...work, leased: tasks.length, tasks };
+  return { ...work, leased: 0, tasks, note: await nothingToLease(db, token, kinds, room, work, at) };
+}
+
+/** Why a maintainer got no task: its daily limit, its kinds, or tasks it may not take. */
+async function nothingToLease(db: D1Database, token: Token, kinds: readonly string[], room: number, work: Work, at: string): Promise<string> {
+  if (kinds.length === 0) return 'This token may review none of the kinds asked for; check GET /api/me for the kinds it covers.';
+  if (room === 0) return `You have used today's limit of ${work.daily_task_limit} verdicts; tasks come again after midnight UTC.`;
+  const row = await db
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN r.submitted_by = ?1 THEN 1 ELSE 0 END) AS own,
+         SUM(CASE WHEN r.submitted_by != ?1 AND t.status = 'leased' AND t.lease_expires_at > ?2 THEN 1 ELSE 0 END) AS held,
+         SUM(CASE WHEN r.flagged = 1 THEN 1 ELSE 0 END) AS flagged
+       FROM tasks t INDEXED BY tasks_open JOIN records r ON r.id = t.record_id
+       WHERE t.status IN ('open', 'leased')`,
+    )
+    .bind(token.id, at)
+    .first<{ own: number | null; held: number | null; flagged: number | null }>();
+  const blocked = await db.prepare(`SELECT COUNT(*) AS n FROM tasks WHERE status = 'blocked'`).first<{ n: number }>();
+  const reasons = [
+    row?.own ? `${row.own} open ${row.own === 1 ? 'task is' : 'tasks are'} for records this token sent, and a maintainer never reviews its own: another maintainer will. To add records yourself, send them with a collector token (POST /api/join) and keep this one for reviewing.` : '',
+    row?.held ? `${row.held} ${row.held === 1 ? 'is' : 'are'} leased to other maintainers until their leases end.` : '',
+    blocked?.n ? `${blocked.n} wait for their place to be verified first.` : '',
+    row?.flagged ? `${row.flagged} ${row.flagged === 1 ? 'is' : 'are'} held for the site team.` : '',
+  ].filter(Boolean);
+  return reasons.length ? `Nothing to review for you now. ${reasons.join(' ')}` : 'Nothing to review right now: every record sent has a verdict.';
 }
 
 interface TaskRow {

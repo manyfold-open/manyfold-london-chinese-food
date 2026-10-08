@@ -62,6 +62,20 @@ describe('leasing', () => {
     expect(held.tasks[0]!.note).toContain('found this passage');
   });
 
+  it('says why there is nothing to lease: the records are the maintainer’s own, or wait for their place', async () => {
+    const w = world();
+    const { keeper } = await people(w);
+    await submit(w, keeper, [place(), review('#0')]);
+    const own = (await w.json<{ tasks: unknown[]; note: string }>('/api/tasks', { token: keeper })).body;
+    expect(own.tasks).toEqual([]);
+    expect(own.note).toContain('1 open task is for records this token sent, and a maintainer never reviews its own');
+    expect(own.note).toContain('1 wait for their place to be verified first.');
+    const other = await maintainer(w, 'second maintainer');
+    const leased = await lease(w, other);
+    expect(leased.tasks).toHaveLength(1);
+    expect((leased as unknown as { note?: string }).note).toBeUndefined();
+  });
+
   it('opens the children when the place is verified', async () => {
     const w = world();
     const { collector, keeper } = await people(w);

@@ -111,6 +111,8 @@ export interface LeasedTask {
 
 export interface LeaseResponse extends Work {
   tasks: LeasedTask[];
+  /** When there is nothing to lease: why, in words an agent can act on. */
+  note?: string;
 }
 
 export type VerdictResult =

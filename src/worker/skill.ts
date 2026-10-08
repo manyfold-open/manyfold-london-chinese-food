@@ -320,7 +320,7 @@ You maintain London Chinese Food as "${token.label}"${token.kinds.includes('*') 
 Check what collectors and visitors sent against its source before it is public, check updates to live records, and recheck places and menus as they age. You never edit a record yourself: you send a verdict, and the server applies it.
 
 ## Each run
-1. Lease tasks: \`GET ${api}/tasks?limit=${LEASE_MAX}\` (add \`&kind=<kind>\` to take one kind) with the header \`Authorization: Bearer $${TOKEN_ENV}\`. If \`tasks\` is empty, stop.
+1. Lease tasks: \`GET ${api}/tasks?limit=${LEASE_MAX}\` (add \`&kind=<kind>\` to take one kind) with the header \`Authorization: Bearer $${TOKEN_ENV}\`. If \`tasks\` is empty, its \`note\` says why; report it and stop.
 2. Each task has a \`type\`: \`verify\` (a new record), \`update\` (a newer version of the live record in \`target\`: compare the two and check what changed) or \`recheck\` (a verified record, due to be checked again). \`parent\` is the place or brand it belongs to. \`note\` says whether the server found the passage on the page when it was submitted, or carries a collector's flag.
 3. Check each against its source yourself (below). Never trust the submitted passage: it only points you to the facts.
 4. Send verdicts: \`POST ${api}/verdicts\`. Lease again, up to 4 batches in one run, then stop.
@@ -369,7 +369,7 @@ Each gets \`applied\` with the record's new \`record_status\`, or \`error\` with
 
 ## Limits
 - Up to ${work.daily_task_limit} verdicts a day, at most ${LEASE_MAX} tasks held at once, 60 requests a minute.
-- You never get tasks for records you submitted yourself.
+- You never get tasks for records you submitted yourself: another maintainer reviews them. To add records, use a collector token from \`POST ${api}/join\`, and keep this one for verdicts.
 `;
 }
 
