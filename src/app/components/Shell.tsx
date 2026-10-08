@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useLocale, useCopy, otherLocalePath, rememberLocale } from '../i18n';
-import { Link, navigate, useLocation } from '../router';
+import { Link, useLocation } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
 import { Icon, IconButton, Logo, ManyfoldMark } from '../ui';
@@ -27,19 +27,9 @@ export function Shell({ children }: { children: ReactNode }) {
             <Link href={paths.page(locale, 'contribute')}>{copy.nav.contribute}</Link>
             <Link href={paths.page(locale, 'about')}>{copy.nav.about}</Link>
           </nav>
-          <a
-            className="lang-switch"
-            href={switchHref}
-            lang={other === 'zh' ? 'zh-Hans' : 'en'}
-            onClick={(event) => {
-              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              rememberLocale(other);
-              navigate(switchHref);
-            }}
-          >
+          <Link className="lang-switch" href={switchHref} lang={other === 'zh' ? 'zh-Hans' : 'en'} onClick={() => rememberLocale(other)}>
             {copy.switchTo}
-          </a>
+          </Link>
           <IconButton
             label={theme === 'dark' ? copy.theme.light : copy.theme.dark}
             icon={theme === 'dark' ? 'sun' : 'moon'}

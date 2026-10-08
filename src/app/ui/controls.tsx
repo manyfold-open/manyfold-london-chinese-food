@@ -315,6 +315,7 @@ export function SearchField({
       <input
         ref={input}
         type="text"
+        name="q"
         role="searchbox"
         enterKeyHint="search"
         autoComplete="off"
