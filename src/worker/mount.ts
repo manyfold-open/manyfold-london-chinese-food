@@ -58,9 +58,12 @@ export const publicUrl = (c: RequestContext, path: string): string =>
 export const prefixed = (value: string, mount: string): string =>
   value.startsWith('/') && !value.startsWith('//') ? mount + value : value;
 
-/** Only a 200 HTML document has attributes to rewrite. Card images and bundles pass untouched. */
+/**
+ * Only an HTML document has attributes to rewrite: a page (200), or the app's own "not found" page
+ * (404), which loads the same scripts. Images, bundles and API answers pass untouched.
+ */
 export const shouldRewrite = (response: Response): boolean =>
-  response.status === 200 &&
+  (response.status === 200 || response.status === 404) &&
   (response.headers.get('content-type') ?? '').toLowerCase().includes('text/html');
 
 function rewriteDocument(response: Response, mount: string): Response {

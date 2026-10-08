@@ -27,7 +27,8 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { KINDS, normName, type Kind } from '../shared/kinds';
-import type { IndexEntry } from '../shared/place-doc';
+import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
+import type { Locale } from '../shared/i18n';
 import { queryPlaces } from '../shared/places-query';
 import type { IssuedToken, JoinResponse, MeResponse, Role, WorkType } from '../shared/types';
 import { requireAdmin } from './admin';
@@ -59,6 +60,7 @@ import { replaceIllustration, syncIllustrateWork, updateIllustrationSettings } f
 import { asJpeg, deleteImage, imageResponse, type MediaKind } from './media';
 import { enforce, RULES, sweep } from './ratelimit';
 import { uploadIllustration, uploadPhoto } from './uploads';
+import { pathMeta, placeMeta, preferredLocale, sitemap, withMeta } from './seo';
 import { blockedHosts, illustrationSettings } from './settings';
 import { collectorSkill, FOCUSES, maintainerSkill, publicSkill, schemaDocument, type Focus } from './skill';
 import { fetchPage, idempotencyKey, recall, remember, submitRecords } from './submit';
@@ -572,7 +574,51 @@ app.all('/api/*', () => {
 
 app.get('/SKILL.md', (c) => markdown(c, publicSkill(siteOf(c))));
 
-// Anything else is a page of the single-page app, or a static file.
+/** The canonical site address: the public one, whatever host this request came to. */
+const canonicalSite = (c: AppContext): string => (c.env.PUBLIC_URL ?? siteOf(c)).replace(/\/+$/, '');
+
+app.get('/sitemap.xml', cachedFor(3600), async (c) => {
+  await ensureSchema(c.env.DB);
+  const places = JSON.parse(await dataset(c, 'index')) as IndexEntry[];
+  const dishes = JSON.parse(await dataset(c, 'dishes')) as [string, string | null, string | null, number][];
+  return c.body(sitemap(canonicalSite(c), places, dishes), 200, { 'content-type': 'application/xml; charset=utf-8' });
+});
+
+/** "/" opens in the reader's language: their earlier choice, else their browser's. */
+app.get('/', (c) => {
+  const locale = preferredLocale(c.req.header('cookie'), c.req.header('accept-language'));
+  return c.redirect(publicUrl(c, `/${locale}/`), 302);
+});
+
+/**
+ * A page: the app's HTML with the page's own title, description, links and, for a place, its
+ * structured data. A place that is not public answers 404, with the app's not-found page.
+ */
+async function page(c: AppContext): Promise<Response> {
+  const url = new URL(c.req.url);
+  const match = /^\/(zh|en)(\/.*)?$/.exec(url.pathname)!;
+  const locale = match[1] as Locale;
+  let rest = match[2] ?? '/';
+  const html = await c.env.ASSETS.fetch(new Request(new URL('/', url), { headers: c.req.raw.headers }));
+  const site = canonicalSite(c);
+  const place = /^\/place\/(rec_[0-9a-z]{26})(?:\/[^/]*)?\/?$/.exec(rest);
+  let meta;
+  if (place) {
+    await ensureSchema(c.env.DB);
+    const json = await placeDoc(c.env.DB, place[1]!);
+    const doc = json ? (JSON.parse(json) as PlaceDoc) : null;
+    if (doc) rest = `/place/${doc.id}${doc.slug ? `/${doc.slug}` : ''}`;
+    meta = placeMeta(doc, locale, rest, `${site}/${locale}${rest}`);
+  } else meta = pathMeta(locale, rest);
+  return withMeta(html, meta, site, onPublicHost(c.env, url), !/^(localhost|127\.0\.0\.1)$/.test(url.hostname));
+}
+
+app.get('/zh', page);
+app.get('/en', page);
+app.get('/zh/*', page);
+app.get('/en/*', page);
+
+// Anything else is a static file, or the app's page for a path it knows.
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export { app };

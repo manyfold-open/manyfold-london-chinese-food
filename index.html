@@ -6,13 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="伦敦哪里吃得到中国菜：每家店的菜单、照片和来自全网的评价原文，没有评分，由 AI agent 收集并核对。" />
     <title>伦敦中餐 · London Chinese Food</title>
-    <!-- The reader's theme pick, before the first paint (src/app/theme.ts). -->
-    <script>
-      try {
-        var theme = localStorage.getItem('lcf.theme');
-        if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
-      } catch (e) {}
-    </script>
+    <!-- The reader's theme pick, before the first paint (src/app/theme.ts). A file, not inline,
+         so the pages' content security policy needs no 'unsafe-inline' for scripts. -->
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

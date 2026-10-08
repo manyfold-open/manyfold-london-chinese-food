@@ -61,9 +61,10 @@ describe('the mount, as plain functions', () => {
     expect(prefixed('assets/a.js', '/london-chinese-food')).toBe('assets/a.js');
   });
 
-  it('rewrites only 200 HTML documents', () => {
+  it('rewrites HTML pages, the 404 page included, and nothing else', () => {
     expect(shouldRewrite(new Response('', { headers: { 'content-type': 'text/html; charset=utf-8' } }))).toBe(true);
-    expect(shouldRewrite(new Response('', { status: 404, headers: { 'content-type': 'text/html' } }))).toBe(false);
+    expect(shouldRewrite(new Response('', { status: 404, headers: { 'content-type': 'text/html' } }))).toBe(true);
+    expect(shouldRewrite(new Response('', { status: 500, headers: { 'content-type': 'text/html' } }))).toBe(false);
     expect(shouldRewrite(new Response('', { headers: { 'content-type': 'image/webp' } }))).toBe(false);
   });
 });
@@ -83,17 +84,34 @@ describe('the Worker under the mount', () => {
     expect(response.headers.get('location')).toBe(`${PUBLIC}/london-chinese-food/?ref=x`);
   });
 
-  it('serves pages and files from the assets with the prefix taken off', async () => {
+  it('serves files from the assets with the prefix taken off, and pages from the app', async () => {
     assetPaths.length = 0;
     seenPrefix.length = 0;
-    await call(`${PUBLIC}/london-chinese-food/zh/`);
-    expect(assetPaths).toEqual(['/zh/']);
+    await call(`${PUBLIC}/london-chinese-food/favicon.svg`);
+    expect(assetPaths).toEqual(['/favicon.svg']);
     expect(seenPrefix).toEqual(['/london-chinese-food']);
+    assetPaths.length = 0;
+    const page = await call(`${PUBLIC}/london-chinese-food/zh/about`);
+    expect(page.status).toBe(200);
+    expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
+    expect(assetPaths).toEqual(['/']);
+  });
+
+  it('sends the root to a language: the cookie first, then the browser', async () => {
+    const english = await call(`${PUBLIC}/london-chinese-food/`, { 'accept-language': 'en-GB,en;q=0.9' });
+    expect(english.headers.get('location')).toBe(`${PUBLIC}/london-chinese-food/en/`);
+    const chosen = await call(`${PUBLIC}/london-chinese-food/`, { 'accept-language': 'en-GB', cookie: 'lcf_locale=zh' });
+    expect(chosen.headers.get('location')).toBe(`${PUBLIC}/london-chinese-food/zh/`);
+  });
+
+  it('answers 404 for a place that is not public', async () => {
+    const response = await call(`${PUBLIC}/london-chinese-food/en/place/rec_00000000000000000000000000/x`);
+    expect(response.status).toBe(404);
   });
 
   it('drops a prefix header a client sends itself', async () => {
     seenPrefix.length = 0;
-    await call('https://manyfold-london-chinese-food.example.workers.dev/zh/', { [PREFIX_HEADER]: '/evil' });
+    await call('https://manyfold-london-chinese-food.example.workers.dev/favicon.svg', { [PREFIX_HEADER]: '/evil' });
     expect(seenPrefix).toEqual([null]);
   });
 
