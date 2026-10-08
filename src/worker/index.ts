@@ -19,6 +19,9 @@
  *
  * Readers: POST /api/records/:id/report (a problem, or a takedown request), limited per IP.
  *
+ * Open data (CC BY 4.0, src/worker/exports.ts): /export/places.csv, /export/places.json and
+ * /export/menus.jsonl.gz, never review excerpts.
+ *
  * Admin (x-admin-password, closed until ADMIN_PASSWORD is set): /api/admin/*, see below.
  *
  * A cron trigger runs the housekeeping every five minutes.
@@ -53,6 +56,7 @@ import {
 } from './console';
 import { ensureSchema } from './db';
 import { buildDishes, buildIndex, datasetJson, dishPlaces, placeDoc, rebuildNow, refreshDocs, sourcePage } from './docs';
+import { menusJsonl, placesCsv, placesJson } from './exports';
 import { maintain } from './maintenance';
 import { applyVerdicts, flagRecord, LEASE_MAX, leaseTasks, workOf } from './maintainer';
 import { publicUrl, withMount } from './mount';
@@ -582,6 +586,25 @@ app.get('/sitemap.xml', cachedFor(3600), async (c) => {
   const places = JSON.parse(await dataset(c, 'index')) as IndexEntry[];
   const dishes = JSON.parse(await dataset(c, 'dishes')) as [string, string | null, string | null, number][];
   return c.body(sitemap(canonicalSite(c), places, dishes), 200, { 'content-type': 'application/xml; charset=utf-8' });
+});
+
+/** The open data: places and menus, CC BY 4.0. Rebuilt for each edge once an hour at most. */
+const download = (c: AppContext, body: ReadableStream<Uint8Array>, type: string, name: string) =>
+  c.body(body, 200, { 'content-type': type, 'content-disposition': `attachment; filename="${name}"`, 'access-control-allow-origin': '*' });
+
+app.get('/export/places.csv', cachedFor(3600), async (c) => {
+  await ensureSchema(c.env.DB);
+  return download(c, placesCsv(c.env.DB, canonicalSite(c)), 'text/csv; charset=utf-8', 'london-chinese-food-places.csv');
+});
+
+app.get('/export/places.json', cachedFor(3600), async (c) => {
+  await ensureSchema(c.env.DB);
+  return download(c, placesJson(c.env.DB, canonicalSite(c), new Date()), 'application/json; charset=utf-8', 'london-chinese-food-places.json');
+});
+
+app.get('/export/menus.jsonl.gz', cachedFor(3600), async (c) => {
+  await ensureSchema(c.env.DB);
+  return download(c, menusJsonl(c.env.DB, canonicalSite(c), new Date()), 'application/gzip', 'london-chinese-food-menus.jsonl.gz');
 });
 
 /** "/" opens in the reader's language: their earlier choice, else their browser's. */

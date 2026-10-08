@@ -2660,6 +2660,15 @@ a.dish-name:hover {
   font-size: 18px;
 }
 
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .instruction {
   display: flex;
   align-items: center;

@@ -66,6 +66,31 @@ export function WordsPage({ which }: { which: 'about' | 'privacy' }) {
       {words.paragraphs.map((paragraph) => (
         <p key={paragraph}>{paragraph}</p>
       ))}
+      {which === 'about' ? (
+        <section className="section">
+          <h2>
+            <Icon name="download" /> {copy.about.dataTitle}
+          </h2>
+          <p>{copy.about.dataText}</p>
+          <ul className="downloads">
+            <li>
+              <a href={appUrl('/export/places.csv')} download>
+                {copy.about.downloads.csv}
+              </a>
+            </li>
+            <li>
+              <a href={appUrl('/export/places.json')} download>
+                {copy.about.downloads.json}
+              </a>
+            </li>
+            <li>
+              <a href={appUrl('/export/menus.jsonl.gz')} download>
+                {copy.about.downloads.menus}
+              </a>
+            </li>
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

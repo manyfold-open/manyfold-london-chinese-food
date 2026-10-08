@@ -119,7 +119,7 @@ export interface Copy {
   };
   report: { title: string; wrong: string; takedown: string; reason: string; send: string; sent: string };
   contribute: { title: string; lead: string; agentTitle: string; agentText: string; copy: string; copied: string; skill: string; photosTitle: string; photosText: string };
-  about: { title: string; paragraphs: string[] };
+  about: { title: string; paragraphs: string[]; dataTitle: string; dataText: string; downloads: { csv: string; json: string; menus: string } };
   privacy: { title: string; paragraphs: string[] };
   notFound: { title: string; text: string; home: string };
   attribution: string;
@@ -245,6 +245,9 @@ const zh: Copy = {
       '评价摘录版权归原作者，我们只作引用并链回原文。如果你是作者或权利人，想让我们删除某条内容，请点该条的“报告问题”，或写信到 hi@manyfold.ai。',
       '没有实拍照片的菜会显示 AI 示意图，并始终标注。',
     ],
+    dataTitle: '下载数据',
+    dataText: '店铺和菜单以 CC BY 4.0 许可开放，注明出自伦敦中餐即可使用。评价摘录版权归原作者，不在下载之列。',
+    downloads: { csv: '店铺（CSV）', json: '店铺（JSON）', menus: '菜单（JSON Lines，gzip 压缩）' },
   },
   privacy: {
     title: '隐私',
@@ -379,6 +382,9 @@ const en: Copy = {
       'Review excerpts remain their authors’; we quote them and link back. If you are the author or rights holder and want something removed, use “Report a problem” on it, or write to hi@manyfold.ai.',
       'Dishes without a real photo show an AI illustration, always labeled.',
     ],
+    dataTitle: 'Download the data',
+    dataText: "Places and menus are open under CC BY 4.0: use them with credit to London Chinese Food. Review excerpts remain their authors' and are not included.",
+    downloads: { csv: 'Places (CSV)', json: 'Places (JSON)', menus: 'Menus (JSON Lines, gzipped)' },
   },
   privacy: {
     title: 'Privacy',
