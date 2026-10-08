@@ -316,6 +316,15 @@ describe('the work feed', () => {
     expect((await submit(w, one, [{ ...place(), work_item: body.items[0]!.id }])).results[0]).toMatchObject({ status: 'accepted' });
   });
 
+  it('tells the maintainer which places are already at the same postcode', async () => {
+    const w = world();
+    const token = await join(w);
+    await submit(w, token, [place({ name_en: 'Hong Kong Cuisine', name_zh: '香港酒家' })]);
+    const { results } = await submit(w, token, [place({ name_en: 'Hong Kong Restaurant', name_zh: undefined })]);
+    const task = await w.env.DB.prepare('SELECT note FROM tasks WHERE record_id = ?').bind(results[0]!.id).first<{ note: string }>();
+    expect(task!.note).toMatch(/Also at W1D 6JW: Hong Kong Cuisine 香港酒家 \(rec_[0-9a-z]{26}, pending\)\. If this is one of them under another name, the verdict is duplicate\.$/);
+  });
+
   it('lets an agent dismiss a lead with a reason', async () => {
     const w = world();
     await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'fsa:42', name: 'Golden Thai' }] } });

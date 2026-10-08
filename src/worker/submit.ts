@@ -559,6 +559,24 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
 
     const quote: QuoteCheck = page.text === null ? 'unreadable' : quoteOnPage(page.text, candidate.provenance.evidence) ? 'found' : 'not_found';
     const waits = parentRow !== null && parentRow.status === 'pending';
+    // A place under another name at the same postcode may be this one: the maintainer is told.
+    let neighbours = '';
+    if (config.kind === 'place' && !targetId) {
+      const { results: rows } = await db
+        .prepare(
+          `SELECT id, status, data_json FROM records INDEXED BY records_identity
+           WHERE kind = 'place' AND identity_key >= ?1 AND identity_key < ?2 AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL LIMIT 8`,
+        )
+        .bind(`${String(data.postcode)}|`, `${String(data.postcode)}}`)
+        .all<{ id: string; status: string; data_json: string }>();
+      if (rows.length > 0) {
+        const names = rows.map((row) => {
+          const other = JSON.parse(row.data_json) as RecordData;
+          return `${[other.name_en, other.name_zh].filter(Boolean).join(' ')} (${row.id}, ${row.status})`;
+        });
+        neighbours = ` Also at ${String(data.postcode)}: ${names.join('; ')}. If this is one of them under another name, the verdict is duplicate.`;
+      }
+    }
     try {
       await store(db, token, { ...candidate, data }, {
         id,
@@ -570,7 +588,7 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
         refId,
         targetId,
         taskStatus: waits ? 'blocked' : 'open',
-        note: precheckNote(quote),
+        note: `${precheckNote(quote)}${neighbours}`,
       }, now);
     } catch (error) {
       if (!/UNIQUE/i.test(String(error))) throw error;

@@ -347,7 +347,7 @@ ${checks}
 | \`stale\` | Recheck tasks: the source no longer supports it, or is gone (404, 410) | \`reason\`. A place that closed is not stale: verify it with \`"corrections": {"trading": "closed"}\` |
 | \`unsure\` | You cannot decide, or cannot open the source | \`reason\` |
 
-Use \`unsure\` rather than guessing; an unsure task goes to the site team. To look for duplicates: \`GET ${api}/search?q=<words of the name>\`.
+Use \`unsure\` rather than guessing; an unsure task goes to the site team. To look for duplicates: \`GET ${api}/search?postcode=<the postcode>\` lists every place there, whatever its name (a place's FSA name and its own can differ), and \`GET ${api}/search?q=<words of the name>\` finds it elsewhere; a task's \`note\` names places already at the same postcode.
 
 ## Corrections and patches
 - \`corrections\`: only the fields to change, e.g. \`{"trading": "closed"}\`; \`null\` removes a value the source does not state. A whole list can be replaced this way.
