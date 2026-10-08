@@ -124,7 +124,8 @@ maintainer never reviews its own submissions.
 
 ## Admin
 
-`/settings` (in English) with the `ADMIN_PASSWORD`, kept in memory only: overview, the review
+`/settings` (in English) with the `ADMIN_PASSWORD`, which the browser trades for a session cookie
+(HttpOnly, 14 days; Lock or a new password ends it; the password is never stored): overview, the review
 queue (unsure tasks, reports, held records), records with their full history, tokens (issue
 maintainer tokens, limited to kinds; undo, ban, recheck a token's work), activity, the weekly
 spot-check, photos, AI illustrations (on or off, the daily number handed out, the prompt

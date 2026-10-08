@@ -1,7 +1,7 @@
 /**
  * /settings: the admin console, in English, outside the reader's frame. One password (the
- * ADMIN_PASSWORD secret) opens it for as long as the page stays loaded: it is kept in memory only
- * (adminApi.ts), so a reload or the Lock button asks for it again. Sections live at
+ * ADMIN_PASSWORD secret) opens it, and a session cookie keeps it open in this browser for 14 days
+ * (adminApi.ts): reloads stay signed in; Lock, or a new password, signs out. Sections live at
  * /settings/<section>; the kind a section shows is ?kind=<kind>, and an open record is
  * ?record=<id>.
  */
@@ -17,7 +17,7 @@ import { paths } from '../routes';
 import { useTheme } from '../theme';
 import { Button, IconButton, Logo, Select } from '../ui';
 import ActivitySection from './ActivitySection';
-import { admin, lock, unlock, unlocked, whenLocked } from './adminApi';
+import { hasSession, lock, signIn, whenLocked } from './adminApi';
 import BlockedHostsSection from './BlockedHostsSection';
 import IllustrationsSection from './IllustrationsSection';
 import OverviewSection from './OverviewSection';
@@ -54,21 +54,20 @@ const ALL = 'all';
 const KIND_OPTIONS = KINDS.map((kind) => ({ value: kind, label: KIND_CONFIGS[kind].title.en }));
 const ANY_KIND_OPTIONS = [{ value: ALL, label: 'All kinds' }, ...KIND_OPTIONS];
 
-function Gate({ onOpen }: { onOpen: () => void }) {
+function Gate({ onOpen, problem }: { onOpen: () => void; problem: string }) {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(problem);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError('');
-    unlock(password);
     try {
-      await admin('/overview');
+      await signIn(password);
+      setPassword('');
       onOpen();
     } catch (failure) {
-      unlock('');
       setError(failure instanceof ApiError && failure.status === 401 ? 'That is not the admin password.' : messageOf(failure));
     } finally {
       setBusy(false);
@@ -79,7 +78,7 @@ function Gate({ onOpen }: { onOpen: () => void }) {
     <form className="panel gate" onSubmit={(event) => void submit(event)}>
       <h1>Settings</h1>
       <p className="muted">
-        For the admin of {SITE}. The password stays in this page's memory only: reloading the page or pressing Lock asks for it again.
+        For the admin of {SITE}. This browser stays signed in for 14 days, until you press Lock or the password changes; the password itself is not stored.
       </p>
       <Field label="Admin password">
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus />
@@ -110,21 +109,36 @@ function NotFound() {
 
 export default function SettingsPage({ section }: { section: string | null }) {
   const { search } = useLocation();
-  const [open, setOpen] = useState(unlocked);
+  // null while the session cookie is being checked.
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [problem, setProblem] = useState('');
   const [theme, toggleTheme] = useTheme();
   const root = useRef<HTMLElement>(null);
   const current: Section | undefined = SECTIONS.find((entry) => entry.id === (section ?? 'overview'));
 
   useEffect(() => {
     whenLocked(() => setOpen(false));
-    return () => whenLocked(null);
+    let live = true;
+    hasSession()
+      .then((signedIn) => {
+        if (live) setOpen(signedIn);
+      })
+      .catch((failure: unknown) => {
+        if (!live) return;
+        setProblem(messageOf(failure));
+        setOpen(false);
+      });
+    return () => {
+      live = false;
+      whenLocked(null);
+    };
   }, []);
 
   useEffect(() => {
     document.title = `${current ? `${current.label} · ` : ''}Settings · ${SITE}`;
   }, [current]);
 
-  useCellLabels(root, open);
+  useCellLabels(root, open === true);
 
   // On a phone the section tabs scroll sideways; keep the current one in view.
   useEffect(() => {
@@ -139,7 +153,8 @@ export default function SettingsPage({ section }: { section: string | null }) {
 
   let content;
   if (!current) content = <NotFound />;
-  else if (!open) content = <Gate onOpen={() => setOpen(true)} />;
+  else if (open === null) content = <p className="muted">Checking your session…</p>;
+  else if (!open) content = <Gate problem={problem} onOpen={() => setOpen(true)} />;
   else {
     const at = (id: Section['id'], query: URLSearchParams) => {
       const text = query.toString();

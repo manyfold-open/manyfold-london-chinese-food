@@ -115,6 +115,16 @@ describe('the Worker under the mount', () => {
     expect(seenPrefix).toEqual([null]);
   });
 
+  it('keeps the console’s session cookie to the site’s own path', async () => {
+    const signedIn = await worker.fetch(
+      new Request(`${PUBLIC}/london-chinese-food/api/admin/session`, { method: 'POST', headers: { 'x-admin-password': 'mounted secret' } }),
+      { ...env, ADMIN_PASSWORD: 'mounted secret' },
+      ctx,
+    );
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.headers.get('set-cookie')).toContain('Path=/london-chinese-food;');
+  });
+
   it('answers 404 JSON for an unknown API route', async () => {
     const response = await call(`${PUBLIC}/london-chinese-food/api/nothing-here`);
     expect(response.status).toBe(404);

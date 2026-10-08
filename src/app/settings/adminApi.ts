@@ -1,10 +1,11 @@
 /**
- * Calls to /api/admin/* for the /settings console. The admin password lives only in this module's
- * memory (AGENTS.md, invariant 22): app.manyfold.ai hosts other apps, so it never goes to
- * sessionStorage or localStorage, and a reload asks for it again. It goes out as x-admin-password;
- * a 401 forgets it and locks the console. Components never handle the password themselves.
+ * Calls to /api/admin/* for the /settings console. The admin password is sent once, to
+ * POST /api/admin/session, which answers with a session cookie the browser keeps for the console:
+ * HttpOnly, so no script here (nor in the other apps on app.manyfold.ai) can read it, and limited
+ * to this site's path. The password itself is never stored. A 401 shows the password gate again;
+ * Lock ends the session.
  *
- * Images that need the password load through a small queue: a few at a time, only once on screen,
+ * Images that need the session load through a small queue: a few at a time, only once on screen,
  * kept as blob URLs until the console locks.
  */
 
@@ -13,24 +14,40 @@ import type { ApiErrorBody } from '../../shared/types';
 import { ApiError } from '../api';
 import { appUrl } from '../base';
 
-let password = '';
 let onLock: (() => void) | null = null;
-
-/** Whether the console holds a password. */
-export const unlocked = (): boolean => password !== '';
 
 /** The console registers once, to show the password gate whenever a call is refused. */
 export const whenLocked = (handler: (() => void) | null): void => {
   onLock = handler;
 };
 
-export function unlock(value: string): void {
-  password = value;
+/** Trades the password for the console's session cookie. A wrong one throws ApiError 401. */
+export async function signIn(password: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(appUrl('/api/admin/session'), { method: 'POST', cache: 'no-store', headers: { accept: 'application/json', 'x-admin-password': password } });
+  } catch {
+    throw new ApiError(0, 'network', 'Could not reach the server.');
+  }
+  if (!response.ok) throw await failure(response);
 }
 
-/** Forgets the password, and every image fetched with it. */
+/** Whether this browser's session still opens the console. */
+export async function hasSession(): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetch(appUrl('/api/admin/session'), { cache: 'no-store', headers: { accept: 'application/json' } });
+  } catch {
+    throw new ApiError(0, 'network', 'Could not reach the server.');
+  }
+  if (response.status === 401) return false;
+  if (!response.ok) throw await failure(response);
+  return true;
+}
+
+/** Ends the session, forgets every image fetched with it, and shows the gate. */
 export function lock(): void {
-  password = '';
+  void fetch(appUrl('/api/admin/session'), { method: 'DELETE', cache: 'no-store' }).catch(() => undefined);
   forgetImages();
   onLock?.();
 }
@@ -41,10 +58,6 @@ export function lock(): void {
 let pausedUntil = 0;
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  if (!password) {
-    lock();
-    throw new ApiError(401, 'locked', 'The console is locked. Enter the admin password again.');
-  }
   let response: Response;
   try {
     response = await fetch(appUrl(`/api/admin${path}`), {
@@ -53,7 +66,6 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
       headers: {
         accept: 'application/json',
         ...(init.body ? { 'content-type': 'application/json' } : {}),
-        'x-admin-password': password,
         ...(init.headers ?? {}),
       },
     });
@@ -153,7 +165,7 @@ function update(entry: Entry, patch: Partial<ImageState>): void {
 function pump(): void {
   clearTimeout(timer);
   timer = undefined;
-  while (queue.length > 0 && active < IMAGE_SLOTS && password) {
+  while (queue.length > 0 && active < IMAGE_SLOTS) {
     const wait = pausedUntil - Date.now();
     if (wait > 0) {
       timer = setTimeout(pump, wait + 100);

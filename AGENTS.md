@@ -77,7 +77,10 @@ whose collector and maintainer mechanism this site reuses.
     browsers and agents go through `publicUrl`, the app's fetches through `appUrl`, and cache keys
     are public URLs. Built scripts hold no root paths (`tests/dist-urls.test.ts`).
 22. **Shared-origin hygiene.** app.manyfold.ai hosts other apps: browser storage keys start with
-    `lcf.`, the admin password lives only in memory, and pages send a content security policy.
+    `lcf.`, the admin password is never stored in a browser (the console holds an HttpOnly,
+    SameSite=Strict session cookie limited to the site's path, signed with a key derived from the
+    password, and admin changes made with it must come from the site's own origin), and pages send
+    a content security policy.
 23. **Author names only for public writers** (critics, publications, blogs, video), never for
     people reviewing on platforms or forums, and no excerpt that names a private person.
 

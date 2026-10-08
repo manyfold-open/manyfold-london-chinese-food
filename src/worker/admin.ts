@@ -4,6 +4,11 @@
  * settled on. The compare is constant-time, and wrong passwords are counted per address, so
  * the password cannot be guessed at speed while the console itself (its image grids included)
  * is never slowed down.
+ *
+ * Scripts send the password in x-admin-password. The /settings console sends it once, and gets a
+ * session cookie instead: HttpOnly (no script on the shared app.manyfold.ai origin can read it),
+ * SameSite=Strict, limited to the site's path, and signed with a key derived from the password,
+ * so changing ADMIN_PASSWORD ends every session. The password itself is never kept in a browser.
  */
 
 import { sha256Hex } from './ids';
@@ -40,4 +45,32 @@ export async function requireAdmin(env: Env, supplied: string | undefined, ip: s
     await consume(env.DB, 'admin-wrong', ip, WRONG_PER_HOUR);
     throw new HttpError(401, 'admin_password_invalid', 'Send the admin password in the x-admin-password header.');
   }
+}
+
+/* ───────── the console's session ───────── */
+
+export const SESSION_COOKIE = 'lcf_admin';
+export const SESSION_DAYS = 14;
+
+/** A signing key only this password gives. */
+async function sessionKey(secret: string): Promise<CryptoKey> {
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`london-chinese-food admin session\n${secret}`));
+  return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+}
+
+const base64url = (bytes: ArrayBuffer): string =>
+  btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+/** `<expiry ms>.<signature>`: the session until `expiresAt`, for whoever knows the password now. */
+export async function sessionToken(secret: string, expiresAt: number): Promise<string> {
+  const signature = await crypto.subtle.sign('HMAC', await sessionKey(secret), new TextEncoder().encode(`session:${expiresAt}`));
+  return `${expiresAt}.${base64url(signature)}`;
+}
+
+/** Whether a session cookie is one this password signed, and not yet expired. */
+export async function validSession(env: Env, value: string | undefined, nowMs: number = Date.now()): Promise<boolean> {
+  const secret = (env.ADMIN_PASSWORD ?? '').trim();
+  const match = /^(\d{13})\.[A-Za-z0-9_-]{43}$/.exec(value ?? '');
+  if (!secret || !match || Number(match[1]) <= nowMs) return false;
+  return safeEqual(await sessionToken(secret, Number(match[1])), value!);
 }

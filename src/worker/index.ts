@@ -29,12 +29,13 @@
 
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { KINDS, normName, type Kind } from '../shared/kinds';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import type { Locale } from '../shared/i18n';
 import { queryPlaces } from '../shared/places-query';
 import type { IssuedToken, JoinResponse, MeResponse, Role, WorkType } from '../shared/types';
-import { requireAdmin } from './admin';
+import { requireAdmin, SESSION_COOKIE, SESSION_DAYS, sessionToken, validSession } from './admin';
 import { cachedFor, cachedJson, cacheKeyOf, forget, isDailyLimit } from './cache';
 import {
   activity,
@@ -59,7 +60,7 @@ import { buildDishes, buildIndex, datasetJson, dishPlaces, placeDoc, rebuildNow,
 import { menusJsonl, placesCsv, placesJson } from './exports';
 import { maintain } from './maintenance';
 import { applyVerdicts, flagRecord, LEASE_MAX, leaseTasks, workOf } from './maintainer';
-import { publicUrl, withMount } from './mount';
+import { mountOf, publicUrl, withMount } from './mount';
 import { replaceIllustration, syncIllustrateWork, updateIllustrationSettings } from './illustrations';
 import { asJpeg, deleteImage, imageResponse, type MediaKind } from './media';
 import { enforce, RULES, sweep } from './ratelimit';
@@ -410,9 +411,45 @@ app.post('/api/verdicts', async (c) => {
 
 /* ───────── admin ───────── */
 
+/** The console's session cookie lives under the site's path, so other apps on the host never get it. */
+const sessionCookie = (c: AppContext) => ({
+  path: mountOf(c) || '/',
+  httpOnly: true,
+  sameSite: 'Strict' as const,
+  secure: new URL(c.req.url).protocol === 'https:',
+});
+
+/** Locking the console forgets its session; it needs no password, so even a stale cookie can be cleared. */
+app.delete('/api/admin/session', (c) => {
+  deleteCookie(c, SESSION_COOKIE, sessionCookie(c));
+  return c.json({ open: false });
+});
+
 app.use('/api/admin/*', async (c, next) => {
-  await requireAdmin(c.env, c.req.header('x-admin-password'), ipOf(c));
+  const password = c.req.header('x-admin-password');
+  if (password === undefined && (await validSession(c.env, getCookie(c, SESSION_COOKIE)))) {
+    // A cookie rides along on whatever the browser sends; a change must come from this site's own pages.
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.header('origin') !== new URL(c.req.url).origin) {
+      throw new HttpError(403, 'cross_origin', 'Admin changes are made from this site’s own /settings pages.');
+    }
+    await next();
+    return;
+  }
+  await requireAdmin(c.env, password, ipOf(c));
   await next();
+});
+
+/** Whether the console is open: the session cookie (or a password) still opens the admin API. */
+app.get('/api/admin/session', (c) => c.json({ open: true }));
+
+/** The console trades the password for a session cookie, good for SESSION_DAYS. */
+app.post('/api/admin/session', async (c) => {
+  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  setCookie(c, SESSION_COOKIE, await sessionToken((c.env.ADMIN_PASSWORD ?? '').trim(), expiresAt), {
+    ...sessionCookie(c),
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
+  });
+  return c.json({ open: true, expires_at: new Date(expiresAt).toISOString() });
 });
 
 /**

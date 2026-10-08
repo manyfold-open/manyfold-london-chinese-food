@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ADMIN, join, lease, maintainer, menu, NOW_ISO, place, review, row, submit, tasksOf, verdicts, verifyQuote, world, type World } from './harness';
+import { sessionToken } from '../src/worker/admin';
+import { ADMIN, join, lease, maintainer, menu, NOW_ISO, place, review, row, SITE, submit, tasksOf, verdicts, verifyQuote, world, type World } from './harness';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -35,6 +36,32 @@ describe('the admin API', () => {
     const list = await w.json<{ tokens: Record<string, unknown>[] }>('/api/admin/tokens', { admin: true });
     expect(JSON.stringify(list.body)).not.toContain(body.token);
     expect(ADMIN).toBeTruthy();
+  });
+
+  it('keeps the console signed in with a session cookie, never the password', async () => {
+    const w = world();
+    expect((await w.json('/api/admin/session', { method: 'POST', headers: { 'x-admin-password': 'nope' } })).status).toBe(401);
+    const signedIn = await w.call('/api/admin/session', { method: 'POST', admin: true });
+    expect(signedIn.status).toBe(200);
+    const cookie = signedIn.headers.get('set-cookie')!;
+    expect(cookie).toMatch(/^lcf_admin=\d{13}\.[A-Za-z0-9_-]{43}; Max-Age=1209600; Path=\/; HttpOnly; Secure; SameSite=Strict$/);
+    expect(cookie).not.toContain(ADMIN);
+    const session = cookie.split(';')[0]!;
+    expect((await w.call('/api/admin/session', { headers: { cookie: session } })).status).toBe(200);
+    expect((await w.call('/api/admin/overview', { headers: { cookie: session } })).status).toBe(200);
+    // A change needs the site's own origin: the browser sends one with every POST it makes.
+    const change = { method: 'POST', json: { label: 'from the console' }, headers: { cookie: session } };
+    expect((await w.call('/api/admin/tokens', { ...change, headers: { ...change.headers, origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await w.call('/api/admin/tokens', { ...change, headers: { ...change.headers, origin: SITE } })).status).toBe(201);
+    // A forged, an expired, or another password's cookie opens nothing.
+    const [expiry, signature] = session.slice('lcf_admin='.length).split('.');
+    expect((await w.call('/api/admin/overview', { headers: { cookie: `lcf_admin=${Number(expiry) + 1}.${signature}` } })).status).toBe(401);
+    expect((await w.call('/api/admin/overview', { headers: { cookie: `lcf_admin=${await sessionToken(ADMIN, Date.now() - 1000)}` } })).status).toBe(401);
+    const changed = world({ ADMIN_PASSWORD: 'a new password' });
+    expect((await changed.call('/api/admin/overview', { headers: { cookie: session } })).status).toBe(401);
+    // Locking clears the cookie.
+    const locked = await w.call('/api/admin/session', { method: 'DELETE', headers: { cookie: session } });
+    expect(locked.headers.get('set-cookie')).toMatch(/^lcf_admin=; Max-Age=0; Path=\//);
   });
 
   it('counts wrong passwords per address, never the right one', async () => {
