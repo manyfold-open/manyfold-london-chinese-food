@@ -284,6 +284,38 @@ describe('the work feed', () => {
     expect(item).toMatchObject({ status: 'submitted' });
   });
 
+  it('tops an agent up to the number it asks for, however often it asks', async () => {
+    const w = world();
+    const leads = Array.from({ length: 8 }, (_, i) => ({ subject: `osm:node/${i}`, name: `Wok ${i}` }));
+    await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads } });
+    const token = await join(w);
+    for (let i = 0; i < 3; i += 1) expect((await w.json<{ items: unknown[] }>('/api/work?type=lead&limit=3', { token })).body.items).toHaveLength(3);
+    expect((await w.json<{ items: unknown[] }>('/api/work?type=lead&limit=5', { token })).body.items).toHaveLength(5);
+  });
+
+  it('refuses a record that answers someone else’s work item, or a lead for another place', async () => {
+    const w = world();
+    await w.call('/api/admin/leads', {
+      method: 'POST',
+      admin: true,
+      json: { leads: [{ subject: 'osm:node/1', name: 'Example Noodle House', postcode: 'W1D 6JW' }, { subject: 'fsa:7', name: 'Four Seasons', postcode: 'DA2 6DJ' }] },
+    });
+    const one = await join(w, 'one', '198.51.100.1');
+    const two = await join(w, 'two', '198.51.100.2');
+    const { body } = await w.json<{ items: { id: string; payload: { name: string } }[] }>('/api/work?type=lead&limit=1', { token: one });
+    expect((await submit(w, two, [{ ...place(), work_item: body.items[0]!.id }])).results[0]).toMatchObject({
+      status: 'invalid',
+      errors: [{ field: 'work_item', message: expect.stringContaining('not a work item you hold open') }],
+    });
+    const other = (await w.json<{ items: { id: string; payload: { name: string } }[] }>('/api/work?type=lead&limit=2', { token: one })).body.items.find(
+      (item) => item.payload.name === 'Four Seasons',
+    )!;
+    const mixedUp = (await submit(w, one, [{ ...place(), work_item: other.id }])).results[0]!;
+    expect(mixedUp).toMatchObject({ status: 'invalid', errors: [{ field: 'work_item' }] });
+    expect(mixedUp.errors![0]!.message).toContain('the lead for "Four Seasons" at DA2 6DJ');
+    expect((await submit(w, one, [{ ...place(), work_item: body.items[0]!.id }])).results[0]).toMatchObject({ status: 'accepted' });
+  });
+
   it('lets an agent dismiss a lead with a reason', async () => {
     const w = world();
     await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'fsa:42', name: 'Golden Thai' }] } });

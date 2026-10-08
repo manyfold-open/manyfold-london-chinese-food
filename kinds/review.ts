@@ -13,7 +13,7 @@ export default defineKind({
     place: { type: 'ref', to: ['place'], required: true, label: { en: 'Place', zh: '店铺' }, help: 'The place reviewed: its record id (rec_...) or "#n" for a place sent earlier in the same batch.' },
     published_on: {
       type: 'date', partial: true, required: true, label: { en: 'Published', zh: '发布时间' },
-      help: 'When the review was published, as the page dates it: YYYY-MM-DD, or YYYY-MM or YYYY when that is all it gives.',
+      help: 'When the review was published, as the page dates it: YYYY-MM-DD, or YYYY-MM or YYYY when that is all it gives. A relative date ("3 months ago") counts back from today: give the month it points to, or just the year for "a year ago" and older.',
     },
     publication: {
       type: 'text', max: 80, required: true, label: { en: 'Published in', zh: '来源' },

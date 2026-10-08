@@ -60,12 +60,17 @@ async function illustratedToday(db: D1Database, now: Date): Promise<number> {
 }
 
 /**
- * Hands up to `limit` open items of a type to the token, most wanted first, and returns every
- * item of that type the token holds. One statement, so two agents never get the same item.
+ * Hands open items of a type to the token, most wanted first, until it holds `limit` of them, and
+ * returns every item of that type it holds. One statement, so two agents never get the same item.
  */
 export async function handOut(db: D1Database, token: Token, type: WorkType, limit: number, now: Date): Promise<WorkItem[]> {
   const at = now.toISOString();
-  let room = Math.max(0, Math.min(limit, HANDOUT_MAX));
+  const held = await db
+    .prepare(`SELECT COUNT(*) AS n FROM work_items INDEXED BY work_items_handed WHERE handed_to = ? AND type = ? AND status = 'open' AND handed_until > ?`)
+    .bind(token.id, type, at)
+    .first<{ n: number }>();
+  // Asking again tops the agent's holding up to `limit`; it never piles up.
+  let room = Math.max(0, Math.min(limit, HANDOUT_MAX) - Number(held?.n ?? 0));
   const settings = type === 'illustrate' ? await illustrationSettings(db) : null;
   if (settings) room = settings.requested ? Math.min(room, Math.max(0, settings.daily - (await illustratedToday(db, now)))) : 0;
   if (room > 0) {

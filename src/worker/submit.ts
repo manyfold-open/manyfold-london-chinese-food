@@ -37,6 +37,7 @@ import {
   type RecordData,
 } from '../shared/kinds';
 import { quoteOnPage } from '../shared/quote';
+import { similarity } from '../shared/similar';
 import type { RecordStatus, SubmitResponse, SubmitResult } from '../shared/types';
 import { newId } from './ids';
 import { lookupPostcodes, placeFieldsFrom, type PostcodeAnswer } from './postcodes';
@@ -193,6 +194,47 @@ function store(db: D1Database, token: Token, candidate: Candidate, row: {
   return db.batch(statements);
 }
 
+interface WorkRow {
+  id: string;
+  type: string;
+  subject: string;
+  payload_json: string | null;
+  status: string;
+  handed_to: string | null;
+  handed_until: string | null;
+}
+
+/** The kind of record that answers each type of work item. */
+const ANSWERED_BY: Record<string, Kind> = { lead: 'place', menu: 'menu', reviews: 'review', transcribe: 'menu' };
+
+/**
+ * Why a record cannot answer the work item it names, or null. A lead is answered by the place it
+ * points to: the same outcode or a similar name, so a batch whose work item ids were mixed up is
+ * refused rather than closing the wrong leads.
+ */
+function workItemProblem(item: WorkRow | undefined, id: string, token: Token, kind: Kind, data: RecordData, owner: { id: string; kind: Kind } | null, now: Date): string | null {
+  if (!item || item.handed_to !== token.id || item.status !== 'open' || !item.handed_until || item.handed_until <= now.toISOString()) {
+    return `${id} is not a work item you hold open; GET /api/work lists yours, or send the record without work_item`;
+  }
+  const answer = ANSWERED_BY[item.type];
+  if (answer !== kind) return `${id} is a ${item.type} item, answered by ${answer ? `a ${answer}` : 'an upload'}, not a ${kind}`;
+  if (item.type === 'lead') {
+    const lead = (item.payload_json ? JSON.parse(item.payload_json) : {}) as { name?: string; postcode?: string };
+    const name = String(data.name_en ?? data.name_zh ?? '');
+    const sameArea = Boolean(lead.postcode) && lead.postcode!.split(' ')[0]!.toUpperCase() === String(data.outcode ?? '');
+    const sameName = similarity(normName(lead.name ?? ''), normName(name)) >= 0.5;
+    if (!sameArea && !sameName) {
+      return `${id} is the lead for "${lead.name ?? item.subject}"${lead.postcode ? ` at ${lead.postcode}` : ''}, not ${name} at ${String(data.postcode)}: send this place's own work item, or none`;
+    }
+  }
+  if (item.type === 'reviews' && owner?.id !== item.subject) return `${id} asks for reviews of ${item.subject}, but this review is of ${owner?.id ?? 'another place'}`;
+  if (item.type === 'menu' && owner?.id !== item.subject && owner?.kind !== 'brand') {
+    return `${id} asks for the menu of ${item.subject} (or its brand's), but this menu belongs to ${owner?.id ?? 'another place'}`;
+  }
+  if (item.type === 'transcribe' && data.photo !== item.subject) return `${id} asks for the menu in photo ${item.subject}; set "photo" to it`;
+  return null;
+}
+
 export interface SubmitOptions {
   now: Date;
   fetchPage: (url: string) => Promise<PageCheck>;
@@ -288,6 +330,17 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
     for (let hop = 0; row?.status === 'merged' && row.merged_into && hop < 3; hop += 1) row = refs.get(row.merged_into);
     return row;
   };
+
+  // The work items the batch answers.
+  const itemIds = [...new Set(candidates.map((candidate) => candidate.workItem).filter((id): id is string => id !== null))];
+  const workItems = new Map<string, WorkRow>();
+  if (itemIds.length > 0) {
+    const { results: rows } = await db
+      .prepare('SELECT id, type, subject, payload_json, status, handed_to, handed_until FROM work_items WHERE id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(itemIds))
+      .all<WorkRow>();
+    for (const row of rows) workItems.set(row.id, row);
+  }
 
   // 3. Postcodes of places, then each source once.
   const postcodes = candidates.filter((candidate) => candidate.config.kind === 'place').map((candidate) => String(candidate.data.postcode));
@@ -450,6 +503,14 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
             ? { hint: `If the source shows something has changed, send it again with "updates": "${twinId}".` }
             : {}),
         };
+        continue;
+      }
+    }
+
+    if (candidate.workItem) {
+      const problem = workItemProblem(workItems.get(candidate.workItem), candidate.workItem, token, config.kind, data, parentRow, now);
+      if (problem) {
+        results[index] = { index, status: 'invalid', errors: [{ field: 'work_item', message: problem }] };
         continue;
       }
     }
