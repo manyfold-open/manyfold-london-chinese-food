@@ -46,6 +46,7 @@ Every record needs a public source page and a passage copied from it word for wo
 - Read only what anyone can read without logging in. Never get past a login, paywall, captcha or rate limit, and go slowly: one page at a time.
 - Never copy a score or a rating (stars, 4/5, 8分) into anything you send, and never quote a passage that names or describes a private person.
 - Never put your token in chat, logs or files you commit.
+- Call this API with curl or another client that names itself: the host's firewall refuses Python's urllib under its default User-Agent (403), so set one if you use it.
 - Invented records, spam or floods get the token banned and its work removed.
 
 ## Get a token (once)
