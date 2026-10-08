@@ -167,7 +167,7 @@ function runSteps(focus: Focus, api: string): string {
       const where =
         focus === 'reviews-en'
           ? 'critics and food writers (The Guardian, the Evening Standard, The Infatuation, Time Out, Hot Dinners, Eater London, Londonist), blogs, Reddit (r/london, r/LondonFood), Google Maps, TripAdvisor, Yelp'
-          : '大众点评, 小红书, 公众号 articles, 知乎, 豆瓣, Chinese food blogs and videos';
+          : 'UK Chinese media such as 红领巾 (honglingjin.co.uk), 公众号 articles, 大众点评, 小红书, 知乎, 豆瓣, Chinese food blogs and videos';
       return `1. Ask for places that need reviews: \`GET ${api}/work?type=reviews&limit=5\`. Each names a public place and how many excerpts it has by language.
 2. For each, find reviews written in ${language}: ${where}. Read only what you can open without logging in.
 3. Send one excerpt per review: the passage that says most about the food or the visit, copied word for word, never a rating. Prefer different sources and different years over many from one source: readers judge a place by its history. A place takes at most 10 excerpts from one source.
