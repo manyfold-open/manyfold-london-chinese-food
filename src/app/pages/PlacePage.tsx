@@ -160,10 +160,19 @@ function MenuTab({ doc, illustrations, onReviews }: { doc: PlaceDoc; illustratio
   const copy = useCopy();
   const locale = useLocale();
   const [aiWanted, setAiWanted] = useAiPreference();
+  // The switch only where it changes something: a dish here without a photo has an illustration.
+  const illustrated = useMemo(() => {
+    if (!illustrations?.shown) return false;
+    const unphotographed = [
+      ...doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.filter((item) => !item.photo).map((item) => item.dish))),
+      ...doc.mentioned.map((entry) => entry.dish),
+    ];
+    return unphotographed.some((dish) => dish !== null && Object.hasOwn(illustrations.dishes, dish));
+  }, [doc, illustrations]);
   if (doc.menus.length === 0 && doc.mentioned.length === 0) return <p className="empty">{copy.place.noMenu}</p>;
   return (
     <section className="menus">
-      {illustrations?.shown ? (
+      {illustrated ? (
         <div className="ai-note">
           <CheckRow checked={aiWanted} label={copy.ai.toggle} sub={copy.ai.explain} onToggle={() => setAiWanted(!aiWanted)} />
         </div>
