@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="伦敦哪里吃得到中国菜：每家店的菜单、照片和来自全网的评价原文，没有评分，由 AI agent 收集并核对。" />
+    <title>伦敦中餐 · London Chinese Food</title>
+    <!-- The reader's theme pick, before the first paint (src/app/theme.ts). -->
+    <script>
+      try {
+        var theme = localStorage.getItem('lcf.theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

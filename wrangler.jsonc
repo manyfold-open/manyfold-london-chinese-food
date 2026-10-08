@@ -1,0 +1,67 @@
+// Cloudflare Worker configuration for app.manyfold.ai/london-chinese-food.
+//
+// .github/workflows/ci.yml deploys this on every push to main: checks and tests first,
+// then `npm run build` and `npx wrangler deploy`. The build step is load-bearing — the
+// Cloudflare Vite plugin writes the config that wrangler actually deploys into dist/.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "manyfold-london-chinese-food",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  // The site shares app.manyfold.ai with other apps (tarot, fortune-stick), under BASE_PATH.
+  // src/worker/mount.ts takes the prefix off on the way in and puts it back on the way out.
+  // The workers.dev address stays on for checks; pages there are never indexed.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "app.manyfold.ai/london-chinese-food", "zone_name": "manyfold.ai" },
+    { "pattern": "app.manyfold.ai/london-chinese-food/*", "zone_name": "manyfold.ai" },
+    // The host's root has no origin of its own (it answers 530), and Google reads a robots.txt
+    // that fails with 5xx as "crawl nothing on this host". This Worker answers it instead.
+    { "pattern": "app.manyfold.ai/robots.txt", "zone_name": "manyfold.ai" }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Every request but hashed bundles reaches the Worker first: the API, the media, the
+    // generated files, and the pages, which get their title, links and data on the way out.
+    "run_worker_first": ["/*", "!/assets/*", "!/favicon.svg"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "manyfold-london-chinese-food-db",
+      // The production database (region WEUR). `npm run dev` uses a local D1 in .wrangler/.
+      "database_id": "fc9f7e30-aa81-42e3-b1d8-39eab5f586da"
+    }
+  ],
+  // Visitors' photos and agents' illustrations, only ever as WebP the Images binding wrote.
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "manyfold-london-chinese-food-media"
+    }
+  ],
+  // Re-encodes every upload (src/worker/media.ts): WebP output drops all metadata, GPS included.
+  "images": {
+    "binding": "IMAGES"
+  },
+  "vars": {
+    // The site's public address, mount included: canonical links, the sitemap, agents' links,
+    // and the one host whose pages may be indexed.
+    "PUBLIC_URL": "https://app.manyfold.ai/london-chinese-food",
+    "BASE_PATH": "/london-chinese-food",
+    // Turnstile's public site key for the photo upload form. The secret is TURNSTILE_SECRET.
+    "TURNSTILE_SITE_KEY": ""
+  },
+  // Secrets, set with `npx wrangler secret put <NAME>`:
+  //   ADMIN_PASSWORD     opens /api/admin/* and /settings
+  //   TURNSTILE_SECRET   checks the photo upload form's Turnstile answer
+  // Every five minutes: expired leases and handouts, rechecks, the read models of places that
+  // changed (src/worker/docs.ts), and old counters (src/worker/maintenance.ts).
+  "triggers": { "crons": ["*/5 * * * *"] }
+}

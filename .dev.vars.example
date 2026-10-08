@@ -1,0 +1,15 @@
+# Local development secrets. Copy to .dev.vars (git-ignored); `npm run dev` reads it.
+
+# Opens /settings and /api/admin/*. Unset, both stay closed.
+# In production: npx wrangler secret put ADMIN_PASSWORD
+ADMIN_PASSWORD=
+
+# Turnstile for the photo upload form. These are Cloudflare's test keys, which always pass:
+# never put the production secret here. In production the site key is a var in wrangler.jsonc
+# and the secret is: npx wrangler secret put TURNSTILE_SECRET
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+
+# Local addresses: the site at the root of the dev server, so no mount.
+PUBLIC_URL=http://localhost:5173
+BASE_PATH=
