@@ -60,15 +60,7 @@ interface RecordRow {
 const RECORD_SELECT = `SELECT r.*, t.label AS submitter_label FROM records r LEFT JOIN tokens t ON t.id = r.submitted_by`;
 
 export const actorLabel = (id: string, label: string | null | undefined): string =>
-  id === 'seed'
-    ? 'Site team (seed data)'
-    : id === ADMIN
-      ? 'Admin'
-      : id === SYSTEM
-        ? 'Site (automatic)'
-        : id === 'visitor'
-          ? 'A visitor'
-          : (label ?? 'Unknown token');
+  id === ADMIN ? 'Admin' : id === SYSTEM ? 'Site (automatic)' : id === 'visitor' ? 'A visitor' : (label ?? 'Unknown token');
 
 function toAdminRecord(row: RecordRow): AdminRecord {
   const data = JSON.parse(row.data_json) as RecordData;

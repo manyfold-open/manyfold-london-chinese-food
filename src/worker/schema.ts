@@ -1,6 +1,6 @@
 /**
  * The D1 schema. The Worker applies it on the first request of each isolate
- * (src/worker/db.ts), and every seed file starts with it (scripts/seed.ts).
+ * (src/worker/db.ts).
  *
  * There is no migration step: evolve it only with CREATE TABLE / CREATE INDEX IF NOT
  * EXISTS, and keep semicolons out of statement bodies and comments, because
