@@ -209,10 +209,12 @@ export async function rebuildPlace(db: D1Database, placeId: string, now: Date): 
     );
   }
   const name = built.entry.n ?? built.entry.z;
+  // Restaurants first: they are what critics, writers and platforms review; a supermarket last.
+  const kindFirst = place.data.category === 'restaurant' ? 2 : place.data.category === 'grocery' ? 0 : 1;
   statements.push(
-    built.wants.menu ? wantWork(db, 'menu', placeId, 5, { place: placeId, name, postcode: place.data.postcode }, now) : doneWork(db, 'menu', placeId, now),
+    built.wants.menu ? wantWork(db, 'menu', placeId, 4 + kindFirst, { place: placeId, name, postcode: place.data.postcode }, now) : doneWork(db, 'menu', placeId, now),
     built.wants.reviews
-      ? wantWork(db, 'reviews', placeId, 6 - Math.min(6, built.wants.reviews.en + built.wants.reviews.zh), { place: placeId, name, postcode: place.data.postcode, ...built.wants.reviews }, now)
+      ? wantWork(db, 'reviews', placeId, 2 * (6 - Math.min(6, built.wants.reviews.en + built.wants.reviews.zh)) + kindFirst, { place: placeId, name, postcode: place.data.postcode, ...built.wants.reviews }, now)
       : doneWork(db, 'reviews', placeId, now),
     clearDirty,
   );

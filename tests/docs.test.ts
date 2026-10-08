@@ -133,4 +133,21 @@ describe('the work feed from pages', () => {
     const menuItem = await w.env.DB.prepare(`SELECT status FROM work_items WHERE subject = ? AND type = 'menu'`).bind(results[0]!.id).first<{ status: string }>();
     expect(menuItem!.status).toBe('done');
   });
+
+  it('asks for reviews of restaurants before other places, and of the least reviewed first', async () => {
+    const w = world();
+    const token = await join(w);
+    const { results } = await submit(w, token, [
+      place(),
+      place({ name_en: 'Example Supermarket', category: 'grocery', cuisines: undefined, postcode: 'N7 8AB' }),
+      place({ name_en: 'Example Reviewed House', postcode: 'E14 5AB' }),
+      review('#2'),
+    ]);
+    for (const result of results) await decide(w, result.id!, 'verified');
+    await cron(w);
+    const { results: items } = await w.env.DB.prepare(`SELECT subject, priority FROM work_items WHERE type = 'reviews'`).all<{ subject: string; priority: number }>();
+    const priority = Object.fromEntries(items.map((item) => [item.subject, item.priority]));
+    // A restaurant with none; a restaurant with one, and a supermarket with none.
+    expect(priority).toEqual({ [results[0]!.id!]: 14, [results[2]!.id!]: 12, [results[1]!.id!]: 12 });
+  });
 });
