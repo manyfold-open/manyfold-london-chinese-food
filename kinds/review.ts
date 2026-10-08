@@ -17,7 +17,7 @@ export default defineKind({
     },
     publication: {
       type: 'text', max: 80, required: true, label: { en: 'Published in', zh: '来源' },
-      help: 'Where it appeared: the publication, blog, forum or platform, e.g. "The Guardian", "Google Maps", "大众点评", "小红书", "r/london".',
+      help: 'Where it appeared: the publication, blog, forum or platform, named as this site already names it so one source keeps one history: "The Guardian", "The Infatuation", "Time Out" (not "Time Out London"), "MICHELIN Guide", "红领巾 Red Scarf", "Google Maps", "大众点评", "小红书", "r/london". A blog goes by its own title.',
     },
     source_type: { type: 'enum', required: true, label: { en: 'Source type', zh: '来源类型' }, values: SOURCE_TYPES, valueLabels: SOURCE_TYPE_LABELS },
     author: {
