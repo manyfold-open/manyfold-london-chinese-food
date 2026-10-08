@@ -62,6 +62,22 @@ export async function consume(
   };
 }
 
+/** Whether `scope:subject` still has room under the rule, counting nothing. */
+export async function peek(
+  db: D1Database,
+  scope: string,
+  subject: string,
+  rule: RateRule,
+  nowMs: number = Date.now(),
+): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+  const index = windowIndex(nowMs, rule.windowMs);
+  const row = await db.prepare('SELECT count FROM rate_counters WHERE bucket = ?').bind(`${scope}:${subject}:${index}`).first<{ count: number }>();
+  return {
+    allowed: Number(row?.count ?? 0) < rule.limit,
+    retryAfterSeconds: Math.max(1, Math.ceil(((index + 1) * rule.windowMs - nowMs) / 1000)),
+  };
+}
+
 /** Counts one hit under every rule and throws 429 when any of them is full. */
 export async function enforce(
   db: D1Database,

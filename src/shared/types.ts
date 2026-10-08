@@ -133,6 +133,13 @@ export interface WorkItem {
   note: string | null;
 }
 
+/** A work item as the admin sees it: also the record sent for it, and who holds it. */
+export interface AdminWorkItem extends WorkItem {
+  record_id: string | null;
+  handed_to: { id: string; label: string } | null;
+  updated_at: string;
+}
+
 export type WorkType = 'lead' | 'menu' | 'reviews' | 'transcribe' | 'illustrate';
 export const WORK_TYPES: readonly WorkType[] = ['lead', 'menu', 'reviews', 'transcribe', 'illustrate'];
 
@@ -225,7 +232,9 @@ export interface ReviewItem {
   type: 'unsure' | 'flagged' | 'report';
   record: AdminRecord;
   reason: string;
+  /** Who was unsure, or who sent a flagged record: a token id, and its label. */
   by: string | null;
+  by_label: string | null;
   at: string;
   task_id: string | null;
   report_id: number | null;

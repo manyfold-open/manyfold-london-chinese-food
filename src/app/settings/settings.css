@@ -1,0 +1,1098 @@
+/* The admin console's own styles. Imported by SettingsPage, so they ship in the console's chunk and
+   readers never download them. Colors come from the tokens in ../styles.css. Once loaded they stay
+   in the document, even after the admin goes back to a reader page, so every rule is scoped under
+   .settings (the console's <main>) or .settings-site (its frame), or names a class only the
+   console uses (.settings-*, .confirm-text, which sits in a sheet outside <main>). */
+
+/* ── frame ── */
+
+.settings-site .topbar-app {
+  padding-left: 10px;
+  border-left: 1px solid var(--line2);
+}
+
+.settings code {
+  font: 12.5px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.settings .empty {
+  padding: 0;
+  color: var(--muted);
+}
+
+.settings .notice {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--warn);
+  border-radius: 0 8px 8px 0;
+  background: var(--hover);
+  color: var(--ink2);
+  font-size: 14px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.settings .notice.good {
+  border-left-color: var(--up);
+}
+
+.settings blockquote {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--axis);
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+
+/* ── section bar ── */
+
+.settings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.settings-nav a {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 17px;
+  color: var(--ink2);
+  font-size: 14px;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+
+.settings-nav a:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.settings-nav a[aria-current='page'] {
+  background: var(--chip);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.settings-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-tools .select-list {
+  right: 0;
+  left: auto;
+}
+
+/* ── tables ── */
+
+.settings .table-wrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .records {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.settings .records th,
+.settings .records td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--grid);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.settings .records td.wrap {
+  min-width: 160px;
+  max-width: 260px;
+  white-space: normal;
+}
+
+.settings .records td:first-child {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.settings .records tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.settings .records tbody tr:hover,
+.settings .records tbody tr.current {
+  background: var(--wash);
+}
+
+.settings .records th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Names in the first column are links: keep them left-aligned like the text around them. */
+.settings .records a {
+  text-align: left;
+}
+
+.settings .work-items td:first-child {
+  min-width: 260px;
+  max-width: 420px;
+}
+
+/* Each token's actions sit on their own line under its row, so they never scroll out of view.
+   Cells may wrap, so the table fits its box and every row's actions stay in view. */
+.settings .token-table th,
+.settings .token-table td {
+  padding-left: 12px;
+  padding-right: 12px;
+  white-space: normal;
+}
+
+.settings .token-table td.num {
+  white-space: nowrap;
+}
+
+.settings .token-table tr.has-actions td {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.settings .token-table tr.actions-row td {
+  padding-top: 4px;
+  white-space: normal;
+}
+
+.settings .token-table tbody tr:hover {
+  background: none;
+}
+
+.settings .row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.settings .undo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings .pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings .loading-rows {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+/* ── facts of one record ── */
+
+.settings .facts {
+  margin: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .fact {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--grid);
+}
+
+.settings .fact:last-child {
+  border-bottom: 0;
+}
+
+.settings .fact dt {
+  color: var(--ink2);
+  font-size: 14px;
+}
+
+.settings .fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings .facts.compact .fact {
+  grid-template-columns: 140px minmax(0, 1fr);
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.settings .facts.record-meta {
+  margin-top: 12px;
+}
+
+/* A few of a record's fields, in two columns. */
+.settings .summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.settings .summary div {
+  display: contents;
+}
+
+.settings .summary dt {
+  color: var(--muted);
+}
+
+.settings .summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings .detail {
+  margin-top: 20px;
+}
+
+.settings .detail .section-head {
+  margin-top: 0;
+}
+
+.settings .detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.settings .detail-grid h4:first-child {
+  margin-top: 0;
+}
+
+.settings .json {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  max-height: 360px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--hover);
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings .json-fold summary,
+.settings .media-meta details summary,
+.settings .work-subject details summary {
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+.settings .before-after {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings .history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--grid);
+}
+
+.settings .history-list > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--grid);
+  font-size: 14px;
+}
+
+.settings .history-list p {
+  margin: 4px 0;
+}
+
+.settings .history-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 16px;
+}
+
+.settings .history-line time {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.settings .diff {
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.settings .diff li {
+  overflow-wrap: anywhere;
+}
+
+.settings .diff .was {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* ── panels, the gate ── */
+
+.settings .section-head {
+  margin: 28px 0 14px;
+}
+
+.settings .section-head h2,
+.settings .section-head h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.settings .panel {
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .panel h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+
+.settings .panel h4 {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+.settings details.panel > summary {
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings details.panel[open] > summary {
+  margin-bottom: 10px;
+}
+
+.settings .gate {
+  display: grid;
+  gap: 14px;
+  max-width: 420px;
+  margin: 40px auto;
+}
+
+.settings .gate h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.settings .gate p {
+  margin: 0;
+}
+
+.settings .gate .btn {
+  justify-self: start;
+}
+
+/* ── badges ── */
+
+.settings .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--ring);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.settings td > .badge:first-child,
+.settings .review-head .badge:first-child,
+.settings .plain li > .badge:first-child {
+  margin-left: 0;
+}
+
+/* The dot carries the colour; the word always carries the meaning. */
+.settings .badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.settings .badge-verified::before,
+.settings .badge-active::before,
+.settings .badge-resolved::before,
+.settings .badge-done::before,
+.settings .badge-applied::before {
+  background: var(--good);
+}
+
+.settings .badge-pending::before,
+.settings .badge-stale::before,
+.settings .badge-suspended::before,
+.settings .badge-flagged::before,
+.settings .badge-open::before,
+.settings .badge-review::before,
+.settings .badge-leased::before,
+.settings .badge-blocked::before,
+.settings .badge-submitted::before,
+.settings .badge-proposal::before {
+  background: var(--warning);
+}
+
+.settings .badge-rejected::before,
+.settings .badge-revoked::before {
+  background: var(--critical);
+}
+
+.settings .badge-kind::before {
+  display: none;
+}
+
+/* ── forms and actions ── */
+
+.settings .inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 16px;
+  margin: 8px 0;
+}
+
+.settings .field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.settings .field > span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.settings .field > small {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.settings .field input[type='text'],
+.settings .field input[type='password'],
+.settings .field .search {
+  min-width: 240px;
+}
+
+.settings input[type='password'],
+.settings input[type='number'] {
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--ink);
+  font-size: 14px;
+  caret-color: var(--accent);
+  transition:
+    background 120ms,
+    box-shadow 120ms;
+}
+
+.settings input[type='password']:focus,
+.settings input[type='number']:focus {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  outline: none;
+}
+
+.settings input::placeholder {
+  color: var(--muted);
+}
+
+.settings .text-field {
+  height: 36px;
+}
+
+.settings .text-field[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.settings .narrow {
+  width: 92px;
+}
+
+.settings .narrow-date {
+  width: 130px;
+  min-width: 0;
+}
+
+.settings .undo input {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.settings .json-editor,
+.settings .template-editor {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  font: 13px/1.5 var(--mono);
+  resize: vertical;
+}
+
+.settings .template-editor {
+  font: 14px/1.5 var(--font);
+}
+
+.settings .action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings .action-error {
+  color: var(--critical);
+  font-size: 13px;
+}
+
+.settings .btn.danger {
+  color: var(--critical);
+}
+
+.confirm-text {
+  margin: 0 0 4px;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.settings .rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings .rename .text-field {
+  width: auto;
+  min-width: 180px;
+  height: 32px;
+  font-size: 13px;
+}
+
+/* Kit check rows, sized for a form rather than a filter column. */
+.settings .check-list {
+  display: grid;
+  width: min(360px, 100%);
+  padding-left: 8px;
+}
+
+.settings .check-list.wide {
+  width: min(560px, 100%);
+  margin-bottom: 8px;
+}
+
+.settings .check-field {
+  width: min(320px, 100%);
+  padding-left: 8px;
+}
+
+/* ── tokens ── */
+
+.settings .token-reveal p {
+  margin: 0 0 10px;
+}
+
+.settings .secret-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.settings .secret {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 14px;
+  user-select: all;
+}
+
+.settings .secret-message {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--page);
+  box-shadow: inset 0 0 0 1px var(--grid);
+  font: 13px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── review queue, spot-check ── */
+
+.settings .review-list,
+.settings .spot-list,
+.settings .plain,
+.settings .media-grid,
+.settings .host-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings .plain li {
+  margin-bottom: 6px;
+}
+
+.settings .review-item,
+.settings .spot-item {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .review-head,
+.settings .spot-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings .review-body {
+  margin: 8px 0;
+}
+
+.settings .review-body.has-image {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.settings .review-reason {
+  margin: 8px 0;
+}
+
+.settings .review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings .review-actions > .text-field,
+.settings .spot-item .inline-form > .text-field {
+  flex: 1;
+  width: auto;
+  min-width: 220px;
+}
+
+.settings .takedown-row {
+  margin-top: 8px;
+}
+
+.settings .takedown-row .check-row {
+  width: auto;
+  margin: 0;
+}
+
+.settings .spot-item.right {
+  box-shadow:
+    inset 3px 0 0 var(--good),
+    inset 0 0 0 1px var(--line2);
+}
+
+.settings .spot-item.wrong {
+  box-shadow:
+    inset 3px 0 0 var(--critical),
+    inset 0 0 0 1px var(--line2);
+}
+
+.settings .spot-item p {
+  margin: 6px 0;
+}
+
+/* ── images ── */
+
+.settings .admin-image {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--chip);
+}
+
+.settings .admin-image.thumb {
+  aspect-ratio: 1;
+}
+
+.settings .admin-image.full {
+  min-height: 200px;
+  max-width: 560px;
+  margin-bottom: 12px;
+}
+
+.settings .admin-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.settings .admin-image.full img {
+  height: auto;
+  max-height: 560px;
+}
+
+.settings .image-note {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.settings .media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.settings .media-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .media-meta p {
+  margin: 2px 0;
+}
+
+.settings .media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.settings .media-actions > .text-field {
+  flex: 1 1 100%;
+  height: 34px;
+}
+
+.settings .prompt {
+  margin: 4px 0 0;
+  color: var(--ink2);
+  white-space: pre-wrap;
+}
+
+/* ── work, hosts ── */
+
+.settings .work-subject {
+  display: grid;
+  gap: 2px;
+}
+
+.settings .host-list {
+  max-width: 560px;
+  border-top: 1px solid var(--grid);
+}
+
+.settings .host-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+@media (max-width: 900px) {
+  .settings .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .settings .fact,
+  .settings .facts.compact .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+/* ── phone ── */
+
+@media (max-width: 767px) {
+  .settings-site .topbar-app {
+    display: none;
+  }
+
+  .settings-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* One row of section tabs that scrolls sideways, edge to edge. */
+  .settings-nav {
+    /* Its row of tabs must not widen the page: size it from the page, scroll the rest. */
+    contain: inline-size;
+    position: relative;
+    flex-wrap: nowrap;
+    margin: 0 -16px;
+    padding: 0 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-nav a {
+    flex: none;
+  }
+
+  .settings-tools {
+    justify-content: space-between;
+  }
+
+  .settings-tools > .btn {
+    margin-left: auto;
+  }
+
+  .settings-tools .select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .settings-tools .select-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-tools .select-list {
+    right: auto;
+    left: 0;
+  }
+
+  .settings .section-head {
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+
+  .settings .panel {
+    padding: 16px;
+  }
+
+  /* Forms: one field per line at full width; buttons share the last line. */
+  .settings .inline-form {
+    align-items: stretch;
+  }
+
+  .settings .inline-form > * {
+    flex: 1 1 100%;
+  }
+
+  .settings .inline-form > .action,
+  .settings .inline-form > .btn {
+    flex: 1 1 0;
+  }
+
+  .settings .action .btn {
+    flex: 1;
+  }
+
+  .settings .review-actions > .text-field,
+  .settings .spot-item .inline-form > .text-field {
+    min-width: 0;
+  }
+
+  .settings .field input,
+  .settings .field textarea,
+  .settings .field .text-field,
+  .settings .field .search,
+  .settings .field .select,
+  .settings .field .select-button,
+  .settings .narrow-date {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .settings .review-body.has-image {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .settings .before-after {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings .media-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  /* Tables become one card per row; every cell carries its column's name (useCellLabels). */
+  .settings .table-wrap {
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .settings .records,
+  .settings .records tbody,
+  .settings .records tr,
+  .settings .records td {
+    display: block;
+    width: 100%;
+  }
+
+  .settings .records thead {
+    display: none;
+  }
+
+  .settings .records tbody:empty::before {
+    display: block;
+    padding: 4px 0;
+    color: var(--muted);
+    content: 'Nothing here yet.';
+  }
+
+  .settings .records tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    margin-bottom: 10px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    box-shadow: inset 0 0 0 1px var(--line2);
+  }
+
+  .settings .records td {
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .settings .records td[data-label]::before {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 12px;
+    content: attr(data-label);
+  }
+
+  /* The first cell names the row: full width, no label. */
+  .settings .records td:first-child {
+    grid-column: 1 / -1;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .settings .records td:first-child::before {
+    display: none;
+  }
+
+  /* A row of actions under a token joins the card above it. */
+  .settings .token-table tr.has-actions {
+    margin-bottom: 0;
+    padding-bottom: 8px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow:
+      inset 1px 0 0 var(--line2),
+      inset -1px 0 0 var(--line2),
+      inset 0 1px 0 var(--line2);
+  }
+
+  .settings .token-table tr.actions-row {
+    display: block;
+    margin-top: 0;
+    padding-top: 4px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow:
+      inset 1px 0 0 var(--line2),
+      inset -1px 0 0 var(--line2),
+      inset 0 -1px 0 var(--line2);
+  }
+
+  .settings .records tbody tr:hover,
+  .settings .records tbody tr.current {
+    background: none;
+  }
+
+  .settings .history-line {
+    flex-direction: column;
+  }
+
+  .settings .row-actions > .undo {
+    flex: 1 1 100%;
+  }
+
+  .settings .undo .select {
+    flex: 1;
+  }
+
+  .settings .undo .select-button {
+    width: 100%;
+    min-width: 0;
+  }
+}

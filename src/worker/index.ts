@@ -466,6 +466,7 @@ app.get('/api/admin/records', async (c) =>
       status: c.req.query('status'),
       q: c.req.query('q'),
       parent: c.req.query('parent'),
+      by: c.req.query('by'),
       page: Number(c.req.query('page') ?? 1) || 1,
     }),
   ),
@@ -501,7 +502,7 @@ app.post('/api/admin/photos/reject', refreshesDocs, async (c) => {
   const reason = typeof input.reason === 'string' && input.reason.trim() ? input.reason.trim().slice(0, 300) : '';
   if (!Number.isFinite(since) || !Number.isFinite(until) || !reason) throw new HttpError(422, 'invalid_body', 'Send since and until (ISO 8601) and a reason.');
   const { results } = await c.env.DB
-    .prepare(`SELECT id FROM records INDEXED BY records_age WHERE kind = 'photo' AND status = 'pending' AND updated_at >= ? AND updated_at <= ? AND submitted_by = 'visitor'`)
+    .prepare(`SELECT id FROM records INDEXED BY records_age WHERE kind = 'photo' AND status = 'pending' AND created_at >= ? AND created_at <= ? AND submitted_by = 'visitor'`)
     .bind(new Date(since).toISOString(), new Date(until).toISOString())
     .all<{ id: string }>();
   const now = new Date();
@@ -511,7 +512,12 @@ app.post('/api/admin/photos/reject', refreshesDocs, async (c) => {
 
 app.get('/api/admin/illustrations/settings', async (c) => c.json(await illustrationSettings(c.env.DB)));
 app.patch('/api/admin/illustrations/settings', async (c) => c.json(await updateIllustrationSettings(c.env.DB, await body(c), new Date())));
-app.post('/api/admin/illustrations/:id/replace', refreshesDocs, async (c) => c.json(await replaceIllustration(c.env.DB, c.req.param('id'), await body(c), new Date())));
+app.post('/api/admin/illustrations/:id/replace', refreshesDocs, async (c) => {
+  const id = c.req.param('id');
+  const outcome = await replaceIllustration(c.env.DB, id, await body(c), new Date());
+  await forget([publicUrl(c, `/media/i/${id}/full.webp`), publicUrl(c, `/media/i/${id}/thumb.webp`)]);
+  return c.json(outcome);
+});
 
 app.get('/api/admin/blocked-hosts', async (c) => c.json({ hosts: await blockedHosts(c.env.DB) }));
 app.put('/api/admin/blocked-hosts', async (c) => c.json({ hosts: await setBlockedHosts(c.env.DB, (await body(c)).hosts, new Date()) }));

@@ -103,7 +103,7 @@ async function recordRow(db: D1Database, id: string): Promise<RecordRow> {
 
 export async function listRecords(
   db: D1Database,
-  query: { kind?: string; status?: string; q?: string; parent?: string; page?: number },
+  query: { kind?: string; status?: string; q?: string; parent?: string; by?: string; page?: number },
 ): Promise<{ total: number; page: number; records: AdminRecord[] }> {
   const kind = query.kind && (KINDS as readonly string[]).includes(query.kind) ? query.kind : null;
   const status = query.status && (RECORD_STATUSES as readonly string[]).includes(query.status) ? query.status : null;
@@ -111,11 +111,11 @@ export async function listRecords(
   const parent = query.parent || null;
   const page = Math.max(1, query.page ?? 1);
   const where = `(?1 IS NULL OR r.kind = ?1) AND (?2 IS NULL OR r.status = ?2) AND (?3 IS NULL OR r.data_json LIKE ?3 ESCAPE '\\' OR r.id = ?4)
-    AND (?5 IS NULL OR r.parent_id = ?5 OR r.root_id = ?5)`;
-  const params = [kind, status, like, query.q ?? null, parent];
+    AND (?5 IS NULL OR r.parent_id = ?5 OR r.root_id = ?5) AND (?6 IS NULL OR r.submitted_by = ?6)`;
+  const params = [kind, status, like, query.q ?? null, parent, query.by || null];
   const [count, rows] = await db.batch([
     db.prepare(`SELECT COUNT(*) AS n FROM records r WHERE ${where}`).bind(...params),
-    db.prepare(`${RECORD_SELECT} WHERE ${where} ORDER BY r.updated_at DESC, r.id LIMIT ?6 OFFSET ?7`).bind(...params, PAGE_SIZE, (page - 1) * PAGE_SIZE),
+    db.prepare(`${RECORD_SELECT} WHERE ${where} ORDER BY r.updated_at DESC, r.id LIMIT ?7 OFFSET ?8`).bind(...params, PAGE_SIZE, (page - 1) * PAGE_SIZE),
   ]);
   return {
     total: (count?.results[0] as { n: number } | undefined)?.n ?? 0,
@@ -186,6 +186,7 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
         `${RECORD_SELECT.replace('SELECT r.*', `SELECT r.*, k.id AS task_id,
            (SELECT reason FROM revisions WHERE record_id = r.id AND action = 'unsure' ORDER BY id DESC LIMIT 1) AS note,
            (SELECT actor FROM revisions WHERE record_id = r.id AND action = 'unsure' ORDER BY id DESC LIMIT 1) AS note_by,
+           (SELECT t2.label FROM revisions v2 JOIN tokens t2 ON t2.id = v2.actor WHERE v2.record_id = r.id AND v2.action = 'unsure' ORDER BY v2.id DESC LIMIT 1) AS note_by_label,
            k.done_at AS at`)}
          JOIN tasks k ON k.record_id = r.id WHERE k.status = 'review' AND (? IS NULL OR r.kind = ?)`,
       )
@@ -198,13 +199,14 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       )
       .bind(only, only),
   ]);
-  type Row = RecordRow & { task_id?: string; report_id?: number; report_type?: string; note?: string; note_by?: string; at?: string };
+  type Row = RecordRow & { task_id?: string; report_id?: number; report_type?: string; note?: string; note_by?: string; note_by_label?: string | null; at?: string };
   const items: ReviewItem[] = [
     ...((unsure?.results ?? []) as Row[]).map((row) => ({
       type: 'unsure' as const,
       record: toAdminRecord(row),
       reason: row.note ?? '',
       by: row.note_by ?? null,
+      by_label: row.note_by ? actorLabel(row.note_by, row.note_by_label) : null,
       at: row.at ?? row.updated_at,
       task_id: row.task_id ?? null,
       report_id: null,
@@ -214,6 +216,7 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       record: toAdminRecord(row),
       reason: 'Text that looks aimed at AI agents',
       by: row.submitted_by,
+      by_label: actorLabel(row.submitted_by, row.submitter_label),
       at: row.created_at,
       task_id: null,
       report_id: null,
@@ -223,6 +226,7 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       record: toAdminRecord(row),
       reason: `${row.report_type === 'takedown' ? 'Takedown request: ' : ''}${row.note ?? ''}`,
       by: null,
+      by_label: null,
       at: row.at ?? row.updated_at,
       task_id: null,
       report_id: row.report_id ?? null,

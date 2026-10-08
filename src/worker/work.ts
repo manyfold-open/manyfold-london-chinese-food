@@ -15,11 +15,11 @@
  * (src/worker/effects.ts).
  */
 
-import type { WorkItem, WorkType } from '../shared/types';
+import type { AdminWorkItem, WorkItem, WorkType } from '../shared/types';
 import { WORK_TYPES } from '../shared/types';
 import { newId } from './ids';
 import { HOUR } from './ratelimit';
-import { illustrationSettings } from './settings';
+import { illustrationSettings, promptFor } from './settings';
 import type { Token } from './tokens';
 import { HttpError } from './types';
 
@@ -66,10 +66,8 @@ async function illustratedToday(db: D1Database, now: Date): Promise<number> {
 export async function handOut(db: D1Database, token: Token, type: WorkType, limit: number, now: Date): Promise<WorkItem[]> {
   const at = now.toISOString();
   let room = Math.max(0, Math.min(limit, HANDOUT_MAX));
-  if (type === 'illustrate') {
-    const settings = await illustrationSettings(db);
-    room = settings.requested ? Math.min(room, Math.max(0, settings.daily - (await illustratedToday(db, now)))) : 0;
-  }
+  const settings = type === 'illustrate' ? await illustrationSettings(db) : null;
+  if (settings) room = settings.requested ? Math.min(room, Math.max(0, settings.daily - (await illustratedToday(db, now)))) : 0;
   if (room > 0) {
     const result = await db
       .prepare(
@@ -99,7 +97,16 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
     )
     .bind(token.id, type, at)
     .all<ItemRow>();
-  return results.map(toItem);
+  const items = results.map(toItem);
+  // The prompt follows the template as it is now, so an edit reaches items opened before it.
+  if (settings) {
+    for (const item of items) {
+      const payload = item.payload ?? {};
+      const text = (value: unknown) => (typeof value === 'string' && value ? value : null);
+      item.payload = { ...payload, prompt: promptFor(settings.template, { key: item.subject, zh: text(payload.name_zh), en: text(payload.name_en) }, text(payload.note)) };
+    }
+  }
+  return items;
 }
 
 /** A held item the agent gives up on: a lead that is not a place to list is dismissed for good, anything else goes back. */
@@ -190,19 +197,26 @@ export async function importLeads(db: D1Database, leads: unknown, now: Date): Pr
 }
 
 /** The work feed as the admin sees it: counts by type and status, and the latest items of a type. */
-export async function workAdmin(db: D1Database, type: WorkType | null, status: string | null): Promise<{ counts: { type: string; status: string; n: number }[]; items: WorkItem[] }> {
+export async function workAdmin(db: D1Database, type: WorkType | null, status: string | null): Promise<{ counts: { type: string; status: string; n: number }[]; items: AdminWorkItem[] }> {
   const [counts, items] = await db.batch([
     db.prepare('SELECT type, status, COUNT(*) AS n FROM work_items GROUP BY type, status'),
     db
       .prepare(
-        `SELECT id, type, subject, priority, payload_json, status, handed_until, note FROM work_items
-         WHERE (? IS NULL OR type = ?) AND (? IS NULL OR status = ?) ORDER BY updated_at DESC LIMIT 100`,
+        `SELECT w.id, w.type, w.subject, w.priority, w.payload_json, w.status, w.handed_until, w.note, w.record_id, w.handed_to, w.updated_at, t.label AS handed_label
+         FROM work_items w LEFT JOIN tokens t ON t.id = w.handed_to
+         WHERE (? IS NULL OR w.type = ?) AND (? IS NULL OR w.status = ?) ORDER BY w.updated_at DESC LIMIT 100`,
       )
       .bind(type, type, status, status),
   ]);
+  type Row = ItemRow & { record_id: string | null; handed_to: string | null; updated_at: string; handed_label: string | null };
   return {
     counts: (counts?.results ?? []) as { type: string; status: string; n: number }[],
-    items: ((items?.results ?? []) as ItemRow[]).map(toItem),
+    items: ((items?.results ?? []) as Row[]).map((row) => ({
+      ...toItem(row),
+      record_id: row.record_id,
+      handed_to: row.handed_to ? { id: row.handed_to, label: row.handed_label ?? row.handed_to } : null,
+      updated_at: row.updated_at,
+    })),
   };
 }
 

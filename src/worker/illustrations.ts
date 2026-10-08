@@ -1,31 +1,20 @@
 /**
  * AI illustrations as work (AGENTS.md, invariant 18). The Worker calls no image model: it keeps
  * an `illustrate` work item open for every standard dish places serve that has no illustration,
- * most served first, with the prompt to use, and agents generate and upload them
+ * most served first, with the prompt to use (filled in from the admin's template each time an item
+ * is handed out, src/worker/work.ts), and agents generate and upload them
  * (src/worker/uploads.ts). A maintainer looks at each; an approved one becomes its dish's picture
  * (src/worker/effects.ts) wherever no real photo of that dish at that place exists.
  */
 
-import { CUISINE_LABELS } from '../../kinds/vocab';
 import { standardDish } from '../shared/dish';
 import { cleanText } from '../shared/kinds';
 import { decide } from './console';
-import { illustrationSettings, putSetting, type IllustrationSettings } from './settings';
+import { illustrationSettings, promptFor, putSetting, type IllustrationSettings } from './settings';
 import { HttpError } from './types';
 
 /** How many dishes one run looks at for missing work items. */
 const SYNC_MAX = 200;
-
-/** The prompt for a dish, from the template the admin can edit. */
-export function promptFor(template: string, dish: { key: string; zh: string | null; en: string | null }, note?: string | null): string {
-  const entry = standardDish(dish.zh) ?? standardDish(dish.en) ?? standardDish(dish.key);
-  const zh = entry?.zh ?? dish.zh ?? dish.key;
-  const en = entry?.en ?? dish.en ?? zh;
-  const cuisine = entry ? (CUISINE_LABELS[entry.cuisine]?.en ?? 'Chinese') : 'Chinese';
-  const description = entry?.description ?? `A typical serving of ${en}.`;
-  const prompt = template.replaceAll('{zh}', zh).replaceAll('{en}', en).replaceAll('{cuisine}', cuisine).replaceAll('{description}', description);
-  return note ? `${prompt} Note from the last review: ${note}` : prompt;
-}
 
 /**
  * Opens a work item for each served dish with no illustration and none waiting, and refreshes the
@@ -81,10 +70,10 @@ export async function replaceIllustration(db: D1Database, id: string, body: { no
   const result = await db
     .prepare(
       `UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL, note = ?,
-         payload_json = json_set(coalesce(payload_json, '{}'), '$.prompt', ?), updated_at = ?
+         payload_json = json_set(coalesce(payload_json, '{}'), '$.prompt', ?, '$.note', ?), updated_at = ?
        WHERE type = 'illustrate' AND subject = ?`,
     )
-    .bind(note || 'The last illustration was replaced.', prompt, now.toISOString(), record.identity_key)
+    .bind(note || 'The last illustration was replaced.', prompt, note || null, now.toISOString(), record.identity_key)
     .run();
   return { reopened: Number(result.meta.changes ?? 0) > 0 };
 }

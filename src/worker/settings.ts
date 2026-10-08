@@ -3,6 +3,9 @@
  * hosts the site may not quote, and how illustrations are handled.
  */
 
+import { CUISINE_LABELS } from '../../kinds/vocab';
+import { standardDish } from '../shared/dish';
+
 export async function getSetting(db: D1Database, key: string): Promise<string | null> {
   const row = await db.prepare(`SELECT value FROM settings WHERE scope = '*' AND key = ?`).bind(key).first<{ value: string }>();
   return row?.value ?? null;
@@ -56,4 +59,15 @@ export async function illustrationSettings(db: D1Database): Promise<Illustration
     daily: stored.daily ?? 100,
     template: stored.template ?? DEFAULT_TEMPLATE,
   };
+}
+
+/** The prompt for a dish, from the template the admin can edit, with the note of a replaced illustration. */
+export function promptFor(template: string, dish: { key: string; zh: string | null; en: string | null }, note?: string | null): string {
+  const entry = standardDish(dish.zh) ?? standardDish(dish.en) ?? standardDish(dish.key);
+  const zh = entry?.zh ?? dish.zh ?? dish.key;
+  const en = entry?.en ?? dish.en ?? zh;
+  const cuisine = entry ? (CUISINE_LABELS[entry.cuisine]?.en ?? 'Chinese') : 'Chinese';
+  const description = entry?.description ?? `A typical serving of ${en}.`;
+  const prompt = template.replaceAll('{zh}', zh).replaceAll('{en}', en).replaceAll('{cuisine}', cuisine).replaceAll('{description}', description);
+  return note ? `${prompt} Note from the last review: ${note}` : prompt;
 }

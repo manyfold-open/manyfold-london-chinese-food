@@ -36,6 +36,17 @@ describe('the admin API', () => {
     expect(JSON.stringify(list.body)).not.toContain(body.token);
     expect(ADMIN).toBeTruthy();
   });
+
+  it('counts wrong passwords per address, never the right one', async () => {
+    const w = world();
+    for (let i = 0; i < 40; i += 1) expect((await w.call('/api/admin/overview', { admin: true })).status).toBe(200);
+    const guesser = { 'cf-connecting-ip': '192.0.2.66' };
+    for (let i = 0; i < 20; i += 1) expect((await w.call('/api/admin/overview', { headers: { ...guesser, 'x-admin-password': `guess ${i}` } })).status).toBe(401);
+    const locked = await w.call('/api/admin/overview', { headers: { ...guesser, 'x-admin-password': ADMIN } });
+    expect(locked.status).toBe(429);
+    expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect((await w.call('/api/admin/overview', { admin: true })).status).toBe(200);
+  });
 });
 
 describe('leasing', () => {

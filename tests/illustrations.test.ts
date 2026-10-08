@@ -47,6 +47,15 @@ describe('illustration work', () => {
     expect(item.payload.prompt).toContain('No text, letters, logos, watermarks, people or hands.');
   });
 
+  it('fills the prompt in from the template as it is when an item is handed out', async () => {
+    const w = world();
+    await servedDishes(w);
+    const template = 'Studio photograph of {en} ({zh}) on a white plate.';
+    expect((await w.json('/api/admin/illustrations/settings', { method: 'PATCH', admin: true, json: { template } })).status).toBe(200);
+    const artist = await join(w, 'artist', '198.51.100.46');
+    expect((await holdItem(w, artist)).payload.prompt).toBe('Studio photograph of Biang biang noodles (油泼面) on a white plate.');
+  });
+
   it('hands each dish to one agent, within the daily number, and none when paused', async () => {
     const w = world();
     await servedDishes(w);
