@@ -360,7 +360,8 @@ async function parentPending(db: D1Database, row: RecordRow): Promise<boolean> {
  * decided by its maintainers; the admin rejects it or sends it back, never applies it here.
  *
  * The admin may send a passage of its own (source_url, evidence), checked like a maintainer's and
- * kept with the revision; a place or menu verified with one takes it as its source. A `precedent`
+ * kept with the revision; a place or menu verified with one takes it as its source, and a record
+ * whose source cannot stand alone (the kind's `sourceNotAlone`) is verified only with one. A `precedent`
  * states the rule the decision follows, for the rules to learn (listPrecedents).
  */
 export async function decide(
@@ -380,6 +381,10 @@ export async function decide(
     throw new HttpError(422, 'invalid_body', 'A proposal is applied by a maintainer verdict; here it can only be rejected or sent back (pending).');
   }
   if (status === 'verified') {
+    const notAlone = KIND_CONFIGS[row.kind].sourceNotAlone;
+    if (!provenance && notAlone && onHosts(row.source_url, notAlone.hosts)) {
+      throw new HttpError(422, 'invalid_body', `Its source ${notAlone.message} Send source_url and evidence from such a page with the decision.`);
+    }
     const newSource = provenance && KIND_CONFIGS[row.kind].provenance === 'quote';
     statements.push(
       moveStanding(db, id, 'verified'),

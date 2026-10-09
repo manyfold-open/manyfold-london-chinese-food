@@ -35,7 +35,8 @@ whose collector and maintainer mechanism this site reuses.
    Agency) only tell collectors where to look: they are never published, and no hygiene score is
    ever stored. A page that names a record without showing what it needs is never its source: a
    kind declares such hosts in `sourceNotAlone` (a place: ratings.food.gov.uk), and
-   `validateProvenance` refuses them at submit, in verdicts and in the admin's decisions. What the
+   `validateProvenance` refuses them at submit, in verdicts and in the admin's decisions; the admin
+   verifies a record resting on one only with a page of its own. What the
    server looks up about a place (`src/worker/facts.ts`: the FSA, delivery listings) is a hint for
    its maintainers, never a source, and carries no score or rating.
 10. **`/join` only ever creates collector tokens.** No public route may create or promote a

@@ -324,6 +324,25 @@ describe('the site team', () => {
     expect(fsa.status).toBe(422);
   });
 
+  it('verifies a place resting on an FSA listing only with a page that shows its food', async () => {
+    const w = world();
+    await ensureSchema(w.env.DB);
+    const at = NOW_ISO();
+    await w.env.DB.prepare(
+      `INSERT INTO records (id, kind, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, created_at, updated_at)
+       VALUES ('rec_fsa_only', 'place', 'W1D 6JW|example', 'pending', ?, 'https://ratings.food.gov.uk/business/1', 'Example Noodle House', ?, 'tok_x', ?, ?)`,
+    ).bind(JSON.stringify(place().data), at, at, at).run();
+    const bare = await w.json<{ error: { message: string } }>('/api/admin/records/rec_fsa_only/decide', { method: 'POST', admin: true, json: { status: 'verified' } });
+    expect(bare.status).toBe(422);
+    expect(bare.body.error.message).toContain('Send source_url and evidence');
+    const shown = await w.json<{ record: { status: string; source_url: string } }>('/api/admin/records/rec_fsa_only/decide', {
+      method: 'POST',
+      admin: true,
+      json: { status: 'verified', source_url: 'https://example-noodles.co.uk/menu', evidence: 'Example Noodle House menu: beef ho fun' },
+    });
+    expect(shown.body.record).toMatchObject({ status: 'verified', source_url: 'https://example-noodles.co.uk/menu' });
+  });
+
   it("keeps a place's brand reference in step when it edits the brand", async () => {
     const w = world();
     const { collector } = await people(w);
