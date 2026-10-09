@@ -33,7 +33,7 @@ const describe = (report: CronReport): string =>
     `queued ${plural(report.rechecks, 'recheck')}`,
     report.escalated ? `sent you ${plural(report.escalated, 'task')} no one with a browser took` : null,
     `looked up ${plural(report.facts, 'place')}`,
-    report.source_rechecks ? `queued ${plural(report.source_rechecks, 'recheck')} of places verified on an FSA listing` : null,
+    report.source_rechecks ? `queued ${plural(report.source_rechecks, 'recheck')} of places verified on an FSA listing or OpenStreetMap` : null,
     `rebuilt ${plural(report.docs.rebuilt, 'place page')}`,
     report.docs.indexed === null ? null : `the index lists ${plural(report.docs.indexed, 'place')}`,
     report.docs.dishes === null ? null : `the dish catalog ${plural(report.docs.dishes, 'dish', 'dishes')}`,
@@ -134,7 +134,7 @@ const age = (at: string): string => {
   return hours >= 48 ? `${Math.round(hours / 24)} days` : `${hours} h`;
 };
 
-/** Places verified on an FSA listing alone, checked again with a page that shows the food: now, or so many a day. */
+/** Places verified on an FSA listing or an OpenStreetMap entry, checked again with a page that shows the food: now, or so many a day. */
 function SourceRechecks() {
   const { data, reload } = useAdmin<{ remaining: number; daily: number }>('/source-rechecks');
   const [daily, setDaily] = useState('');
@@ -143,12 +143,12 @@ function SourceRechecks() {
   return (
     <>
       <div className="section-head">
-        <h3>Places verified on an FSA listing</h3>
+        <h3>Places verified on an FSA listing or OpenStreetMap</h3>
         <span className="muted">{plural(data.remaining, 'place')} without a recheck</span>
       </div>
       <p className="muted small">
-        An FSA listing shows a name and address, never the food. Each of these gets a recheck: a maintainer finds a page that shows the food, marks it
-        closed, or rejects it. {data.daily ? `${plural(data.daily, 'recheck')} are queued each day.` : 'None are queued daily yet.'}
+        An FSA listing shows a name and address, never the food; an OpenStreetMap entry is a lead, under a licence the exports cannot carry. Each of
+        these gets a recheck: a maintainer finds a page that shows the food, marks it closed, or rejects it. {data.daily ? `${plural(data.daily, 'recheck')} are queued each day.` : 'None are queued daily yet.'}
       </p>
       <Notice message={message} />
       <div className="row-actions">

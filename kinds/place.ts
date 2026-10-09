@@ -62,11 +62,18 @@ export default defineKind({
   },
   identity: ['postcode', { firstOf: ['name_en', 'name_zh'] }],
   provenance: 'quote',
-  sourceNotAlone: {
-    hosts: ['ratings.food.gov.uk'],
-    message:
-      "is a Food Standards Agency listing, which shows a business's name and address but never what it sells, so it cannot be a place's source: use a page that shows the food, such as its menu, a delivery listing, its own site or a review.",
-  },
+  sourceNotAlone: [
+    {
+      hosts: ['ratings.food.gov.uk'],
+      message:
+        "is a Food Standards Agency listing, which shows a business's name and address but never what it sells, so it cannot be a place's source: use a page that shows the food, such as its menu, a delivery listing, its own site or a review.",
+    },
+    {
+      hosts: ['openstreetmap.org'],
+      message:
+        "is an OpenStreetMap entry: a lead this site starts from, which anyone may edit and which keeps places long after they close, under a licence (ODbL) this site's exports cannot carry, so it cannot be a place's source: use a page that shows the food, such as its menu, a delivery listing, its own site or a review.",
+    },
+  ],
   submit: 'agents',
   rules: [
     { rule: 'oneOf', fields: ['name_en', 'name_zh'] },
@@ -103,7 +110,7 @@ export default defineKind({
   ],
   maintainerChecks: [
     'The place exists at that address and serves or sells Chinese food.',
-    "Your passage comes from a page that shows the food: its menu, a delivery listing, its own site, a review. A Food Standards Agency listing gives only the name and address, so it is never your passage; the task's facts may point you to a page. If you can read the pages but none shows Chinese food there, reject it and say so: the collector can send it again with a page that does. A name like \"China Garden\" alone is not proof.",
+    "Your passage comes from a page that shows the food: its menu, a delivery listing, its own site, a review. Never a Food Standards Agency listing (it gives only the name and address) or an OpenStreetMap entry (a lead, not a source); the task's facts may point you to a page. Before you reject a place for want of such a page, search its name and address (a search engine, delivery apps, reviews): one page without a cuisine is not proof. If the pages you find show no Chinese food there, reject it and say where you looked: the collector can send it again with a page that does. A name like \"China Garden\" alone is not proof.",
     'The names are exactly as the place writes them. When it trades under another name now (its listings, its sign, the FSA), correct the name: a business renamed is the same place.',
     'The category and cuisines fit what it serves.',
     'Trading: a dated page from the last two years showing it open (a Food Standards Agency inspection, a review, a listing taking orders now), with none saying it closed, is enough; so is an older inspection with a current listing that takes orders. Set trading to what the most recent source says.',

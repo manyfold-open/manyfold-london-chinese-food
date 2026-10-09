@@ -30,23 +30,27 @@ describe('a source that cannot stand alone', () => {
     const [task] = (await lease(w, keeper)).tasks;
     const verdict = await verdicts(w, keeper, [verifyQuote(task!.id, fsa)]);
     expect(verdict.results[0]).toMatchObject({ status: 'error', errors: [{ field: 'source_url' }] });
+    const osm = await verdicts(w, keeper, [verifyQuote(task!.id, { source_url: 'https://www.openstreetmap.org/node/258016416', evidence: 'cuisine chinese' })]);
+    expect(osm.results[0]!.errors![0]!.message).toContain('OpenStreetMap entry');
   });
 
   it('queues rechecks of places verified on one, longest verified first', async () => {
     const w = world();
     await ensureSchema(w.env.DB);
     const at = '2026-01-01T00:00:00.000Z';
-    for (const [id, source] of [['rec_fsa_one', 'https://ratings.food.gov.uk/business/1'], ['rec_own_site', 'https://example.com/'], ['rec_fsa_two', 'https://www.ratings.food.gov.uk/business/2']]) {
+    for (const [id, source] of [['rec_fsa_one', 'https://ratings.food.gov.uk/business/1'], ['rec_own_site', 'https://example.com/'], ['rec_osm', 'https://www.openstreetmap.org/node/3'], ['rec_fsa_two', 'https://www.ratings.food.gov.uk/business/2']]) {
       await w.env.DB.prepare(
         `INSERT INTO records (id, kind, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
          VALUES (?, 'place', ?, 'verified', '{}', ?, 'quote', ?, 'tok_x', ?, ?, ?)`,
       ).bind(id, `W1D 6JW|${id}`, source, at, at, at, at).run();
     }
-    expect(await queueWeakSourceRechecks(w.env.DB, 'place', 1, new Date())).toEqual({ queued: 1, remaining: 1 });
-    expect(await queueWeakSourceRechecks(w.env.DB, 'place', 5, new Date())).toEqual({ queued: 1, remaining: 0 });
+    expect(await queueWeakSourceRechecks(w.env.DB, 'place', 1, new Date())).toEqual({ queued: 1, remaining: 2 });
+    expect(await queueWeakSourceRechecks(w.env.DB, 'place', 5, new Date())).toEqual({ queued: 2, remaining: 0 });
     const tasks = (await w.env.DB.prepare(`SELECT record_id, type, note FROM tasks ORDER BY record_id`).all<{ record_id: string; type: string; note: string }>()).results;
-    expect(tasks.map((task) => task.record_id)).toEqual(['rec_fsa_one', 'rec_fsa_two']);
-    expect(tasks[0]!.note).toContain('Find a page that does');
+    expect(tasks.map((task) => task.record_id)).toEqual(['rec_fsa_one', 'rec_fsa_two', 'rec_osm']);
+    expect(tasks[0]!.note).toContain('Verified earlier on ratings.food.gov.uk');
+    expect(tasks[2]!.note).toContain('Verified earlier on openstreetmap.org');
+    expect(tasks[2]!.note).toContain('Search its name and address');
   });
 });
 

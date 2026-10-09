@@ -140,11 +140,11 @@ export interface KindConfig {
   /** Longest excerpt, by script: CJK text says more per character. */
   excerptMax?: { latin: number; cjk: number };
   /**
-   * Sites whose pages name a record without showing what it needs, such as the Food Standards
-   * Agency's listings for places: a page there is never the record's source. `message` says why
-   * and what to cite instead, to the agent that sent one.
+   * Sites whose pages are never the record's source: they name it without showing what it needs
+   * (the Food Standards Agency's listings, for places), or are the leads collectors start from
+   * (OpenStreetMap). Each `message` says why and what to cite instead, to the agent that sent one.
    */
-  sourceNotAlone?: { hosts: readonly string[]; message: string };
+  sourceNotAlone?: readonly SourceNotAlone[];
   rules?: readonly Rule[];
   /** Submissions must fall inside these ranges, read at submit time ('today' included). */
   accept?: Readonly<Record<string, { from?: string; to?: string }>>;
@@ -249,9 +249,12 @@ export function validateConfig(config: KindConfig, all: readonly KindConfig[] = 
   config.display.forEach((name) => need(name, 'display'));
   if (config.sourceNotAlone) {
     if (config.provenance === 'upload') fail('sourceNotAlone needs a kind with a source page');
-    if (config.sourceNotAlone.hosts.length === 0) fail('sourceNotAlone needs hosts');
-    for (const name of config.sourceNotAlone.hosts) if (!HOST.test(name)) fail(`sourceNotAlone: "${name}" is not a host name`);
-    if (!config.sourceNotAlone.message.trim()) fail('sourceNotAlone needs a message');
+    if (config.sourceNotAlone.length === 0) fail('sourceNotAlone needs at least one entry');
+    for (const entry of config.sourceNotAlone) {
+      if (entry.hosts.length === 0) fail('sourceNotAlone: an entry needs hosts');
+      for (const name of entry.hosts) if (!HOST.test(name)) fail(`sourceNotAlone: "${name}" is not a host name`);
+      if (!entry.message.trim()) fail('sourceNotAlone: an entry needs a message');
+    }
   }
   if (config.provenance === 'excerpt' && !config.excerptMax) fail('an excerpt kind needs excerptMax');
   if (config.provenance === 'upload' && config.submit === 'agents') fail('an upload kind is submitted through an upload route');
@@ -334,6 +337,19 @@ export function parseHttpsUrl(raw: string): string | null {
 }
 
 /** Whether a URL is on one of these hosts or a subdomain of one, a leading www. aside. */
+export interface SourceNotAlone {
+  hosts: readonly string[];
+  message: string;
+}
+
+/** The kind's sourceNotAlone entry a URL falls under, or null when it may be a source. */
+export function notAloneFor(config: KindConfig, url: string): SourceNotAlone | null {
+  return config.sourceNotAlone?.find((entry) => onHosts(url, entry.hosts)) ?? null;
+}
+
+/** Every host a kind's sources may not be on. */
+export const notAloneHosts = (config: KindConfig): string[] => (config.sourceNotAlone ?? []).flatMap((entry) => [...entry.hosts]);
+
 export function onHosts(url: string, hosts: readonly string[]): boolean {
   let host: string;
   try {
@@ -676,8 +692,9 @@ export function validateProvenance(
           ? `must be the full https:// URL of the page the excerpt comes from; got ${show(input.source_url)}`
           : `must be the full https:// URL of the page that states the facts; got ${show(input.source_url)}`,
     });
-  } else if (config.sourceNotAlone && onHosts(source, config.sourceNotAlone.hosts)) {
-    errors.push({ field: 'source_url', message: config.sourceNotAlone.message });
+  } else {
+    const notAlone = notAloneFor(config, source);
+    if (notAlone) errors.push({ field: 'source_url', message: notAlone.message });
   }
 
   const evidence = typeof input.evidence === 'string' ? cleanText(input.evidence) : '';

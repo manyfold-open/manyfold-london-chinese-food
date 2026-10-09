@@ -126,7 +126,8 @@ limit of records waiting for review starts small for each kind and grows with ea
 collector with ten or more reviewed records, more than half of them rejected, is suspended. A
 maintainer never reviews its own submissions, and one with ten or more verdicts the site team looked
 at again, more than half of them overturned, is suspended too. A place is never sent or verified on a
-Food Standards Agency listing alone: it shows no food. A place with the same FSA business, or the
+Food Standards Agency listing (it shows no food) or an OpenStreetMap entry (a lead, under a licence the
+exports cannot carry). A place with the same FSA business, or the
 same phone or website at the same address, as one already here is a `duplicate`.
 
 What a maintainer cannot decide goes to whoever can: a page it cannot open to a maintainer with a
@@ -145,7 +146,7 @@ template, replace), leads, takedowns and blocked sites. Deciding a record, the a
 passage of its own (which becomes a verified place's source) and a precedent, kept until the rule
 is written into the kinds. Maintainers get a browser capability, and show how their verdicts held
 up over 30 days. The overview counts tasks waiting for a browser and the oldest item waiting for
-you, and queues rechecks of places verified on an FSA listing (now, or so many a day); Just Eat
+you, and queues rechecks of places verified on an FSA listing or OpenStreetMap (now, or so many a day); Just Eat
 lookups for maintainers can be turned off in the review queue. The same is open at `/api/admin/*`
 with the header `x-admin-password`.
 

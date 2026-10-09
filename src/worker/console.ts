@@ -8,7 +8,7 @@
  */
 
 import { KIND_CONFIGS } from '../../kinds/index';
-import { cleanText, identityKey, KINDS, onHosts, recordName, validateProvenance, validateRecordData, type Kind, type Provenance, type RecordData } from '../shared/kinds';
+import { cleanText, identityKey, KINDS, notAloneFor, recordName, validateProvenance, validateRecordData, type Kind, type Provenance, type RecordData } from '../shared/kinds';
 import type {
   ActivityItem,
   AdminRecord,
@@ -381,8 +381,8 @@ export async function decide(
     throw new HttpError(422, 'invalid_body', 'A proposal is applied by a maintainer verdict; here it can only be rejected or sent back (pending).');
   }
   if (status === 'verified') {
-    const notAlone = KIND_CONFIGS[row.kind].sourceNotAlone;
-    if (!provenance && notAlone && onHosts(row.source_url, notAlone.hosts)) {
+    const notAlone = notAloneFor(KIND_CONFIGS[row.kind], row.source_url);
+    if (!provenance && notAlone) {
       throw new HttpError(422, 'invalid_body', `Its source ${notAlone.message} Send source_url and evidence from such a page with the decision.`);
     }
     const newSource = provenance && KIND_CONFIGS[row.kind].provenance === 'quote';
@@ -815,7 +815,7 @@ export async function adoptPrecedent(db: D1Database, id: number, now: Date): Pro
 
 /** The note a recheck of a record verified on a source that cannot stand alone carries. */
 const WEAK_SOURCE_NOTE = (hosts: readonly string[]) =>
-  `Verified earlier on ${hosts.join(', ')}, which does not show what this record needs. Find a page that does and verify with it as your passage; if it closed, verify with trading closed; if no page shows it belongs here, reject it and say so.`;
+  `Verified earlier on ${hosts.join(', ')}, which cannot be its source. Search its name and address (a search engine, delivery apps, reviews) for a page that shows what this record needs, and verify with it as your passage; if it closed, verify with trading closed; if none of the pages you find shows it belongs here, reject it and say where you looked.`;
 
 /**
  * Verified records of a kind whose source is on a host that cannot stand alone (sourceNotAlone):
@@ -834,16 +834,18 @@ export async function queueWeakSourceRechecks(db: D1Database, kind: Kind, limit:
     )
     .bind(kind)
     .all<{ id: string; source_url: string }>();
-  const weak = results.filter((row) => onHosts(row.source_url, config.sourceNotAlone!.hosts));
+  const weak = results.flatMap((row) => {
+    const notAlone = notAloneFor(config, row.source_url);
+    return notAlone ? [{ ...row, hosts: notAlone.hosts }] : [];
+  });
   const chosen = weak.slice(0, Math.max(0, limit));
   if (chosen.length > 0) {
     const at = now.toISOString();
-    const note = WEAK_SOURCE_NOTE(config.sourceNotAlone.hosts);
     await db.batch(
       chosen.map((row) =>
         db
           .prepare(`INSERT INTO tasks (id, record_id, record_kind, type, status, note, created_at) VALUES (?, ?, ?, 'recheck', 'open', ?, ?)`)
-          .bind(newId('tsk', now.getTime()), row.id, kind, note, at),
+          .bind(newId('tsk', now.getTime()), row.id, kind, WEAK_SOURCE_NOTE(row.hosts), at),
       ),
     );
   }

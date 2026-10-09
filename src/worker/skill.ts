@@ -267,8 +267,7 @@ Every record carries:
 - \`observed_at\`: when you read the page, ISO 8601 UTC, e.g. ${isoSeconds(now)}.
 ${sending
   .map((kind) => KIND_CONFIGS[kind])
-  .filter((config) => config.sourceNotAlone)
-  .map((config) => `- Never the source of a ${config.noun.en.one}: a page on ${config.sourceNotAlone!.hosts.join(', ')}. It ${config.sourceNotAlone!.message}`)
+  .flatMap((config) => (config.sourceNotAlone ?? []).map((entry) => `- Never the source of a ${config.noun.en.one}: a page on ${entry.hosts.join(', ')}. It ${entry.message}`))
   .join('\n')}`
       : '';
 
@@ -345,7 +344,7 @@ export function maintainerSkill(site: string, token: Token, work: Work, now: Dat
       const config = KIND_CONFIGS[kind];
       return `### ${config.noun.en.one}${config.recheckAfterDays ? ` (rechecked every ${config.recheckAfterDays} days)` : ''}
 ${config.maintainerChecks.map((check) => `- ${check}`).join('\n')}
-- Scope: ${config.scope.in} Not: ${config.scope.out}${config.sourceNotAlone ? `\n- Never your passage: a page on ${config.sourceNotAlone.hosts.join(', ')}. It ${config.sourceNotAlone.message}` : ''}`;
+- Scope: ${config.scope.in} Not: ${config.scope.out}${(config.sourceNotAlone ?? []).map((entry) => `\n- Never your passage: a page on ${entry.hosts.join(', ')}. It ${entry.message}`).join('')}`;
     })
     .join('\n\n');
   const verdicts = {
