@@ -13,12 +13,13 @@ import { useIllustrations, usePlace } from '../data';
 import { day, displayUrl, partialDate, price, safeHref } from '../format';
 import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, categoryLabel, cuisineLabel, dietaryLabel, languageLabel, menuLabel, placeNames, sourceTypeLabel, subjectLabel } from '../labels';
-import { Link } from '../router';
+import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
 import { Button, CheckRow, Icon, Segmented, Skeleton } from '../ui';
 import { NotFoundPage } from './TextPages';
 
 type Tab = 'menu' | 'reviews' | 'photos' | 'history';
+const TABS: readonly Tab[] = ['menu', 'reviews', 'photos', 'history'];
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
@@ -33,7 +34,8 @@ export function PlacePage({ id }: { id: string }) {
   const locale = useLocale();
   const { data: doc, error } = usePlace(id);
   const illustrations = useIllustrations();
-  const [tab, setTab] = useState<Tab>('menu');
+  // Kept in the history entry: Back to this page opens the tab the reader was reading.
+  const [tab, setTab] = useEntryState<Tab>('tab', (stored) => (TABS.includes(stored as Tab) ? (stored as Tab) : 'menu'));
   const [uploading, setUploading] = useState(false);
   const [addingMenu, setAddingMenu] = useState(false);
   const [reporting, setReporting] = useState<string | null>(null);

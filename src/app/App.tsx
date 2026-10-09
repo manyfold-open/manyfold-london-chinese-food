@@ -12,7 +12,7 @@ import { DishPage } from './pages/DishPage';
 import { PlacePage } from './pages/PlacePage';
 import { SourcePage } from './pages/SourcePage';
 import { ContributePage, NotFoundPage, WordsPage } from './pages/TextPages';
-import { navigate, useLocation } from './router';
+import { navigate, useLocation, useScrollRestoration } from './router';
 import { matchRoute, paths } from './routes';
 import { ToastProvider } from './ui';
 
@@ -21,9 +21,10 @@ const SettingsPage = lazy(() => import('./settings/SettingsPage'));
 const browserLocale = (): Locale => storedLocale() ?? (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en');
 
 export default function App() {
-  const { pathname } = useLocation();
+  const { pathname, key } = useLocation();
   const route = matchRoute(pathname, browserLocale());
   const locale: Locale = route.page === 'settings' ? 'en' : route.locale;
+  useScrollRestoration(key);
 
   useEffect(() => {
     if (route.page === 'home' && pathname === '/') navigate(paths.home(locale), { replace: true });

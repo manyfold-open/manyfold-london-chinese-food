@@ -24,7 +24,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           <span className="grow" />
           <nav className="topnav" aria-label={copy.siteShort}>
-            <Link href={paths.page(locale, 'contribute')}>{copy.nav.contribute}</Link>
+            <Link className="topnav-contribute" href={paths.page(locale, 'contribute')}>
+              {copy.nav.contribute}
+            </Link>
             <Link href={paths.page(locale, 'about')}>{copy.nav.about}</Link>
           </nav>
           <Link className="lang-switch" href={switchHref} lang={other === 'zh' ? 'zh-Hans' : 'en'} onClick={() => rememberLocale(other)}>

@@ -1,6 +1,8 @@
 /**
  * Places on a map: MapLibre with OpenFreeMap's tiles (free, no key; attribution added by MapLibre).
  * Loaded only when a reader opens the map, as its own chunk. Points cluster when they crowd.
+ * The map reports where it was left (`onCamera`) and opens there again (`camera`), so going back
+ * from a place finds it as it was.
  */
 
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -15,6 +17,13 @@ import { paths } from '../routes';
 const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const LONDON: [number, number] = [-0.1276, 51.5072];
 
+/** Where the map looks. */
+export interface Camera {
+  lng: number;
+  lat: number;
+  zoom: number;
+}
+
 function features(entries: readonly IndexEntry[], locale: Locale) {
   return {
     type: 'FeatureCollection' as const,
@@ -28,17 +37,41 @@ function features(entries: readonly IndexEntry[], locale: Locale) {
   };
 }
 
-export default function MapView({ entries, locale, near }: { entries: readonly IndexEntry[]; locale: Locale; near: { lat: number; lng: number } | null }) {
+export default function MapView({
+  entries,
+  locale,
+  near,
+  camera,
+  onCamera,
+}: {
+  entries: readonly IndexEntry[];
+  locale: Locale;
+  near: { lat: number; lng: number } | null;
+  camera?: Camera | null;
+  onCamera?: (camera: Camera) => void;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
+  const opened = useRef({ near, onCamera });
+  opened.current.onCamera = onCamera;
+  // What to draw when the style has loaded: the reader may have changed a filter while it loaded.
+  const latest = useRef({ entries, locale });
+  latest.current = { entries, locale };
 
   useEffect(() => {
     if (!container.current) return;
-    const instance = new maplibregl.Map({ container: container.current, style: STYLE, center: near ? [near.lng, near.lat] : LONDON, zoom: near ? 13 : 10.5 });
+    const start = camera
+      ? { center: [camera.lng, camera.lat] as [number, number], zoom: camera.zoom }
+      : { center: near ? ([near.lng, near.lat] as [number, number]) : LONDON, zoom: near ? 13 : 10.5 };
+    const instance = new maplibregl.Map({ container: container.current, style: STYLE, ...start });
     map.current = instance;
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    instance.on('moveend', () => {
+      const center = instance.getCenter();
+      opened.current.onCamera?.({ lng: center.lng, lat: center.lat, zoom: instance.getZoom() });
+    });
     instance.on('load', () => {
-      instance.addSource('places', { type: 'geojson', data: features(entries, locale), cluster: true, clusterRadius: 40, clusterMaxZoom: 15 });
+      instance.addSource('places', { type: 'geojson', data: features(latest.current.entries, latest.current.locale), cluster: true, clusterRadius: 40, clusterMaxZoom: 15 });
       instance.addLayer({ id: 'clusters', type: 'circle', source: 'places', filter: ['has', 'point_count'], paint: { 'circle-color': '#c8102e', 'circle-opacity': 0.85, 'circle-radius': ['step', ['get', 'point_count'], 14, 20, 18, 100, 24] } });
       instance.addLayer({ id: 'cluster-count', type: 'symbol', source: 'places', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12, 'text-font': ['Noto Sans Bold'] }, paint: { 'text-color': '#ffffff' } });
       instance.addLayer({ id: 'place', type: 'circle', source: 'places', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': '#c8102e', 'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' } });
@@ -69,7 +102,8 @@ export default function MapView({ entries, locale, near }: { entries: readonly I
   }, [entries, locale]);
 
   useEffect(() => {
-    if (near) map.current?.easeTo({ center: [near.lng, near.lat], zoom: 13 });
+    // Only a new position moves the map: the one it opened with is already in its camera.
+    if (near && near !== opened.current.near) map.current?.easeTo({ center: [near.lng, near.lat], zoom: 13 });
   }, [near]);
 
   return <div className="map" ref={container} />;

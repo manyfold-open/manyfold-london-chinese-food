@@ -62,6 +62,8 @@ export function WordsPage({ which }: { which: 'about' | 'privacy' }) {
     <div className="text-page screen">
       <header className="page-head">
         <h1>{words.title}</h1>
+        {/* The front page has no title of its own: what the site is for is said here. */}
+        {which === 'about' ? <p className="desc">{copy.tagline}</p> : null}
       </header>
       {words.paragraphs.map((paragraph) => (
         <p key={paragraph}>{paragraph}</p>

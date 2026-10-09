@@ -264,11 +264,23 @@ export function CheckRow({
   );
 }
 
-/** "Show all 12" under a long list. */
-export function ShowAll({ expanded, total, onToggle, less = 'Show less' }: { expanded: boolean; total: number; onToggle: () => void; less?: string }) {
+/** "Show all 12" under a long list. `more` and `less` are its words in the page's language. */
+export function ShowAll({
+  expanded,
+  total,
+  onToggle,
+  more = `Show all ${total.toLocaleString('en-US')}`,
+  less = 'Show less',
+}: {
+  expanded: boolean;
+  total: number;
+  onToggle: () => void;
+  more?: string;
+  less?: string;
+}) {
   return (
     <button type="button" className="show-all" aria-expanded={expanded} onClick={onToggle}>
-      {expanded ? less : `Show all ${total.toLocaleString('en-US')}`}
+      {expanded ? less : more}
       <Icon name="down" size={16} />
     </button>
   );

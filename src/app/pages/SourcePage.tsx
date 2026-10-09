@@ -1,18 +1,18 @@
 /** Everything one source (or one critic) wrote, across places: read it to judge how far to trust it. */
 
-import { useState } from 'react';
 import { useSource } from '../data';
 import { partialDate } from '../format';
 import { useCopy, useLocale } from '../i18n';
 import { placeNames, sourceTypeLabel } from '../labels';
-import { Link } from '../router';
+import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
 import { Button, Icon, Skeleton } from '../ui';
 
 export function SourcePage({ by, sourceKey }: { by: 'source' | 'author'; sourceKey: string }) {
   const copy = useCopy();
   const locale = useLocale();
-  const [page, setPage] = useState(1);
+  // Kept in the history entry: Back from a place returns to the page of excerpts it was on.
+  const [page, setPage] = useEntryState('page', (stored) => (typeof stored === 'number' && Number.isInteger(stored) && stored > 1 ? stored : 1));
   const { data } = useSource(by, sourceKey, page);
   const first = data?.entries[0];
   const name = by === 'source' ? (first?.publication ?? sourceKey) : (first?.author ?? sourceKey);

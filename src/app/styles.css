@@ -2041,6 +2041,7 @@ th[aria-sort='ascending'] .sort-button svg {
 
 .topnav {
   display: flex;
+  flex: none;
   gap: 2px;
   margin-right: 6px;
 }
@@ -2048,12 +2049,14 @@ th[aria-sort='ascending'] .sort-button svg {
 .topnav a,
 .lang-switch {
   display: inline-flex;
+  flex: none;
   align-items: center;
   height: 34px;
   padding: 0 12px;
   border-radius: 17px;
   color: var(--ink2);
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .topnav a:hover,
@@ -2173,33 +2176,33 @@ h1 .other-name {
   color: var(--critical);
 }
 
-/* home */
+/* home: the filters in a column on the left, the search and the places on the right; one
+   column on a phone, where the filters open as a sheet. */
 
-.hero {
-  max-width: 720px;
-  margin: 12px 0 20px;
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'search' 'head' 'results';
+  align-items: start;
 }
 
-.hero h1 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.home-search {
+  grid-area: search;
 }
 
-.lead {
-  margin: 8px 0 18px;
-  color: var(--ink2);
-  font-size: 15px;
+.home-search .search {
+  width: 100%;
 }
 
-.hero .search input {
-  height: 46px;
+/* 16px, as on every phone field: iOS zooms into anything smaller. */
+.home-search .search input {
+  height: 44px;
+  border-radius: 22px;
   font-size: 16px;
 }
 
 .dish-hits {
-  margin: 0 0 18px;
+  margin: 14px 0 0;
 }
 
 .dish-hits h2 {
@@ -2229,22 +2232,107 @@ h1 .other-name {
   font-size: 12px;
 }
 
-.toolbar {
+.lead {
+  margin: 8px 0 18px;
+  color: var(--ink2);
+  font-size: 15px;
+}
+
+.home-side {
+  display: none;
+  grid-area: side;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  border-bottom: 1px solid var(--line);
+}
+
+.side-head h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.filter-group {
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.filter-group:last-child {
+  border-bottom: 0;
+}
+
+.sheet .filter-group:first-child {
+  padding-top: 0;
+}
+
+.filter-group h3 {
+  margin: 2px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.results-head {
+  display: flex;
+  flex-wrap: wrap;
+  grid-area: head;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 16px 0 12px;
+  scroll-margin-top: calc(var(--top-h) + 8px);
+}
+
+.results-count {
+  flex: 1;
+  margin: 0;
+  color: var(--ink2);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.results-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  order: 1;
 }
 
-.pills.wrap {
-  flex-wrap: wrap;
+.results-head .segmented {
+  order: 2;
 }
 
-.count {
-  margin: 6px 0 10px;
+.results-head .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-label {
   color: var(--muted);
   font-size: 13px;
+}
+
+.sort .select-button {
+  min-width: 0;
+}
+
+.results {
+  grid-area: results;
+  min-width: 0;
 }
 
 .place-list {
@@ -2315,18 +2403,101 @@ h1 .other-name {
   padding: 18px 0;
 }
 
+.place-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.place-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px 12px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line2);
+  color: var(--ink);
+  transition: background 120ms;
+}
+
+.place-card:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.place-card.closed {
+  opacity: 0.6;
+}
+
+.place-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.place-card-top b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.place-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.place-card .tags {
+  margin-top: 8px;
+}
+
+.place-card-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .map {
   width: 100%;
-  height: min(70vh, 640px);
+  height: max(360px, calc(100vh - var(--top-h) - 200px));
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--chip);
 }
 
-.filter-sheet h3 {
-  margin: 18px 0 8px;
-  font-size: 13px;
-  font-weight: 600;
+/* From here the filters stand beside the places, and stay in view while the list scrolls. */
+@media (min-width: 900px) {
+  .home {
+    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: 'side search' 'side head' 'side results';
+    column-gap: 40px;
+  }
+
+  .home-side {
+    position: sticky;
+    top: calc(var(--top-h) + 24px);
+    display: block;
+    max-height: calc(100vh - var(--top-h) - 48px);
+    /* Room for the check rows' hover, which reaches 8px past the column. */
+    margin: 0 -8px;
+    padding: 0 8px 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .filters-button {
+    display: none;
+  }
 }
 
 /* place */
@@ -2652,6 +2823,14 @@ a.dish-name:hover {
   line-height: 1.7;
 }
 
+.text-page .page-head {
+  margin-bottom: 16px;
+}
+
+.text-page > p + p {
+  margin-top: 10px;
+}
+
 .contribute h2,
 .text-page .section h2 {
   display: flex;
@@ -2742,12 +2921,69 @@ a.dish-name:hover {
 }
 
 @media (max-width: 767px) {
+  /* A phone's top bar keeps About: the front page has no words of its own on what the site is. */
   .topnav {
+    margin-right: 0;
+  }
+
+  .topnav .topnav-contribute {
     display: none;
   }
 
-  .hero h1 {
-    font-size: 24px;
+  .topnav a,
+  .lang-switch {
+    padding: 0 7px;
+  }
+
+  .lang-switch {
+    margin-right: 0;
+  }
+
+  /* The links have padding of their own: closer together, the English name fits a 360px phone. */
+  .topbar-inner {
+    gap: 2px;
+  }
+
+  /* As wide as the site's name, which gives way before the links do on the narrowest phones. */
+  .topbar-inner .brand {
+    flex: 0 1 auto;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .wordmark {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .results-head {
+    padding-top: 12px;
+  }
+
+  /* The filter, near and sort buttons get a row of their own; the count and the layout share one. */
+  .results-tools {
+    flex-basis: 100%;
+    order: 0;
+  }
+
+  .sort-label,
+  .layout-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .place-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .place-card {
+    padding: 12px;
   }
 
   .dish-grid {
@@ -2771,9 +3007,4 @@ a.dish-name:hover {
     flex-direction: column;
     align-items: stretch;
   }
-}
-
-.hero .search {
-  width: 100%;
-  max-width: 640px;
 }

@@ -44,19 +44,38 @@ export function matchesText(entry: IndexEntry, q: string): boolean {
   return words.every((word) => haystack.includes(word));
 }
 
+type Facet = 'categories' | 'cuisines' | 'boroughs' | 'openOnly' | 'withMenu' | 'withPhotos';
+
+/** Each filter a reader can set, and whether an entry passes it. */
+const FACETS: readonly [Facet, (entry: IndexEntry, query: PlaceQuery) => boolean][] = [
+  ['categories', (entry, query) => !query.categories?.length || query.categories.includes(entry.c)],
+  ['cuisines', (entry, query) => !query.cuisines?.length || query.cuisines.some((cuisine) => entry.k.includes(cuisine))],
+  ['boroughs', (entry, query) => !query.boroughs?.length || (entry.b !== null && query.boroughs.includes(entry.b))],
+  ['openOnly', (entry, query) => !query.openOnly || entry.t !== 'closed'],
+  ['withMenu', (entry, query) => !query.withMenu || entry.m > 0],
+  ['withPhotos', (entry, query) => !query.withPhotos || entry.p > 0],
+];
+
+/** The one filter an entry fails: null when it passes them all, 'more' when it fails two or more. */
+function missed(entry: IndexEntry, query: PlaceQuery): Facet | 'more' | null {
+  let found: Facet | null = null;
+  for (const [facet, passes] of FACETS) {
+    if (passes(entry, query)) continue;
+    if (found) return 'more';
+    found = facet;
+  }
+  return found;
+}
+
+/** Whether an entry matches what was typed and the postcode, the parts of a query that are not filters. */
+function searched(entry: IndexEntry, query: PlaceQuery, postcode: string | null): boolean {
+  if (query.q && !matchesText(entry, query.q)) return false;
+  return !postcode || (entry.pc !== null && compact(entry.pc) === postcode) || compact(entry.o ?? '') === postcode;
+}
+
 export function queryPlaces(entries: readonly IndexEntry[], query: PlaceQuery): IndexEntry[] {
   const postcode = query.postcode ? compact(query.postcode) : null;
-  const found = entries.filter((entry) => {
-    if (query.q && !matchesText(entry, query.q)) return false;
-    if (postcode && !(entry.pc && compact(entry.pc) === postcode) && compact(entry.o ?? '') !== postcode) return false;
-    if (query.categories?.length && !query.categories.includes(entry.c)) return false;
-    if (query.cuisines?.length && !query.cuisines.some((cuisine) => entry.k.includes(cuisine))) return false;
-    if (query.boroughs?.length && !(entry.b && query.boroughs.includes(entry.b))) return false;
-    if (query.openOnly && entry.t === 'closed') return false;
-    if (query.withMenu && entry.m === 0) return false;
-    if (query.withPhotos && entry.p === 0) return false;
-    return true;
-  });
+  const found = entries.filter((entry) => searched(entry, query, postcode) && missed(entry, query) === null);
   const name = (entry: IndexEntry) => (entry.n ?? entry.z ?? '').toLowerCase();
   const sort = query.sort ?? (query.near ? 'distance' : 'recent');
   if (sort === 'distance' && query.near) {
@@ -66,4 +85,40 @@ export function queryPlaces(entries: readonly IndexEntry[], query: PlaceQuery): 
   }
   if (sort === 'name') return found.sort((a, b) => name(a).localeCompare(name(b)));
   return found.sort((a, b) => (b.l ?? '').localeCompare(a.l ?? '') || b.u.localeCompare(a.u) || name(a).localeCompare(name(b)));
+}
+
+/**
+ * For every choice of every filter, how many places the list would show with that choice made
+ * and the other filters as they are: the numbers beside the reader's filters. Counts of places,
+ * never of anything said about them.
+ */
+export interface FacetCounts {
+  categories: Record<string, number>;
+  cuisines: Record<string, number>;
+  boroughs: Record<string, number>;
+  openOnly: number;
+  withMenu: number;
+  withPhotos: number;
+}
+
+export function facetCounts(entries: readonly IndexEntry[], query: PlaceQuery): FacetCounts {
+  const postcode = query.postcode ? compact(query.postcode) : null;
+  const counts: FacetCounts = { categories: {}, cuisines: {}, boroughs: {}, openOnly: 0, withMenu: 0, withPhotos: 0 };
+  const add = (into: Record<string, number>, value: string) => {
+    into[value] = (into[value] ?? 0) + 1;
+  };
+  for (const entry of entries) {
+    if (!searched(entry, query, postcode)) continue;
+    // An entry failing one filter counts toward that filter's choices only; failing two, toward none.
+    const miss = missed(entry, query);
+    if (miss === 'more') continue;
+    const counted = (facet: Facet) => miss === null || miss === facet;
+    if (counted('categories')) add(counts.categories, entry.c);
+    if (counted('cuisines')) for (const cuisine of entry.k) add(counts.cuisines, cuisine);
+    if (counted('boroughs') && entry.b) add(counts.boroughs, entry.b);
+    if (counted('openOnly') && entry.t !== 'closed') counts.openOnly += 1;
+    if (counted('withMenu') && entry.m > 0) counts.withMenu += 1;
+    if (counted('withPhotos') && entry.p > 0) counts.withPhotos += 1;
+  }
+  return counts;
 }

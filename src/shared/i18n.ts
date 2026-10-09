@@ -42,7 +42,9 @@ export interface Copy {
     near: string;
     nearDenied: string;
     list: string;
+    grid: string;
     map: string;
+    layout: string;
     sortLabel: string;
     sorts: { distance: string; recent: string; name: string };
     filters: string;
@@ -53,7 +55,11 @@ export interface Copy {
     withMenu: string;
     withPhotos: string;
     clear: string;
+    showAll: (count: number) => string;
+    showFewer: string;
+    showResults: (count: number) => string;
     count: (shown: number, total: number) => string;
+    more: (count: number) => string;
     empty: string;
     dishesMatching: string;
     placesMatching: string;
@@ -162,7 +168,9 @@ const zh: Copy = {
     near: '附近',
     nearDenied: '无法获取你的位置',
     list: '列表',
+    grid: '网格',
     map: '地图',
+    layout: '显示方式',
     sortLabel: '排序',
     sorts: { distance: '距离', recent: '最新评价', name: '名称' },
     filters: '筛选',
@@ -173,7 +181,11 @@ const zh: Copy = {
     withMenu: '有菜单',
     withPhotos: '有照片',
     clear: '清除',
+    showAll: (count) => `显示全部 ${count} 个`,
+    showFewer: '收起',
+    showResults: (count) => `显示 ${count} 家店`,
     count: (shown, total) => (shown === total ? `${total} 家店` : `${shown} / ${total} 家店`),
+    more: (count) => `再显示 ${count} 家`,
     empty: '没有符合条件的店。',
     dishesMatching: '菜品',
     placesMatching: '店铺',
@@ -281,7 +293,7 @@ const zh: Copy = {
   about: {
     title: '关于',
     paragraphs: [
-      '伦敦中餐收录伦敦所有能吃到、买到中国食物的店：餐厅、外卖、烘焙甜品、奶茶、华人超市。',
+      '伦敦中餐收录伦敦所有能吃到、买到中国食物的店（餐厅、外卖、烘焙甜品、奶茶、华人超市），并收集它们的菜单、照片和来自全网的评价原文。',
       '这里没有评分。我们只摘录评价原文，附上原文链接，不收任何星级或分数。一家店好不好，读它的历史自己判断；一个评论来源靠不靠谱，也可以读它写过的全部。',
       '数据由公开的 AI agent 收集，每一条在公开前都由另一个 agent 对照来源核对；所有修改都有记录。',
       '评价摘录版权归原作者，我们只作引用并链回原文。如果你是作者或权利人，想让我们删除某条内容，请点该条的“报告问题”，或写信到 hi@manyfold.ai。',
@@ -294,7 +306,7 @@ const zh: Copy = {
   privacy: {
     title: '隐私',
     paragraphs: [
-      '这个网站不用分析或广告 cookie。你选的语言和主题只保存在你的浏览器里。',
+      '这个网站不用分析或广告 cookie。你选的语言、主题和筛选条件只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序，不会发送给我们。',
       '上传照片时，我们会删除照片里的全部元数据（包括位置），只保存重新编码后的图片。为了防止滥用，我们会对 IP 地址做哈希后计数，不保存 IP 本身。上传表单使用 Cloudflare Turnstile 验证你是人。',
       '地图由 OpenFreeMap 提供，查看地图时你的浏览器会向它请求地图图块。',
       '想删除你上传的照片或其他内容，请写信到 hi@manyfold.ai。',
@@ -320,7 +332,9 @@ const en: Copy = {
     near: 'Near me',
     nearDenied: 'Could not get your location',
     list: 'List',
+    grid: 'Grid',
     map: 'Map',
+    layout: 'View',
     sortLabel: 'Sort',
     sorts: { distance: 'Distance', recent: 'Newest review', name: 'Name' },
     filters: 'Filters',
@@ -331,7 +345,11 @@ const en: Copy = {
     withMenu: 'Has a menu',
     withPhotos: 'Has photos',
     clear: 'Clear',
+    showAll: (count) => `Show all ${count}`,
+    showFewer: 'Show fewer',
+    showResults: (count) => `Show ${count} ${count === 1 ? 'place' : 'places'}`,
     count: (shown, total) => (shown === total ? `${total} places` : `${shown} of ${total} places`),
+    more: (count) => `Show ${count} more`,
     empty: 'No place matches.',
     dishesMatching: 'Dishes',
     placesMatching: 'Places',
@@ -439,7 +457,7 @@ const en: Copy = {
   about: {
     title: 'About',
     paragraphs: [
-      'London Chinese Food lists every place in London to eat or buy Chinese food: restaurants, takeaways, bakeries and dessert shops, bubble tea, Chinese supermarkets.',
+      'London Chinese Food lists every place in London to eat or buy Chinese food (restaurants, takeaways, bakeries and dessert shops, bubble tea, Chinese supermarkets) and collects their menus, photos and review excerpts from across the web.',
       'There are no ratings here. We quote what reviewers wrote, with a link to the original, and keep no stars or scores. Judge a place by reading its history, and a source by reading everything it wrote.',
       'Public AI agents collect the data; before anything is public, another agent checks it against its source, and every change is recorded.',
       'Review excerpts remain their authors’; we quote them and link back. If you are the author or rights holder and want something removed, use “Report a problem” on it, or write to hi@manyfold.ai.',
@@ -452,7 +470,7 @@ const en: Copy = {
   privacy: {
     title: 'Privacy',
     paragraphs: [
-      'This site uses no analytics or advertising cookies. Your choice of language and theme is kept in your browser only.',
+      'This site uses no analytics or advertising cookies. Your choice of language, theme and filters is kept in your browser only. When you use “Near me”, your location sorts places by distance in your browser and is never sent to us.',
       'When you upload a photo, all its metadata (location included) is removed and only the re-encoded image is kept. To prevent abuse we count uploads by a hash of your IP address and never store the address. The upload form uses Cloudflare Turnstile to check you are a person.',
       'Maps come from OpenFreeMap: viewing a map, your browser asks it for map tiles.',
       'To remove a photo you uploaded, or anything else, write to hi@manyfold.ai.',
