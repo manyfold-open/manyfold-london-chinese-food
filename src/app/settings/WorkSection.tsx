@@ -15,7 +15,11 @@ const TYPE: Record<WorkType, string> = {
   illustrate: 'Illustrations wanted',
 };
 
-/** Work items' statuses (src/worker/work.ts): handed out while open, submitted with a record, then done; leads and menu links may be dismissed. */
+/**
+ * Work items' statuses (src/worker/work.ts): handed out while open, submitted with a record, then
+ * done. Leads and menu links may be dismissed, and illustrate items for dishes that are not standard
+ * are closed as dismissed (src/worker/illustrations.ts).
+ */
 const STATUSES = ['open', 'submitted', 'done', 'dismissed'] as const;
 
 const isWorkType = (value: string | null): value is WorkType => (WORK_TYPES as readonly (string | null)[]).includes(value);

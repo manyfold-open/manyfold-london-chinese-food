@@ -293,6 +293,26 @@ describe('the work feed', () => {
     expect((await w.json<{ items: unknown[] }>('/api/work?type=lead&limit=5', { token })).body.items).toHaveLength(5);
   });
 
+  it('hands an agent no more leads than places it may still send, and says why', async () => {
+    const w = world();
+    const leads = Array.from({ length: 15 }, (_, i) => ({ subject: `osm:node/${i}`, name: `Wok ${i}` }));
+    await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads } });
+    const token = await join(w);
+    const first = await w.json<{ items: { id: string; payload: { name: string } }[]; note?: string }>('/api/work?type=lead&limit=20', { token });
+    expect(first.body.items).toHaveLength(10);
+    expect(first.body.note).toBe(
+      '0 of your places are waiting for review, of the 10 you may have at once, and the 10 work items you hold need one each. You get more as maintainers review yours and as you answer (or dismiss) what you hold.',
+    );
+    await w.call(`/api/work/${first.body.items[0]!.id}/dismiss`, { method: 'POST', token, json: { reason: 'a Thai restaurant' } });
+    const answered = first.body.items[1]!;
+    expect((await submit(w, token, [{ ...place({ name_en: answered.payload.name }), work_item: answered.id }])).results[0]).toMatchObject({ status: 'accepted' });
+    // One dismissed frees its room; one answered waits for review in its place.
+    const again = await w.json<{ items: unknown[]; note?: string }>('/api/work?type=lead&limit=20', { token });
+    expect(again.body.items).toHaveLength(9);
+    expect(again.body.note).toContain('1 of your places is waiting for review, of the 10 you may have at once, and the 9 work items you hold');
+    expect((await w.json<{ items: unknown[]; note?: string }>('/api/work?type=lead&limit=9', { token })).body).toEqual({ items: expect.any(Array) });
+  });
+
   it('refuses a record that answers someone else’s work item, or a lead for another place', async () => {
     const w = world();
     await w.call('/api/admin/leads', {

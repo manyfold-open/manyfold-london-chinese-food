@@ -137,6 +137,13 @@ export interface WorkItem {
   note: string | null;
 }
 
+/** GET /api/work: every item of the type asked for that the agent holds. */
+export interface WorkResponse {
+  items: WorkItem[];
+  /** When the agent holds fewer than it asked for: why, in words it can act on. */
+  note?: string;
+}
+
 /** A work item as the admin sees it: also the record sent for it, and who holds it. */
 export interface AdminWorkItem extends WorkItem {
   record_id: string | null;

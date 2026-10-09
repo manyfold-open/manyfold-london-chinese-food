@@ -38,13 +38,14 @@ import {
 } from '../shared/kinds';
 import { quoteOnPage } from '../shared/quote';
 import { similarity } from '../shared/similar';
-import type { RecordStatus, SubmitResponse, SubmitResult } from '../shared/types';
+import type { RecordStatus, SubmitResponse, SubmitResult, WorkType } from '../shared/types';
 import { newId } from './ids';
 import { lookupPostcodes, placeFieldsFrom, type PostcodeAnswer } from './postcodes';
 import { DAY } from './ratelimit';
 import { blockedBy, blockedHosts } from './settings';
 import { standing, type Token } from './tokens';
 import { HttpError } from './types';
+import { ANSWERED_BY } from './work';
 
 export const BATCH_MAX = 20;
 
@@ -204,9 +205,6 @@ interface WorkRow {
   handed_until: string | null;
 }
 
-/** The kind of record that answers each type of work item. */
-const ANSWERED_BY: Record<string, Kind> = { lead: 'place', menu: 'menu', 'menu-link': 'menu', reviews: 'review', transcribe: 'menu' };
-
 /**
  * Why a record cannot answer the work item it names, or null. A lead is answered by the place it
  * points to: the same outcode or a similar name, so a batch whose work item ids were mixed up is
@@ -225,8 +223,8 @@ function workItemProblem(
   if (!item || item.handed_to !== token.id || item.status !== 'open' || !item.handed_until || item.handed_until <= now.toISOString()) {
     return `${id} is not a work item you hold open; GET /api/work lists yours, or send the record without work_item`;
   }
-  const answer = ANSWERED_BY[item.type];
-  if (answer !== kind) return `${id} is a ${item.type} item, answered by ${answer ? `a ${answer}` : 'an upload'}, not a ${kind}`;
+  const answer = ANSWERED_BY[item.type as WorkType] as Kind | undefined;
+  if (answer !== kind) return `${id} is a ${item.type} item, answered by ${answer && KIND_CONFIGS[answer].submit === 'agents' ? `a ${answer}` : 'an upload'}, not a ${kind}`;
   if (item.type === 'lead') {
     const lead = (item.payload_json ? JSON.parse(item.payload_json) : {}) as { name?: string; postcode?: string };
     const name = String(data.name_en ?? data.name_zh ?? '');

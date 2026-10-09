@@ -253,9 +253,10 @@ export async function uploadIllustration(env: Env, token: Token, request: Reques
   const workItem = field(form, 'work_item') ?? '';
   const dish = cleanText(field(form, 'dish') ?? '');
   const item = await env.DB
-    .prepare(`SELECT subject, handed_to, handed_until, status FROM work_items WHERE id = ? AND type = 'illustrate'`)
+    .prepare(`SELECT subject, handed_to, handed_until, status, note FROM work_items WHERE id = ? AND type = 'illustrate'`)
     .bind(workItem)
-    .first<{ subject: string; handed_to: string | null; handed_until: string | null; status: string }>();
+    .first<{ subject: string; handed_to: string | null; handed_until: string | null; status: string; note: string | null }>();
+  if (item?.status === 'dismissed') throw new HttpError(422, 'invalid_body', `work_item ${workItem} is closed. ${item.note ?? ''} Ask for others with GET /api/work?type=illustrate.`);
   if (!item || item.handed_to !== token.id || item.status !== 'open' || !item.handed_until || item.handed_until <= now.toISOString()) {
     throw new HttpError(422, 'invalid_body', 'work_item must be an illustrate item you hold now; ask for one with GET /api/work?type=illustrate.');
   }

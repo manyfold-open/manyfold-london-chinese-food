@@ -15,14 +15,21 @@
  * record (or uploads the illustration with it), which marks it submitted. When that record is
  * verified the item is done; when it is rejected the item opens again with the reason
  * (src/worker/effects.ts).
+ *
+ * Work handed out can be finished (AGENTS.md, invariant 24): every item an agent holds needs a
+ * record of the kind that answers it, so an agent is never handed more than it may still have
+ * waiting for review, and when it gets fewer than it asked for, it is told why.
  */
 
-import type { AdminWorkItem, WorkItem, WorkType } from '../shared/types';
+import { KIND_CONFIGS } from '../../kinds/index';
+import type { Kind } from '../shared/kinds';
+import type { AdminWorkItem, WorkItem, WorkResponse, WorkType } from '../shared/types';
 import { WORK_TYPES } from '../shared/types';
 import { newId } from './ids';
+import { reopenProblem } from './illustrations';
 import { HOUR } from './ratelimit';
 import { illustrationSettings, promptFor } from './settings';
-import type { Token } from './tokens';
+import { standing, type Token } from './tokens';
 import { HttpError } from './types';
 
 export const HANDOUT_MS = 2 * HOUR;
@@ -51,6 +58,16 @@ const toItem = (row: ItemRow): WorkItem => ({
 });
 
 export const isWorkType = (value: unknown): value is WorkType => typeof value === 'string' && (WORK_TYPES as readonly string[]).includes(value);
+
+/** The kind of record that answers each type of work item; an illustration is uploaded, the rest are sent. */
+export const ANSWERED_BY: Readonly<Record<WorkType, Kind>> = {
+  lead: 'place',
+  menu: 'menu',
+  'menu-link': 'menu',
+  reviews: 'review',
+  transcribe: 'menu',
+  illustrate: 'illustration',
+};
 
 /** A menu's pages go out together: not while one of them still waits for a maintainer. */
 const READY_PAGES = ` AND NOT EXISTS (SELECT 1 FROM records p INDEXED BY records_age
@@ -81,17 +98,50 @@ async function illustratedToday(db: D1Database, now: Date): Promise<number> {
 /**
  * Hands open items of a type to the token, most wanted first, until it holds `limit` of them, and
  * returns every item of that type it holds. One statement, so two agents never get the same item.
+ * Each item held waits for a record of the kind that answers it, so the token is handed no more
+ * than its limit of records waiting for review leaves room for.
  */
-export async function handOut(db: D1Database, token: Token, type: WorkType, limit: number, now: Date): Promise<WorkItem[]> {
+export async function handOut(db: D1Database, token: Token, type: WorkType, limit: number, now: Date): Promise<WorkResponse> {
   const at = now.toISOString();
-  const held = await db
-    .prepare(`SELECT COUNT(*) AS n FROM work_items INDEXED BY work_items_handed WHERE handed_to = ? AND type = ? AND status = 'open' AND handed_until > ?`)
-    .bind(token.id, type, at)
-    .first<{ n: number }>();
-  // Asking again tops the agent's holding up to `limit`; it never piles up.
-  let room = Math.max(0, Math.min(limit, HANDOUT_MAX) - Number(held?.n ?? 0));
+  const wanted = Math.min(limit, HANDOUT_MAX);
+  const kind = ANSWERED_BY[type];
+  const { results: holding } = await db
+    .prepare(`SELECT type, COUNT(*) AS n FROM work_items INDEXED BY work_items_handed WHERE handed_to = ? AND status = 'open' AND handed_until > ? GROUP BY type`)
+    .bind(token.id, at)
+    .all<{ type: WorkType; n: number }>();
+  const heldOf = (types: readonly WorkType[]) => holding.reduce((sum, row) => sum + (types.includes(row.type) ? Number(row.n) : 0), 0);
+  const heldForKind = heldOf(WORK_TYPES.filter((other) => ANSWERED_BY[other] === kind));
+  const mine = await standing(db, token, kind, now);
+  const noun = KIND_CONFIGS[kind].noun.en.other;
+  let handed = 0;
+  // Asking again tops the agent's holding up to `limit`; it never piles up. The tightest bound
+  // says why, once the agent holds what it was handed, when it got fewer than it asked for.
+  const bounds: { room: number; why: () => string }[] = [
+    { room: wanted - heldOf([type]), why: () => '' },
+    {
+      room: mine.pending_cap - mine.pending - heldForKind,
+      why: () => {
+        const holds = heldForKind + handed;
+        return `${mine.pending} of your ${noun} ${mine.pending === 1 ? 'is' : 'are'} waiting for review, of the ${mine.pending_cap} you may have at once${
+          holds ? `, and the ${holds} work ${holds === 1 ? 'item' : 'items'} you hold need one each` : ''
+        }. You get more as maintainers review yours${holds ? ' and as you answer (or dismiss) what you hold' : ''}.`;
+      },
+    },
+  ];
   const settings = type === 'illustrate' ? await illustrationSettings(db) : null;
-  if (settings) room = settings.requested ? Math.min(room, Math.max(0, settings.daily - (await illustratedToday(db, now)))) : 0;
+  if (settings) {
+    const daily = settings.daily;
+    bounds.push(
+      settings.requested
+        ? {
+            room: daily - (await illustratedToday(db, now)),
+            why: () => `The site hands out ${daily} illustrate ${daily === 1 ? 'item' : 'items'} a day, and today's are all out; more come after midnight UTC.`,
+          }
+        : { room: 0, why: () => 'The site team has paused illustrations; ask again on a later run.' },
+    );
+  }
+  const tightest = bounds.reduce((min, bound) => (bound.room < min.room ? bound : min));
+  const room = Math.max(0, tightest.room);
   if (room > 0) {
     const result = await db
       .prepare(
@@ -103,7 +153,7 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
       )
       .bind(token.id, new Date(now.getTime() + HANDOUT_MS).toISOString(), at, type, room)
       .run();
-    const handed = Number(result.meta.changes ?? 0);
+    handed = Number(result.meta.changes ?? 0);
     if (type === 'illustrate' && handed > 0) {
       await db
         .prepare(
@@ -130,7 +180,8 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
       item.payload = { ...payload, prompt: promptFor(settings.template, { key: item.subject, zh: text(payload.name_zh), en: text(payload.name_en) }, text(payload.note)) };
     }
   }
-  return items;
+  if (items.length >= wanted) return { items };
+  return { items, note: handed < room ? `No more ${type} items are open for you right now; ask again on a later run.` : tightest.why() };
 }
 
 /** A held item the agent gives up on: a lead that is not a place to list, or menu links with nothing new, are dismissed for good; anything else goes back. */
@@ -245,11 +296,14 @@ export async function workAdmin(db: D1Database, type: WorkType | null, status: s
   };
 }
 
-/** The admin opens an item again (a lead dismissed by mistake). */
+/** The admin opens an item again (a lead dismissed by mistake), unless no agent could answer it. */
 export async function reopenWork(db: D1Database, id: string, now: Date): Promise<void> {
-  const result = await db
+  const item = await db.prepare('SELECT type, subject FROM work_items WHERE id = ?').bind(id).first<{ type: WorkType; subject: string }>();
+  if (!item) throw new HttpError(404, 'not_found', 'No work item has that id.');
+  const problem = item.type === 'illustrate' ? await reopenProblem(db, item.subject) : null;
+  if (problem) throw new HttpError(409, 'conflict', problem);
+  await db
     .prepare(`UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL, updated_at = ? WHERE id = ?`)
     .bind(now.toISOString(), id)
     .run();
-  if (!result.meta.changes) throw new HttpError(404, 'not_found', 'No work item has that id.');
 }

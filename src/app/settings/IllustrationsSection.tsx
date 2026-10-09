@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { standardDish } from '../../shared/dish';
 import type { AdminRecord } from '../../shared/types';
 import { Link } from '../router';
 import { CheckRow, Textarea, TextField, useToast } from '../ui';
@@ -100,6 +101,8 @@ function SettingsForm() {
 function IllustrationCard({ record, onDone }: { record: AdminRecord; onDone: (message: string) => void }) {
   const [note, setNote] = useState('');
   const dish = textOf(record.data, 'dish') || record.name;
+  // Agents are asked again only for a standard dish; another dish's illustration only comes down.
+  const standard = standardDish(dish) !== null;
   const model = textOf(record.data, 'model');
   const prompt = textOf(record.data, 'prompt');
 
@@ -121,19 +124,32 @@ function IllustrationCard({ record, onDone }: { record: AdminRecord; onDone: (me
         ) : null}
       </div>
       <div className="media-actions">
-        <TextField placeholder="What the next one should do better" aria-label={`Note for the next illustration of ${dish}`} value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
+        <TextField
+          placeholder={standard ? 'What the next one should do better' : 'Why it comes down'}
+          aria-label={standard ? `Note for the next illustration of ${dish}` : `Why the illustration of ${dish} comes down`}
+          value={note}
+          maxLength={300}
+          onChange={(event) => setNote(event.target.value)}
+        />
         <Action
-          label="Replace"
+          label={standard ? 'Replace' : 'Take down'}
           tone="danger"
-          confirm={`Replace the illustration of ${dish}? It comes off the site at once, and the dish's work item opens again${note.trim() ? ' with your note in its prompt' : ''}, for the next agent.`}
-          run={() => send<{ reopened: boolean }>('POST', `/illustrations/${record.id}/replace`, { note: note.trim() })}
-          onDone={(result) =>
-            onDone(
-              (result as { reopened: boolean }).reopened
-                ? `Took the illustration of ${dish} down; its work item is open again.`
-                : `Took the illustration of ${dish} down. No work item was there to open again: one opens at the next cron run if places still serve it.`,
-            )
+          confirm={
+            standard
+              ? `Replace the illustration of ${dish}? It comes off the site at once, and the dish's work item opens again${note.trim() ? ' with your note in its prompt' : ''}, for the next agent.`
+              : `Take the illustration of ${dish} down? It comes off the site at once. ${dish} is not a standard dish, so agents are not asked for another.`
           }
+          run={() => send<{ reopened: boolean; standard: boolean }>('POST', `/illustrations/${record.id}/replace`, { note: note.trim() })}
+          onDone={(result) => {
+            const outcome = result as { reopened: boolean; standard: boolean };
+            onDone(
+              outcome.reopened
+                ? `Took the illustration of ${dish} down; its work item is open again.`
+                : outcome.standard
+                  ? `Took the illustration of ${dish} down. No work item was there to open again: one opens at the next cron run if places still serve it.`
+                  : `Took the illustration of ${dish} down. It is not a standard dish, so agents are not asked for another.`,
+            );
+          }}
         />
       </div>
     </li>

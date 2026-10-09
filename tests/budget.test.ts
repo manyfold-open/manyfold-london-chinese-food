@@ -5,6 +5,7 @@
 // index, never a table's history.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dishPlaces, placeDoc, rebuildPlace, refreshDocs, sourcePage, datasetJson, buildIndex } from '../src/worker/docs';
+import { ILLUSTRATABLE, syncIllustrateWork } from '../src/worker/illustrations';
 import { leaseTasks } from '../src/worker/maintainer';
 import { maintain } from '../src/worker/maintenance';
 import { SCHEMA, schemaStatements } from '../src/worker/schema';
@@ -161,12 +162,13 @@ describe('what agents cost', () => {
   });
 
   it('hands out work from 2,500 leads through the open-items index', async () => {
-    // Each item handed costs its index entries and its row, never the queue behind it.
+    // Each item handed costs its index entries and its row, never the queue behind it, plus the
+    // token's standing (its waiting records and one row), which bounds how many it may hold.
     const { value, rows } = await reads(() => handOut(db, collector, 'lead', 10, NOW));
-    expect(value).toHaveLength(10);
-    expect(rows).toBeLessThanOrEqual(8 * value.length + 10);
+    expect(value.items).toHaveLength(10);
+    expect(rows).toBeLessThanOrEqual(8 * value.items.length + 14);
     const { rows: more } = await reads(() => handOut(db, keeper, 'lead', 2, NOW));
-    expect(more).toBeLessThanOrEqual(8 * 2 + 10);
+    expect(more).toBeLessThanOrEqual(8 * 2 + 14);
   });
 });
 
@@ -186,6 +188,24 @@ describe('what the cron costs', () => {
     const { rows } = await reads(() => rebuildPlace(db, BIG, NOW));
     // 1 place, 81 children, a 400-item menu's dish rows, up to 60 history rows, and lookups.
     expect(rows).toBeLessThanOrEqual(81 + 400 + 60 + 60);
+  });
+
+  it('asks for illustrations of the standard dishes alone, past thousands of other menu lines', async () => {
+    // Every menu line is a dish row, and 400 dishes were illustrated before; 200 items were opened
+    // for menu lines that are no standard dish.
+    const run = (sql: string, ...values: unknown[]) => raw.prepare(sql).bind(...values).run();
+    await run(`${seq(3000)} INSERT OR IGNORE INTO dishes (dish_key, name_en, places, updated_at) SELECT 'menu line ' || i, 'Menu line ' || i, 1 + i % 4, '${AT}' FROM n`);
+    await run(`INSERT OR IGNORE INTO dishes (dish_key, name_zh, places, updated_at) SELECT value, value, 2, '${AT}' FROM json_each(?)`, JSON.stringify([...ILLUSTRATABLE.keys()]));
+    await run(`${seq(400)} INSERT INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
+      SELECT printf('wrk_drawn_%05d', i), 'illustrate', 'drawn ' || i, 1, '{}', 'done', '${AT}', '${AT}' FROM n`);
+    await run(`${seq(200)} INSERT INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
+      SELECT printf('wrk_line_%05d', i), 'illustrate', 'menu line ' || i, 1, '{}', 'open', '${AT}', '${AT}' FROM n`);
+    expect((await reads(() => syncIllustrateWork(db, NOW))).value).toBe(200 + 200);
+    // From then on a run reads the open items and, for each standard name, its key and the dish's
+    // index entry and row: never the other menu lines, nor the items done before.
+    const { value, rows } = await reads(() => syncIllustrateWork(db, NOW));
+    expect(value).toBe(0);
+    expect(rows).toBeLessThanOrEqual(200 + 3 * ILLUSTRATABLE.size + 10);
   });
 
   it('marks only what changed since the last revision seen', async () => {

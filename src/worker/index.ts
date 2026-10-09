@@ -34,7 +34,7 @@ import { KINDS, normName, type Kind } from '../shared/kinds';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import type { Locale } from '../shared/i18n';
 import { queryPlaces } from '../shared/places-query';
-import { WORK_TYPES, type IssuedToken, type JoinResponse, type MeResponse, type Role, type WorkType } from '../shared/types';
+import { WORK_TYPES, type IssuedToken, type JoinResponse, type MeResponse, type Role, type WorkResponse, type WorkType } from '../shared/types';
 import { requireAdmin, SESSION_COOKIE, SESSION_DAYS, sessionToken, validSession } from './admin';
 import { cachedFor, cachedJson, cacheKeyOf, forget, isDailyLimit } from './cache';
 import {
@@ -363,7 +363,7 @@ app.get('/api/work', async (c) => {
   const type = c.req.query('type');
   if (!isWorkType(type)) throw new HttpError(422, 'invalid_query', `type must be one of ${WORK_TYPES.join(', ')}.`);
   const limit = parseLimit(c.req.query('limit'), HANDOUT_MAX, 5);
-  const items = await handOut(c.env.DB, token, type as WorkType, limit, new Date());
+  const { items, note } = await handOut(c.env.DB, token, type as WorkType, limit, new Date());
   // A menu's photos are public once verified: give every page's address, in order.
   const shown = await Promise.all(
     items.map(async (item) => {
@@ -373,7 +373,8 @@ app.get('/api/work', async (c) => {
       return { ...item, payload: { ...item.payload, photo: pages[0] ?? item.subject, pages, image_url: urls[0] ?? null, image_urls: urls } };
     }),
   );
-  return c.json({ items: shown });
+  const reply: WorkResponse = { items: shown, note };
+  return c.json(reply);
 });
 
 app.post('/api/work/:id/dismiss', async (c) => {

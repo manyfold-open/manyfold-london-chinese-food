@@ -83,6 +83,12 @@ whose collector and maintainer mechanism this site reuses.
     a content security policy.
 23. **Author names only for public writers** (critics, publications, blogs, video), never for
     people reviewing on platforms or forums, and no excerpt that names a private person.
+24. **Work handed out can be finished.** A work item is opened only when an agent can answer it
+    the way the API checks the answer: an `illustrate` item only for a standard dish
+    (`kinds/dish-vocab.ts`) whose name the upload takes as `dish`, never for a menu's other lines
+    (drinks, set meals, add-ons, headings). No agent is handed more items than its limit of records
+    waiting for review leaves room for, a short hand-out says why, and an item no one could finish
+    is closed, not handed out again.
 
 ## Tests
 
