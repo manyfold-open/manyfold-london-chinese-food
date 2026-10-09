@@ -21,6 +21,11 @@ export interface Env {
   TURNSTILE_SITE_KEY?: string;
   /** Turnstile's secret, for checking an upload form's answer. A secret. */
   TURNSTILE_SECRET?: string;
+  /**
+   * Where the daily digest of items waiting long for the site team goes: a URL that takes a POST
+   * of {"text": "..."} (Slack, Lark and most chat webhooks do). A secret. Unset: no digest.
+   */
+  REVIEW_DIGEST_WEBHOOK?: string;
 }
 
 /** Errors that already know their HTTP shape. Thrown anywhere, mapped in index.ts. */

@@ -272,6 +272,92 @@ export async function importLeads(db: D1Database, leads: unknown, now: Date): Pr
   return { added, known: leads.length - added };
 }
 
+/** Open leads whose subject starts with `prefix`, after the subject `after`, for scripts/qualify-leads.ts. */
+export async function openLeads(db: D1Database, prefix: string, after: string, limit: number): Promise<{ leads: { subject: string; payload: Record<string, unknown> }[] }> {
+  const { results } = await db
+    .prepare(
+      `SELECT subject, payload_json FROM work_items INDEXED BY work_items_subject
+       WHERE type = 'lead' AND subject > ?1 AND subject >= ?2 AND subject < ?3 AND status = 'open' ORDER BY subject LIMIT ?4`,
+    )
+    .bind(after, prefix, `${prefix}\uffff`, Math.min(Math.max(1, limit), 1000))
+    .all<{ subject: string; payload_json: string | null }>();
+  return { leads: results.map((row) => ({ subject: row.subject, payload: row.payload_json ? (JSON.parse(row.payload_json) as Record<string, unknown>) : {} })) };
+}
+
+/** What the site found that shows a lead's food, for the collector to start from. */
+export interface FoodEvidence {
+  url: string;
+  site?: string;
+  name?: string;
+  cuisines?: string[];
+}
+
+/**
+ * The admin's word on open leads (scripts/qualify-leads.ts), by subject: a page that shows a lead's
+ * food (`food_evidence`, put into the payload the collector gets), a new priority, or a reason to
+ * dismiss it for good (it closed, it sells no Chinese food). Leads not open are left alone.
+ */
+export async function updateLeads(db: D1Database, leads: unknown, now: Date): Promise<{ updated: number; dismissed: number }> {
+  if (!Array.isArray(leads) || leads.length === 0 || leads.length > 500) {
+    throw new HttpError(422, 'invalid_body', 'Send {"leads": [...]} with 1 to 500 of {subject, priority?, food_evidence?: {url, site?, name?, cuisines?}, dismiss?}.');
+  }
+  const at = now.toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const [index, raw] of leads.entries()) {
+    const lead = (typeof raw === 'object' && raw !== null ? raw : {}) as { subject?: unknown; priority?: unknown; food_evidence?: unknown; dismiss?: unknown };
+    if (typeof lead.subject !== 'string' || !lead.subject) throw new HttpError(422, 'invalid_body', `leads[${index}] needs its subject, like "fsa:123".`);
+    if (lead.dismiss !== undefined) {
+      const reason = typeof lead.dismiss === 'string' ? lead.dismiss.trim().slice(0, 300) : '';
+      if (reason.length < 3) throw new HttpError(422, 'invalid_body', `leads[${index}].dismiss must say why, in 3 to 300 characters.`);
+      statements.push(
+        db
+          .prepare(
+            `UPDATE work_items SET status = 'dismissed', handed_to = NULL, handed_until = NULL, note = ?, updated_at = ?
+             WHERE type = 'lead' AND subject = ? AND status = 'open'`,
+          )
+          .bind(reason, at, lead.subject),
+      );
+      continue;
+    }
+    const priority = lead.priority === undefined ? null : typeof lead.priority === 'number' && Number.isInteger(lead.priority) ? lead.priority : Number.NaN;
+    if (Number.isNaN(priority)) throw new HttpError(422, 'invalid_body', `leads[${index}].priority must be a whole number.`);
+    let evidence: FoodEvidence | null = null;
+    if (lead.food_evidence !== undefined) {
+      const raw = lead.food_evidence as Partial<FoodEvidence> | null;
+      let url: URL | null = null;
+      try {
+        url = new URL(String(raw?.url));
+      } catch {
+        url = null;
+      }
+      if (!url || url.protocol !== 'https:') throw new HttpError(422, 'invalid_body', `leads[${index}].food_evidence.url must be an https URL.`);
+      evidence = {
+        url: url.toString(),
+        ...(typeof raw?.site === 'string' ? { site: raw.site.slice(0, 40) } : {}),
+        ...(typeof raw?.name === 'string' ? { name: raw.name.slice(0, 120) } : {}),
+        ...(Array.isArray(raw?.cuisines) ? { cuisines: raw.cuisines.filter((cuisine): cuisine is string => typeof cuisine === 'string').slice(0, 8) } : {}),
+      };
+    }
+    statements.push(
+      db
+        .prepare(
+          `UPDATE work_items SET priority = COALESCE(?1, priority),
+             payload_json = CASE WHEN ?2 IS NULL THEN payload_json ELSE json_set(COALESCE(payload_json, '{}'), ?3, json(?2)) END,
+             updated_at = ?4
+           WHERE type = 'lead' AND subject = ?5 AND status = 'open'`,
+        )
+        .bind(priority, evidence ? JSON.stringify(evidence) : null, '$.food_evidence', at, lead.subject),
+    );
+  }
+  // One statement per lead, in order: each says whether its lead was still open.
+  const changed = (await db.batch(statements)).map((result) => Number(result.meta?.changes ?? 0));
+  const isDismissal = (leads as { dismiss?: unknown }[]).map((lead) => typeof lead === 'object' && lead !== null && lead.dismiss !== undefined);
+  return {
+    updated: changed.reduce((sum, n, index) => sum + (isDismissal[index] ? 0 : n), 0),
+    dismissed: changed.reduce((sum, n, index) => sum + (isDismissal[index] ? n : 0), 0),
+  };
+}
+
 /** The work feed as the admin sees it: counts by type and status, and the latest items of a type. */
 export async function workAdmin(db: D1Database, type: WorkType | null, status: string | null): Promise<{ counts: { type: string; status: string; n: number }[]; items: AdminWorkItem[] }> {
   const [counts, items] = await db.batch([

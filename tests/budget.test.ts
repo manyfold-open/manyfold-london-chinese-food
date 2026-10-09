@@ -181,7 +181,9 @@ describe('what the cron costs', () => {
 
   it('keeps the housekeeping indexed', async () => {
     const { rows } = await reads(() => maintain(db, NOW));
-    expect(rows).toBeLessThanOrEqual(12);
+    // A few rows more than before the routing tables (task_needs, task_waits), which it walks
+    // whole: they hold only the tasks waiting for a browser or a duplicate, never the history.
+    expect(rows).toBeLessThanOrEqual(16);
   });
 
   it('rebuilds the biggest page from that place’s rows, not the table', async () => {

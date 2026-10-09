@@ -342,7 +342,9 @@ describe('the work feed', () => {
     await submit(w, token, [place({ name_en: 'Hong Kong Cuisine', name_zh: '香港酒家' })]);
     const { results } = await submit(w, token, [place({ name_en: 'Hong Kong Restaurant', name_zh: undefined })]);
     const task = await w.env.DB.prepare('SELECT note FROM tasks WHERE record_id = ?').bind(results[0]!.id).first<{ note: string }>();
-    expect(task!.note).toMatch(/Also at W1D 6JW: Hong Kong Cuisine 香港酒家 \(rec_[0-9a-z]{26}, pending\)\. If this is one of them under another name, the verdict is duplicate\.$/);
+    expect(task!.note).toMatch(
+      /Also at W1D 6JW: Hong Kong Cuisine 香港酒家 \(rec_[0-9a-z]{26}, pending; a name alike\)\. If this is one of them under another name, the verdict is duplicate \(verified\) or unsure with unsure_type duplicate_pending \(pending\)\.$/,
+    );
   });
 
   it('lets an agent dismiss a lead with a reason', async () => {

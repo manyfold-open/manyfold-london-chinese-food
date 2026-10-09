@@ -33,13 +33,18 @@ whose collector and maintainer mechanism this site reuses.
 9. **Seeds are checked facts; leads are hints.** A seed record needs a source page and a quote
    copied word for word from it (`npm run quotes:verify`). Leads (OpenStreetMap, the Food Standards
    Agency) only tell collectors where to look: they are never published, and no hygiene score is
-   ever stored.
+   ever stored. A page that names a record without showing what it needs is never its source: a
+   kind declares such hosts in `sourceNotAlone` (a place: ratings.food.gov.uk), and
+   `validateProvenance` refuses them at submit, in verdicts and in the admin's decisions. What the
+   server looks up about a place (`src/worker/facts.ts`: the FSA, delivery listings) is a hint for
+   its maintainers, never a source, and carries no score or rating.
 10. **`/join` only ever creates collector tokens.** No public route may create or promote a
     maintainer token. Token secrets are shown once and stored only as SHA-256.
 11. **Only maintainers' verdicts, the admin, and the effects of those two change a record's
     status** (and the seed, for new records). A verdict counts only for a task leased to the token
     sending it, while the lease lasts, never for a record that token submitted. A page or image a
-    maintainer could not open is `unsure`, never grounds to reject or mark stale. The upload routes
+    maintainer could not open is `unsure` (`cannot_open`), never grounds to reject or mark stale;
+    pages it could read that do not support the record are grounds to reject. The upload routes
     only ever create pending records.
 12. **The admin API stays closed by default.** `/api/admin/*` refuses everything until
     `ADMIN_PASSWORD` is set, compares it in constant time, sends no CORS headers, and never returns
@@ -88,7 +93,26 @@ whose collector and maintainer mechanism this site reuses.
     (`kinds/dish-vocab.ts`) whose name the upload takes as `dish`, never for a menu's other lines
     (drinks, set meals, add-ons, headings). No agent is handed more items than its limit of records
     waiting for review leaves room for, a short hand-out says why, and an item no one could finish
-    is closed, not handed out again.
+    is closed, not handed out again: a lead whose answer was rejected twice is dismissed
+    (`src/worker/effects.ts`), and leads are qualified before they go out
+    (`scripts/qualify-leads.ts`: the FSA still lists them, and a page shows their food).
+25. **Doubt goes to whoever can settle it, and only then to people.** An `unsure` verdict names why
+    (`unsure_type`): a page others cannot open goes to a maintainer with a browser (a token
+    capability), a duplicate of a record still waiting is parked until that one is decided, sources
+    in conflict go to a second maintainer. Only what those cannot settle, questions the rules do not
+    answer, and a day's wait for a browser reach the site team, at most `HUMAN_DAILY_MAX` a day per
+    token. Handing on is a `defer` revision, sending to people an `unsure` one. A token never gets a
+    task again for a record it could not decide, and records waiting for the site team do not
+    count against their collector's cap.
+26. **Agents work from the rules as they are.** Every lease and verdict carries `X-Skill-Version`,
+    a hash of the instructions the agent read (`skillVersion` in `src/worker/skill.ts`), which
+    changes whenever the rules do. A missing one is refused for maintainers, an old one for anyone.
+    No error ever says the current version: an agent learns it by reading the instructions.
+27. **Maintainers answer for their verdicts as collectors do for their records.** The site team's
+    later decisions on a record, and spot checks, are counted against the maintainer whose verdict
+    they overturn (`maintainerQuality`, `src/worker/tokens.ts`); a maintainer with more than half
+    of 10 or more overturned is suspended. A site-team decision that states a rule is kept as a
+    precedent until the rule is written into a kind's checks or scope.
 
 ## Tests
 

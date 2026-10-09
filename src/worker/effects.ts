@@ -8,7 +8,10 @@
  *   ... rejected                its pending children are withdrawn: never reviewed, no one's fault
  *   ... merged into another     its children (and a brand's places) move to the other one; a child
  *                               that would duplicate one already there is merged into it
- *   any record decided          the work item it answered is done, or open again for someone else
+ *   any record decided          the work item it answered is done, or open again for someone else;
+ *                               a lead two attempts failed on is dismissed instead (invariant 24)
+ *   a record decided that others  verified: they are merged into it; rejected or withdrawn: their
+ *   were found to duplicate     tasks open again; merged: they wait for the record it went into
  *   an illustration verified    its dish shows it; one that stops being verified stops showing
  *   a photo of a menu verified  becomes a menu for collectors to transcribe (one item for the pages
  *                               of one menu sent together)
@@ -50,6 +53,9 @@ interface ChildRow {
 }
 
 const PARENT_KINDS: readonly Kind[] = ['place', 'brand'];
+
+/** Failed attempts after which a lead is dismissed rather than handed out again. */
+export const LEAD_ATTEMPTS = 2;
 const LIVE = `('pending', 'verified', 'stale')`;
 
 /** A revision the server writes because `cause` changed. */
@@ -89,13 +95,18 @@ export async function statusEffects(
   const statements: D1PreparedStatement[] = [];
   if (from === to) return statements;
 
+  // First, records a maintainer found to duplicate this one: merged into it, a child of theirs then
+  // moves here before this record's own children stop waiting below.
+  statements.push(...(await resolveWaiting(db, record, to, at, options)));
+
   if (PARENT_KINDS.includes(record.kind)) {
     if (to === 'verified') {
       statements.push(
         db
           .prepare(
             `UPDATE tasks SET status = 'open' WHERE status = 'blocked'
-             AND record_id IN (SELECT id FROM records WHERE parent_id = ? AND status = 'pending')`,
+             AND record_id IN (SELECT id FROM records WHERE parent_id = ? AND status = 'pending')
+             AND NOT EXISTS (SELECT 1 FROM task_waits w WHERE w.task_id = tasks.id)`,
           )
           .bind(record.id),
       );
@@ -121,13 +132,19 @@ export async function statusEffects(
       db.prepare(`UPDATE work_items SET status = 'done', updated_at = ? WHERE record_id = ? AND status = 'submitted'`).bind(at, record.id),
     );
   } else if (to === 'rejected' || to === 'withdrawn') {
+    // A lead someone already failed on once, failed on again, is closed: no one is handed it a
+    // third time. Any other item opens again, with the reason, for someone else.
+    const note = options.reason ? `The last attempt was rejected: ${options.reason}` : 'The last attempt was rejected.';
     statements.push(
       db
         .prepare(
-          `UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL, note = ?, updated_at = ?
-           WHERE record_id = ? AND status = 'submitted'`,
+          `UPDATE work_items SET
+             status = CASE WHEN type = 'lead' AND COALESCE(json_extract(payload_json, ?4), 0) + 1 >= ?5 THEN 'dismissed' ELSE 'open' END,
+             payload_json = json_set(COALESCE(payload_json, '{}'), ?4, COALESCE(json_extract(payload_json, ?4), 0) + 1),
+             handed_to = NULL, handed_until = NULL, record_id = NULL, note = ?1, updated_at = ?2
+           WHERE record_id = ?3 AND status = 'submitted'`,
         )
-        .bind(options.reason ? `The last attempt was rejected: ${options.reason}` : 'The last attempt was rejected.', at, record.id),
+        .bind(note, at, record.id, '$.attempts', LEAD_ATTEMPTS),
     );
   }
 
@@ -286,6 +303,63 @@ async function repointChildren(db: D1Database, parent: ChangingRecord, targetId:
       db.prepare(`UPDATE records SET status = 'withdrawn', updated_at = ? WHERE id = ? AND status = 'pending'`).bind(at, proposal.id),
       cancelTasks(db, proposal.id, at),
     );
+  }
+  return statements;
+}
+
+/**
+ * Records a maintainer found to duplicate `record` wait, their tasks parked (task_waits), until
+ * `record` is decided. Verified (or stale): each is merged into it, as the maintainer said, with
+ * `record` as the cause. Rejected or withdrawn: their tasks open again for a maintainer to decide
+ * them on their own. Merged into another record: they wait for that one, or merge into it at once
+ * if it is verified.
+ */
+async function resolveWaiting(
+  db: D1Database,
+  record: ChangingRecord,
+  to: RecordStatus,
+  at: string,
+  options: { mergedInto?: string },
+): Promise<D1PreparedStatement[]> {
+  const { results: waiting } = await db
+    .prepare(
+      `SELECT w.task_id, r.id, r.kind, r.status, r.data_json, r.identity_key, r.parent_id, r.root_id
+       FROM task_waits w INDEXED BY task_waits_for JOIN tasks t ON t.id = w.task_id JOIN records r ON r.id = w.record_id
+       WHERE w.waits_for = ? AND t.status = 'blocked' AND r.status = 'pending'`,
+    )
+    .bind(record.id)
+    .all<ChangingRecord & { task_id: string }>();
+  if (waiting.length === 0) return [];
+  const statements: D1PreparedStatement[] = [];
+  let into: string | null = null;
+  if (to === 'verified' || to === 'stale') into = record.id;
+  else if (to === 'merged' && options.mergedInto) {
+    const next = await db.prepare('SELECT status FROM records WHERE id = ?').bind(options.mergedInto).first<{ status: RecordStatus }>();
+    if (next?.status === 'verified' || next?.status === 'stale') into = options.mergedInto;
+    else {
+      for (const twin of waiting) statements.push(db.prepare('UPDATE task_waits SET waits_for = ? WHERE task_id = ?').bind(options.mergedInto, twin.task_id));
+      return statements;
+    }
+  }
+  for (const twin of waiting) {
+    statements.push(db.prepare('DELETE FROM task_waits WHERE task_id = ?').bind(twin.task_id));
+    if (into) {
+      const { task_id: _task, ...changing } = twin;
+      void _task;
+      statements.push(
+        moveStanding(db, twin.id, 'merged', 'pending'),
+        systemRevision(db, twin, 'merge', { status: 'merged', merged_into: into }, record.id, `A maintainer found it a duplicate of ${record.id}, now decided.`, at),
+        db.prepare(`UPDATE records SET status = 'merged', merged_into = ?, updated_at = ? WHERE id = ? AND status = 'pending'`).bind(into, at, twin.id),
+        cancelTasks(db, twin.id, at),
+        ...(await statusEffects(db, changing, 'merged', at, { mergedInto: into })),
+      );
+    } else if (to === 'rejected' || to === 'withdrawn') {
+      statements.push(
+        db
+          .prepare(`UPDATE tasks SET status = 'open', note = COALESCE(note, '') || ? WHERE id = ? AND status = 'blocked'`)
+          .bind(` The record it was found to duplicate, ${record.id}, was not accepted: decide this one on its own.`, twin.task_id),
+      );
+    }
   }
   return statements;
 }

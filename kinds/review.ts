@@ -73,7 +73,7 @@ export default defineKind({
   },
   scope: {
     in: 'What people wrote about places in this dataset, from any page you can read without logging in: food critics and writers, publications, blogs, forums such as Reddit, social posts, video descriptions, and review platforms such as Google Maps, TripAdvisor, Yelp, 大众点评 and 小红书. One excerpt per review: the passage that says most about the food or the visit. Prefer reviews from different years and sources over many from one.',
-    out: 'Ratings and scores of any kind, which must stay out of the excerpt; passages that name or describe private people such as staff or other diners; promotional text by the place itself; reviews of another branch; anything you had to log in, pay or solve a captcha to read.',
+    out: 'Ratings and scores of any kind, which must stay out of the excerpt; passages that name or describe private people such as staff or other diners; promotional text by the place itself; reviews of another branch, or of the restaurant at an earlier address; passages about a whole chain that do not name this branch; round-ups that restate what other outlets said, and venue blurbs a directory writes by machine; anything you had to log in, pay or solve a captcha to read.',
   },
   sourceHints: [
     'critics and food writers (The Guardian, the Evening Standard, The Infatuation, Time Out, Hot Dinners, Eater London, Londonist)',
@@ -82,11 +82,14 @@ export default defineKind({
     '公众号 articles, 知乎 and 豆瓣 for reviews in Chinese',
   ],
   maintainerChecks: [
-    'The excerpt is on the page word for word (or on its archived copy), and is about this place, this branch.',
-    'The date, publication, source type and language are right.',
+    'The excerpt is on the page word for word (or on its archived copy), and is about this place, this branch. A passage about a whole chain fits a branch only when its entry names that branch or its address; a review of the restaurant at an earlier address is about another branch.',
+    'Someone wrote it as a review: not a round-up that restates what other outlets said (it cites them as its sources), not a venue blurb a directory writes by machine, not promotional text by the place.',
+    'One excerpt per review: a second excerpt from the same review of the same place is rejected.',
+    'The date is when the page says the review was published; a guide that dates only the visit gives that month (YYYY-MM).',
+    'The publication, source type and language are right.',
     'There is no score in it, and it names no private person.',
-    'The author is given only for a critic, journalist, blogger or video maker writing under their name.',
-    'The translation, if any, says what the excerpt says.',
+    "The author is given only when the page shows the writer's own name as its byline: not a pen name or handle, and not a name found only in the page's metadata.",
+    'The translation, if any, says what the excerpt says: all of it, and nothing from the sentences after it.',
   ],
   display: ['publication'],
 });

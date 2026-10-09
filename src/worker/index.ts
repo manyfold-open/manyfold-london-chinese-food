@@ -39,39 +39,58 @@ import { requireAdmin, SESSION_COOKIE, SESSION_DAYS, sessionToken, validSession 
 import { cachedFor, cachedJson, cacheKeyOf, forget, isDailyLimit } from './cache';
 import {
   activity,
+  adoptPrecedent,
   banCollector,
   createReport,
   decide,
   editRecord,
+  listPrecedents,
   listRecords,
   markSpotCheck,
   overview,
+  queueWeakSourceRechecks,
   recheckToken,
   recordDetail,
   resolveReport,
   revertToken,
   reviewQueue,
   setBlockedHosts,
+  setWeakSourceDaily,
   spotCheck,
   takedown,
+  weakSourceDaily,
 } from './console';
 import { ensureSchema } from './db';
 import { buildDishes, buildIndex, datasetJson, dishPlaces, placeDoc, rebuildNow, refreshDocs, sourcePage } from './docs';
 import { menusJsonl, placesCsv, placesJson } from './exports';
 import { maintain } from './maintenance';
-import { applyVerdicts, flagRecord, LEASE_MAX, leaseTasks, workOf } from './maintainer';
+import { factsSettings, gatherFacts, updateFactsSettings } from './facts';
+import { applyVerdicts, flagRecord, LEASE_MAX, leaseTasks, releaseTasks, workOf } from './maintainer';
 import { mountOf, publicUrl, withMount } from './mount';
 import { replaceIllustration, syncIllustrateWork, updateIllustrationSettings } from './illustrations';
 import { asJpeg, deleteImage, imageResponse, type MediaKind } from './media';
 import { enforce, RULES, sweep } from './ratelimit';
 import { suggestMenuLink, uploadIllustration, uploadPhoto } from './uploads';
 import { pathMeta, placeMeta, preferredLocale, sitemap, withMeta } from './seo';
-import { blockedHosts, illustrationSettings } from './settings';
-import { collectorSkill, FOCUSES, maintainerSkill, publicSkill, schemaDocument, type Focus } from './skill';
+import { blockedHosts, illustrationSettings, putSetting } from './settings';
+import { collectorSkill, FOCUSES, maintainerSkill, publicSkill, schemaDocument, skillVersion, type Focus } from './skill';
 import { fetchPage, idempotencyKey, recall, remember, submitRecords } from './submit';
-import { adminTokens, authenticate, createCollectorToken, createMaintainerToken, kindsOf, requireRole, standing, TOKEN_ENV, updateToken, type Token } from './tokens';
+import {
+  adminTokens,
+  authenticate,
+  capabilitiesOf,
+  createCollectorToken,
+  createMaintainerToken,
+  kindsOf,
+  maintainerQuality,
+  requireRole,
+  standing,
+  TOKEN_ENV,
+  updateToken,
+  type Token,
+} from './tokens';
 import { HttpError, type Env } from './types';
-import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, reopenWork, workAdmin } from './work';
+import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, updateLeads, workAdmin } from './work';
 
 const SERVICE = 'manyfold-london-chinese-food';
 const BODY_MAX = 1_000_000;
@@ -131,8 +150,33 @@ async function readJson(c: AppContext): Promise<unknown> {
 
 const body = async (c: AppContext): Promise<Record<string, unknown>> => ((await readJson(c)) ?? {}) as Record<string, unknown>;
 
-const markdown = (c: AppContext, text: string) =>
-  c.body(text, 200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' });
+const markdown = (c: AppContext, text: string, headers: Record<string, string> = {}) =>
+  c.body(text, 200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store', ...headers });
+
+/**
+ * The version of the instructions an agent follows, sent back on every lease and verdict
+ * (X-Skill-Version): refused when missing for a maintainer, and for anyone when the rules changed
+ * since the agent read them. Its value is never told here: the agent gets it by reading them.
+ */
+async function requireSkillVersion(c: AppContext, token: Token, required: boolean): Promise<string | null> {
+  const sent = c.req.header('x-skill-version');
+  if (!sent) {
+    if (!required) return `Send the header X-Skill-Version with the version of the instructions you follow (GET ${siteOf(c)}/api/skill gives it): once the rules change, calls with an older version are refused until you read them again.`;
+    throw new HttpError(
+      428,
+      'skill_version_required',
+      `Send the header X-Skill-Version with the version of the instructions you follow: read GET ${siteOf(c)}/api/skill (its X-Skill-Version header, also named in the text) and follow them.`,
+    );
+  }
+  if (sent !== (await skillVersion(token.role))) {
+    throw new HttpError(
+      409,
+      'skill_changed',
+      `The instructions changed since you read them (you sent version ${sent}). Read GET ${siteOf(c)}/api/skill again, follow what changed, and send its version.`,
+    );
+  }
+  return null;
+}
 
 /** The token behind this request, counted against its per-minute limit. */
 async function agentToken(c: AppContext): Promise<Token> {
@@ -329,13 +373,22 @@ app.get('/api/me', async (c) => {
 app.get('/api/skill', async (c) => {
   const token = await agentToken(c);
   const now = new Date();
-  if (token.role === 'maintainer') return markdown(c, maintainerSkill(siteOf(c), token, await workOf(c.env.DB, token, now), now));
+  const version = await skillVersion(token.role);
+  const headers = { 'x-skill-version': version };
+  if (token.role === 'maintainer') {
+    const [work, quality, capabilities] = await Promise.all([
+      workOf(c.env.DB, token, now),
+      maintainerQuality(c.env.DB, token.id, now),
+      capabilitiesOf(c.env.DB, token.id),
+    ]);
+    return markdown(c, maintainerSkill(siteOf(c), token, work, now, { version, warnings: quality.warnings, browser: capabilities.includes('browser') }), headers);
+  }
   const raw = c.req.query('focus') ?? 'places';
   if (!(FOCUSES as readonly string[]).includes(raw)) throw new HttpError(422, 'invalid_query', `focus must be one of ${FOCUSES.join(', ')}; got ${raw}`);
   const focus = raw as Focus;
   const kinds: Kind[] = focus === 'places' ? ['place', 'brand'] : focus === 'menus' ? ['menu'] : focus === 'illustrations' ? ['illustration'] : ['review'];
   const standings = Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await standing(c.env.DB, token, kind, now)] as const)));
-  return markdown(c, collectorSkill(siteOf(c), token, focus, standings, now));
+  return markdown(c, collectorSkill(siteOf(c), token, focus, standings, now, version), headers);
 });
 
 app.post('/api/records', async (c) => {
@@ -347,7 +400,9 @@ app.post('/api/records', async (c) => {
     const earlier = await recall(c.env.DB, token.id, key, now);
     if (earlier) return c.json(earlier);
   }
+  const versionWarning = await requireSkillVersion(c, token, false);
   const reply = await submitRecords(c.env.DB, token, await readJson(c), { now, fetchPage: (url) => fetchPage(url) });
+  if (versionWarning) reply.warnings.push(versionWarning);
   if (key) await remember(c.env.DB, token.id, key, reply, now);
   return c.json(reply);
 });
@@ -385,6 +440,7 @@ app.post('/api/work/:id/dismiss', async (c) => {
 app.get('/api/tasks', async (c) => {
   const token = await agentToken(c);
   requireRole(token, ['maintainer']);
+  await requireSkillVersion(c, token, true);
   const kind = parseKind(c.req.query('kind'));
   if (kind && !kindsOf(token).includes(kind)) throw new HttpError(403, 'wrong_kind', `This token reviews ${token.kinds.join(', ')}, not ${kind}.`);
   const limit = parseLimit(c.req.query('limit'), LEASE_MAX, LEASE_MAX);
@@ -425,7 +481,15 @@ app.post('/api/illustrations', async (c) => {
 app.post('/api/verdicts', async (c) => {
   const token = await agentToken(c);
   requireRole(token, ['maintainer']);
+  await requireSkillVersion(c, token, true);
   return c.json(await applyVerdicts(c.env.DB, token, await readJson(c), new Date()));
+});
+
+/** Tasks a maintainer holds, given back untouched. Always open to it, whatever version it read. */
+app.post('/api/tasks/release', async (c) => {
+  const token = await agentToken(c);
+  requireRole(token, ['maintainer']);
+  return c.json(await releaseTasks(c.env.DB, token, await readJson(c), new Date()));
 });
 
 /* ───────── admin ───────── */
@@ -592,14 +656,69 @@ app.post('/api/admin/work/:id/reopen', async (c) => {
   return c.json({ ok: true });
 });
 app.post('/api/admin/leads', async (c) => c.json(await importLeads(c.env.DB, (await body(c)).leads, new Date())));
+app.patch('/api/admin/leads', async (c) => c.json(await updateLeads(c.env.DB, (await body(c)).leads, new Date())));
+app.get('/api/admin/leads', async (c) => c.json(await openLeads(c.env.DB, c.req.query('prefix') ?? '', c.req.query('after') ?? '', Number(c.req.query('limit') ?? 500))));
+
+app.get('/api/admin/precedents', async (c) => c.json({ precedents: await listPrecedents(c.env.DB, c.req.query('all') === '1') }));
+app.post('/api/admin/precedents/:id/adopt', async (c) => c.json({ precedents: await adoptPrecedent(c.env.DB, Number(c.req.param('id')), new Date()) }));
+
+app.get('/api/admin/facts/settings', async (c) => c.json(await factsSettings(c.env.DB)));
+app.patch('/api/admin/facts/settings', async (c) => c.json(await updateFactsSettings(c.env.DB, await body(c), new Date())));
+
+/** Verified places whose source cannot stand alone (an FSA listing): how many, and rechecks for them now or daily. */
+app.get('/api/admin/source-rechecks', async (c) => {
+  const { remaining } = await queueWeakSourceRechecks(c.env.DB, 'place', 0, new Date());
+  return c.json({ remaining, daily: await weakSourceDaily(c.env.DB) });
+});
+app.post('/api/admin/source-rechecks', async (c) => {
+  const limit = (await body(c)).limit;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 500) throw new HttpError(422, 'invalid_body', 'limit must be a whole number from 1 to 500.');
+  return c.json(await queueWeakSourceRechecks(c.env.DB, 'place', limit, new Date()));
+});
+app.put('/api/admin/source-rechecks', async (c) => c.json({ daily: await setWeakSourceDaily(c.env.DB, (await body(c)).daily, new Date()) }));
 
 /** The cron's work, also run from POST /api/admin/maintenance: housekeeping, then the read models. */
 async function runCron(env: Env, now: Date, everyDueRecord: boolean) {
   const housekeeping = await maintain(env.DB, now, { everyDueRecord });
   const docs = await refreshDocs(env.DB, now, { whole: everyDueRecord });
   const illustrate = await syncIllustrateWork(env.DB, now);
+  const facts = await gatherFacts(env.DB, now);
   const purged = everyDueRecord ? await purgeMedia(env, now) : 0;
-  return { ...housekeeping, docs, illustrate, purged };
+  const daily = everyDueRecord ? await onceADay(env, now) : null;
+  return { ...housekeeping, docs, illustrate, facts, purged, ...daily };
+}
+
+/** Items waiting this long for the site team go into the daily digest. */
+const DIGEST_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * What runs once a UTC day, whoever calls first (the day's first cron run, or the admin): the
+ * day's rechecks of places verified on a source that cannot stand alone, as many as the admin set,
+ * and the digest of items waiting long for the site team, when a webhook is set.
+ */
+async function onceADay(env: Env, now: Date): Promise<{ source_rechecks: number; digest: number }> {
+  const day = now.toISOString().slice(0, 10);
+  const done = await env.DB.prepare(`SELECT value FROM settings WHERE scope = '*' AND key = 'daily-run'`).first<{ value: string }>();
+  if (done?.value === day) return { source_rechecks: 0, digest: 0 };
+  await putSetting(env.DB, 'daily-run', day, now).run();
+  const daily = await weakSourceDaily(env.DB);
+  const { queued } = daily > 0 ? await queueWeakSourceRechecks(env.DB, 'place', daily, now) : { queued: 0 };
+  let digest = 0;
+  if (env.REVIEW_DIGEST_WEBHOOK) {
+    const waiting = (await reviewQueue(env.DB)).filter((item) => Date.parse(item.at) <= now.getTime() - DIGEST_AFTER_MS);
+    if (waiting.length > 0) {
+      const site = env.PUBLIC_URL ?? '';
+      const lines = waiting.slice(0, 20).map((item) => `- ${item.record.kind} "${item.record.name}" (${item.record.id}), since ${item.at.slice(0, 10)}: ${item.reason.slice(0, 140)}`);
+      const text = `London Chinese Food: ${waiting.length} ${waiting.length === 1 ? 'item has' : 'items have'} waited more than 3 days for the site team.\n${lines.join('\n')}${waiting.length > 20 ? `\n…and ${waiting.length - 20} more.` : ''}\n${site}/settings`;
+      try {
+        await fetch(env.REVIEW_DIGEST_WEBHOOK, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, msg_type: 'text', content: { text } }) });
+        digest = waiting.length;
+      } catch {
+        digest = 0;
+      }
+    }
+  }
+  return { source_rechecks: queued, digest };
 }
 
 /**

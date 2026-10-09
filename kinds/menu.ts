@@ -40,7 +40,10 @@ export default defineKind({
           help: 'In pence: £12.80 is 1280. The first price when there are several sizes; put the rest in price_note.',
         },
         price_note: { type: 'text', max: 40, label: { en: 'Price note', zh: '价格备注' }, help: 'As printed, e.g. "per piece", "large £14.50", "market price".' },
-        description: { type: 'text', max: 200, label: { en: 'Description', zh: '描述' }, help: 'The description the menu prints, if any.' },
+        description: {
+          type: 'text', max: 200, label: { en: 'Description', zh: '描述' },
+          help: 'The description the menu prints, if any. Longer than 200 characters: keep whole courses or phrases, separated as printed or by "; ", and end with " …".',
+        },
         dietary: {
           type: 'tags', max: 4, label: { en: 'Dietary', zh: '饮食标注' }, values: DIETARY, valueLabels: DIETARY_LABELS,
           help: 'Only marks the menu prints (a V, a vegan leaf, halal).',
@@ -88,7 +91,7 @@ export default defineKind({
     'A menu read from visitors\' photos: the task lists every page in pages; check the items against all of them.',
     'The menu belongs to this place (or every branch of this brand).',
     'source_kind says where it was read; a delivery app is marked so.',
-    'Standard dish names, where given, are the right dish.',
+    'Standard dish names (canonical), where given, are that dish and not a cousin of it: not a smoothie for a fruit tea, a plain or lemon tea for a milk tea, wings or strips for a chicken cutlet. Remove a wrong one with a patch.',
   ],
   display: ['title', 'menu'],
 });

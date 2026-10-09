@@ -296,6 +296,50 @@ CREATE TABLE IF NOT EXISTS rate_counters (
   window_start INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS rate_counters_window ON rate_counters (window_start);
+
+-- What a token can do beyond its role, such as open pages in a real browser.
+CREATE TABLE IF NOT EXISTS token_capabilities (
+  token_id   TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  PRIMARY KEY (token_id, capability)
+);
+
+-- A task only some maintainers can do: one that needs a browser goes to tokens that have one.
+CREATE TABLE IF NOT EXISTS task_needs (
+  task_id TEXT PRIMARY KEY,
+  need    TEXT NOT NULL,
+  since   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_needs_need ON task_needs (need, since);
+
+-- A task parked until another pending record is decided: the maintainer found it a duplicate of one.
+CREATE TABLE IF NOT EXISTS task_waits (
+  task_id    TEXT PRIMARY KEY,
+  record_id  TEXT NOT NULL,
+  waits_for  TEXT NOT NULL,
+  by_token   TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_waits_for ON task_waits (waits_for);
+
+-- What the server looked up about a pending place for its maintainers: FSA and delivery listings.
+CREATE TABLE IF NOT EXISTS facts (
+  record_id  TEXT PRIMARY KEY,
+  facts_json TEXT NOT NULL,
+  checked_at TEXT NOT NULL
+);
+
+-- The site team's decisions that should become rules, until they are written into the kinds.
+CREATE TABLE IF NOT EXISTS precedents (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id  TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  decision   TEXT NOT NULL,
+  rule       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  adopted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS precedents_open ON precedents (created_at) WHERE adopted_at IS NULL;
 `;
 
 /**

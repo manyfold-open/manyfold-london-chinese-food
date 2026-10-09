@@ -96,12 +96,12 @@ describe('leasing', () => {
     const own = (await w.json<{ tasks: unknown[]; note: string }>('/api/tasks', { token: keeper })).body;
     expect(own.tasks).toEqual([]);
     expect(own.note).toContain('1 open task is for records this token sent, and a maintainer never reviews its own');
-    expect(own.note).toContain('1 wait for their place to be verified first.');
+    expect(own.note).toContain('1 wait for their place to be verified first, or for the record they duplicate to be decided.');
     const other = await maintainer(w, 'second maintainer');
     const leased = await lease(w, other);
     expect(leased.tasks).toHaveLength(1);
     expect((leased as unknown as { note?: string }).note).toBeUndefined();
-    await verdicts(w, other, [{ task_id: leased.tasks[0]!.id, verdict: 'unsure', reason: 'The page does not say what it sells.' }]);
+    await verdicts(w, other, [{ task_id: leased.tasks[0]!.id, verdict: 'unsure', unsure_type: 'policy', reason: 'The rules do not say whether a canteen inside a college counts.' }]);
     const third = await maintainer(w, 'third maintainer');
     const after = (await w.json<{ tasks: unknown[]; note: string }>('/api/tasks', { token: third })).body;
     expect(after.tasks).toEqual([]);
@@ -187,8 +187,8 @@ describe('verdicts', () => {
     await submit(w, collector, [place()]);
     const [task] = (await lease(w, keeper)).tasks;
     const refused = await verdicts(w, keeper, [{ task_id: task!.id, verdict: 'rejected', reason: 'The page returned 403 Forbidden.' }]);
-    expect(refused.results[0]!.errors![0]!.message).toContain('send verdict unsure');
-    const unsure = await verdicts(w, keeper, [{ task_id: task!.id, verdict: 'unsure', reason: 'The page returned 403 Forbidden.' }]);
+    expect(refused.results[0]!.errors![0]!.message).toContain('send verdict unsure with unsure_type cannot_open');
+    const unsure = await verdicts(w, keeper, [{ task_id: task!.id, verdict: 'unsure', unsure_type: 'cannot_open', reason: 'The page returned 403 Forbidden.' }]);
     expect(unsure.results[0]!.status).toBe('applied');
     const queue = await w.json<{ items: { type: string }[] }>('/api/admin/review', { admin: true });
     expect(queue.body.items.map((item) => item.type)).toEqual(['unsure']);

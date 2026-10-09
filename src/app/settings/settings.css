@@ -737,8 +737,25 @@
   min-width: 220px;
 }
 
-.settings .takedown-row {
+.settings .takedown-row,
+.settings .review-more {
   margin-top: 8px;
+}
+
+.settings .review-facts {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.settings .review-facts p {
+  margin: 0 0 4px;
+}
+
+.settings .review-facts ul {
+  margin: 0;
+  padding-left: 18px;
 }
 
 .settings .takedown-row .check-row {

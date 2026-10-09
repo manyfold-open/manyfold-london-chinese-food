@@ -42,6 +42,7 @@ import type { RecordStatus, SubmitResponse, SubmitResult, WorkType } from '../sh
 import { newId } from './ids';
 import { lookupPostcodes, placeFieldsFrom, type PostcodeAnswer } from './postcodes';
 import { DAY } from './ratelimit';
+import { houseNumberOf, namesAlike, phoneOf, websiteOf } from '../shared/names';
 import { blockedBy, blockedHosts } from './settings';
 import { standing, type Token } from './tokens';
 import { HttpError } from './types';
@@ -458,6 +459,9 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
         continue;
       }
       Object.assign(data, placeFieldsFrom(answer));
+      // An FSA lead names the business the FSA inspects: kept, so a second record of it is caught.
+      const lead = candidate.workItem ? workItems.get(candidate.workItem) : undefined;
+      if (lead?.type === 'lead' && lead.subject.startsWith('fsa:')) data.fsa_id = lead.subject.slice('fsa:'.length);
     }
 
     const id = newId('rec', now.getTime());
@@ -511,6 +515,25 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
             : {}),
         };
         continue;
+      }
+      // The same place under another spelling: one FSA business, or one phone or website at one
+      // address. A name alike and nothing more is only told to the maintainer (below).
+      if (config.kind === 'place') {
+        const same = strongTwin(data, await neighboursOf(db, String(data.postcode)));
+        if (same) {
+          stored.set(index, { id: same.id, kind: config.kind, status: same.status });
+          results[index] = {
+            index,
+            status: 'duplicate',
+            existing_id: same.id,
+            existing_status: same.status,
+            hint:
+              same.status === 'pending'
+                ? `It has ${same.why} as "${same.name}" (${same.id}), which waits for review: it is the same place, so send nothing more.`
+                : `It has ${same.why} as "${same.name}" (${same.id}): it is the same place. If the source shows a change (a new name, closed), send it with "updates": "${same.id}".`,
+          };
+          continue;
+        }
       }
     }
 
@@ -568,22 +591,18 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
 
     const quote: QuoteCheck = page.text === null ? 'unreadable' : quoteOnPage(page.text, candidate.provenance.evidence) ? 'found' : 'not_found';
     const waits = parentRow !== null && parentRow.status === 'pending';
-    // A place under another name at the same postcode may be this one: the maintainer is told.
+    // A place under another name at the same postcode may be this one: the maintainer is told,
+    // the likely ones first.
     let neighbours = '';
     if (config.kind === 'place' && !targetId) {
-      const { results: rows } = await db
-        .prepare(
-          `SELECT id, status, data_json FROM records INDEXED BY records_identity
-           WHERE kind = 'place' AND identity_key >= ?1 AND identity_key < ?2 AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL LIMIT 8`,
-        )
-        .bind(`${String(data.postcode)}|`, `${String(data.postcode)}}`)
-        .all<{ id: string; status: string; data_json: string }>();
+      const rows = await neighboursOf(db, String(data.postcode));
       if (rows.length > 0) {
-        const names = rows.map((row) => {
-          const other = JSON.parse(row.data_json) as RecordData;
-          return `${[other.name_en, other.name_zh].filter(Boolean).join(' ')} (${row.id}, ${row.status})`;
-        });
-        neighbours = ` Also at ${String(data.postcode)}: ${names.join('; ')}. If this is one of them under another name, the verdict is duplicate.`;
+        const named = rows
+          .map((row) => ({ row, alike: alikeWhy(data, row.data) }))
+          .sort((a, b) => Number(Boolean(b.alike)) - Number(Boolean(a.alike)))
+          .slice(0, 8)
+          .map(({ row, alike }) => `${[row.data.name_en, row.data.name_zh].filter(Boolean).join(' ')} (${row.id}, ${row.status}${alike ? `; ${alike}` : ''})`);
+        neighbours = ` Also at ${String(data.postcode)}: ${named.join('; ')}. If this is one of them under another name, the verdict is duplicate (verified) or unsure with unsure_type duplicate_pending (pending).`;
       }
     }
     try {
@@ -626,6 +645,51 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
     standing: Object.fromEntries([...standings].map(([kind, quota]) => [kind, { pending: quota.pending, pending_cap: quota.cap }])),
     warnings,
   };
+}
+
+/* ───────── the same place under another spelling ───────── */
+
+interface Neighbour {
+  id: string;
+  status: RecordStatus;
+  data: RecordData;
+}
+
+/** Live places at a postcode, read through the identity index (its keys start with the postcode). */
+async function neighboursOf(db: D1Database, postcode: string): Promise<Neighbour[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, status, data_json FROM records INDEXED BY records_identity
+       WHERE kind = 'place' AND identity_key >= ?1 AND identity_key < ?2 AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL LIMIT 40`,
+    )
+    .bind(`${postcode}|`, `${postcode}}`)
+    .all<{ id: string; status: RecordStatus; data_json: string }>();
+  return results.map((row) => ({ id: row.id, status: row.status, data: JSON.parse(row.data_json) as RecordData }));
+}
+
+/** Why a neighbour looks like this place, for the maintainer, or ''. */
+function alikeWhy(data: RecordData, other: RecordData): string {
+  const reasons = [
+    phoneOf(data.phone) && phoneOf(data.phone) === phoneOf(other.phone) ? 'same phone' : '',
+    websiteOf(data.website) && websiteOf(data.website) === websiteOf(other.website) ? 'same website' : '',
+    namesAlike(data, other) ? 'a name alike' : '',
+  ].filter(Boolean);
+  return reasons.join(', ');
+}
+
+/** A neighbour that is this place for certain: one FSA business, or one phone or website at one address or under one name. */
+function strongTwin(data: RecordData, neighbours: readonly Neighbour[]): { id: string; status: RecordStatus; name: string; why: string } | null {
+  for (const other of neighbours) {
+    const name = String(other.data.name_en ?? other.data.name_zh ?? other.id);
+    if (typeof data.fsa_id === 'string' && data.fsa_id === other.data.fsa_id) return { id: other.id, status: other.status, name, why: 'the same FSA business' };
+    const samePlace = (houseNumberOf(data.address) !== '' && houseNumberOf(data.address) === houseNumberOf(other.data.address)) || namesAlike(data, other.data);
+    if (!samePlace) continue;
+    if (phoneOf(data.phone) && phoneOf(data.phone) === phoneOf(other.data.phone)) return { id: other.id, status: other.status, name, why: 'the same phone at the same address' };
+    if (websiteOf(data.website) && websiteOf(data.website) === websiteOf(other.data.website)) {
+      return { id: other.id, status: other.status, name, why: 'the same website at the same address' };
+    }
+  }
+  return null;
 }
 
 /** A record's data with its keys in order, for comparing two versions. */

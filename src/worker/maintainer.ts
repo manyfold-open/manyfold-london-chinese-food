@@ -9,11 +9,22 @@
  *   task     verdicts                       record
  *   verify   verified rejected duplicate    pending  -> verified | rejected | merged
  *   update   verified rejected              proposal -> applied (its target changed in place) | rejected
- *   recheck  verified stale                 verified -> verified (again, maybe corrected) | stale
- *   any      unsure                         unchanged; the task waits for the admin
+ *   recheck  verified stale rejected        verified -> verified (again, maybe corrected) | stale | rejected
+ *   any      unsure                         unchanged; who decides depends on unsure_type
  *
- * A page or image the maintainer could not open is unsure, never grounds to reject or mark
- * stale: such verdicts are refused with an error that says so.
+ * An unsure verdict says why, and that says who decides instead (AGENTS.md, invariant 25):
+ *
+ *   cannot_open        a maintainer with a browser, if one is active; otherwise the site team.
+ *                      Refused when the server can read the passage on the page itself.
+ *   duplicate_pending  nobody: the task is parked until the record it duplicates is decided,
+ *                      then merged into it, or opened again (src/worker/effects.ts)
+ *   conflict           a second maintainer; if that one finds a conflict too, the site team
+ *   policy             the site team
+ *
+ * Handing a task on is a 'defer' revision; sending it to the site team, 'unsure'. A token sends
+ * at most HUMAN_DAILY_MAX tasks a day to the site team, and never gets a task again for a record
+ * it could not decide. A page or image the maintainer could not open is never grounds to reject
+ * or mark stale: such verdicts are refused with an error that says so.
  */
 
 import { KIND_CONFIGS } from '../../kinds/index';
@@ -34,12 +45,29 @@ import {
   type RecordData,
 } from '../shared/kinds';
 import { SAME_PASSAGE, similarity } from '../shared/similar';
-import type { LeasedRecord, LeasedTask, LeaseResponse, RecordStatus, TaskType, Verdict, VerdictResult, VerdictsResponse, Work } from '../shared/types';
+import { quoteOnPage } from '../shared/quote';
+import { UNSURE_TYPES } from '../shared/types';
+import type {
+  LeasedRecord,
+  LeasedTask,
+  LeaseResponse,
+  PlaceFacts,
+  RecordStatus,
+  ReleaseResponse,
+  Routed,
+  TaskType,
+  UnsureType,
+  Verdict,
+  VerdictResult,
+  VerdictsResponse,
+  Work,
+} from '../shared/types';
 import { statusEffects, type ChangingRecord } from './effects';
 import { sha256Hex } from './ids';
 import { lookupPostcodes, placeFieldsFrom, type PostcodeAnswer } from './postcodes';
 import { MINUTE } from './ratelimit';
-import { DAILY_TASK_LIMIT, kindsOf, moveStanding, tallyOf, VERDICT_ACTIONS, type Token } from './tokens';
+import { fetchPage } from './submit';
+import { capabilitiesOf, DAILY_TASK_LIMIT, kindsOf, moveStanding, someoneCan, tallyOf, VERDICT_ACTIONS, type Token } from './tokens';
 import { menuPages } from './work';
 import { HttpError } from './types';
 
@@ -54,8 +82,19 @@ export const SUSPEND_AFTER = 10;
 const VERDICTS: Record<TaskType, readonly Verdict[]> = {
   verify: ['verified', 'rejected', 'duplicate', 'unsure'],
   update: ['verified', 'rejected', 'unsure'],
-  recheck: ['verified', 'stale', 'unsure'],
+  recheck: ['verified', 'stale', 'rejected', 'unsure'],
 };
+
+/** The most tasks one maintainer token may send to the site team in a UTC day. */
+export const HUMAN_DAILY_MAX = 25;
+
+/** What each unsure_type means, for the error an agent gets without one. */
+const UNSURE_HELP =
+  'cannot_open (no page that would settle it opens without a real browser), duplicate_pending (it duplicates another record still waiting for review; give its id as duplicate_of), conflict (its sources disagree and you cannot tell which is right) or policy (the rules do not say how to decide it)';
+
+/** A record this token already could not decide is never leased to it again: someone else looks. */
+const NOT_MINE = `AND NOT EXISTS (SELECT 1 FROM revisions v INDEXED BY revisions_record
+  WHERE v.record_id = r.id AND v.actor = ?1 AND v.action IN ('unsure', 'defer'))`;
 
 const dayStart = (now: Date) => `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
 
@@ -80,6 +119,8 @@ interface HeldRow {
   type: TaskType;
   lease_expires_at: string;
   note: string | null;
+  need: string | null;
+  facts_json: string | null;
   id: string;
   kind: Kind;
   status: RecordStatus;
@@ -139,32 +180,54 @@ export async function leaseTasks(
   const kinds = options.kind ? [options.kind] : kindsOf(token);
   if (room > 0 && kinds.length > 0) {
     const everyKind = !options.kind && token.kinds.includes('*');
+    const until = new Date(now.getTime() + LEASE_MS).toISOString();
+    let left = room;
+    // A maintainer with a browser takes first the tasks that need one.
+    if ((await capabilitiesOf(db, token.id)).includes('browser')) {
+      const taken = await db
+        .prepare(
+          `UPDATE tasks SET status = 'leased', leased_to = ?1, lease_expires_at = ?2
+           WHERE id IN (
+             SELECT t.id FROM task_needs n INDEXED BY task_needs_need JOIN tasks t ON t.id = n.task_id JOIN records r ON r.id = t.record_id
+             WHERE n.need = 'browser' AND t.status IN ('open', 'leased') AND (t.status = 'open' OR t.lease_expires_at <= ?3)
+               AND t.record_kind IN (SELECT value FROM json_each(?5)) AND r.submitted_by != ?1 AND r.flagged = 0 ${NOT_MINE}
+             ORDER BY n.since LIMIT ?4)`,
+        )
+        .bind(token.id, until, at, left, JSON.stringify(kinds))
+        .run();
+      left -= Number(taken.meta.changes ?? 0);
+    }
     // One statement, so two maintainers leasing at once never get the same task. The status test
     // must stay word for word the index's WHERE, or SQLite cannot use it.
-    await db
-      .prepare(
-        everyKind
-          ? `UPDATE tasks SET status = 'leased', leased_to = ?1, lease_expires_at = ?2
-             WHERE id IN (
-               SELECT t.id FROM tasks t INDEXED BY tasks_open JOIN records r ON r.id = t.record_id
-               WHERE t.status IN ('open', 'leased') AND (t.status = 'open' OR t.lease_expires_at <= ?3)
-                 AND r.submitted_by != ?1 AND r.flagged = 0
-               ORDER BY t.created_at, t.id LIMIT ?4)`
-          : `UPDATE tasks SET status = 'leased', leased_to = ?1, lease_expires_at = ?2
-             WHERE id IN (
-               SELECT t.id FROM tasks t INDEXED BY tasks_open_kind JOIN records r ON r.id = t.record_id
-               WHERE t.record_kind IN (SELECT value FROM json_each(?5)) AND t.status IN ('open', 'leased')
-                 AND (t.status = 'open' OR t.lease_expires_at <= ?3) AND r.submitted_by != ?1 AND r.flagged = 0
-               ORDER BY t.created_at, t.id LIMIT ?4)`,
-      )
-      .bind(token.id, new Date(now.getTime() + LEASE_MS).toISOString(), at, room, ...(everyKind ? [] : [JSON.stringify(kinds)]))
-      .run();
+    if (left > 0) {
+      await db
+        .prepare(
+          everyKind
+            ? `UPDATE tasks SET status = 'leased', leased_to = ?1, lease_expires_at = ?2
+               WHERE id IN (
+                 SELECT t.id FROM tasks t INDEXED BY tasks_open JOIN records r ON r.id = t.record_id
+                 WHERE t.status IN ('open', 'leased') AND (t.status = 'open' OR t.lease_expires_at <= ?3)
+                   AND r.submitted_by != ?1 AND r.flagged = 0
+                   AND NOT EXISTS (SELECT 1 FROM task_needs n WHERE n.task_id = t.id) ${NOT_MINE}
+                 ORDER BY t.created_at, t.id LIMIT ?4)`
+            : `UPDATE tasks SET status = 'leased', leased_to = ?1, lease_expires_at = ?2
+               WHERE id IN (
+                 SELECT t.id FROM tasks t INDEXED BY tasks_open_kind JOIN records r ON r.id = t.record_id
+                 WHERE t.record_kind IN (SELECT value FROM json_each(?5)) AND t.status IN ('open', 'leased')
+                   AND (t.status = 'open' OR t.lease_expires_at <= ?3) AND r.submitted_by != ?1 AND r.flagged = 0
+                   AND NOT EXISTS (SELECT 1 FROM task_needs n WHERE n.task_id = t.id) ${NOT_MINE}
+                 ORDER BY t.created_at, t.id LIMIT ?4)`,
+        )
+        .bind(token.id, until, at, left, ...(everyKind ? [] : [JSON.stringify(kinds)]))
+        .run();
+    }
   }
   const { results } = await db
     .prepare(
       `SELECT t.id AS task_id, t.type, t.lease_expires_at, t.note, r.id, r.kind, r.status, r.data_json, r.source_url, r.evidence,
-         r.observed_at, r.created_at, r.verified_at, r.parent_id, r.target_id
+         r.observed_at, r.created_at, r.verified_at, r.parent_id, r.target_id, n.need, f.facts_json
        FROM tasks t INDEXED BY tasks_leased JOIN records r ON r.id = t.record_id
+         LEFT JOIN task_needs n ON n.task_id = t.id LEFT JOIN facts f ON f.record_id = r.id
        WHERE t.status = 'leased' AND t.leased_to = ? AND t.lease_expires_at > ?
        ORDER BY t.created_at, t.id`,
     )
@@ -208,6 +271,8 @@ export async function leaseTasks(
         target: target ? await leasedRecord(target) : null,
         media_url: KIND_CONFIGS[row.kind].provenance === 'upload' ? options.mediaUrl(row.task_id) : null,
         ...(row.kind === 'menu' ? await menuPhotoPages(db, row, options.photoUrl) : {}),
+        needs: row.need,
+        facts: row.kind === 'place' && row.facts_json ? (JSON.parse(row.facts_json) as PlaceFacts) : null,
       };
     }),
   );
@@ -243,13 +308,19 @@ async function nothingToLease(db: D1Database, token: Token, kinds: readonly stri
   const waiting = await db
     .prepare(
       `SELECT (SELECT COUNT(*) FROM tasks INDEXED BY tasks_blocked WHERE status = 'blocked') AS blocked,
-              (SELECT COUNT(*) FROM tasks INDEXED BY tasks_review WHERE status = 'review') AS review`,
+              (SELECT COUNT(*) FROM tasks INDEXED BY tasks_review WHERE status = 'review') AS review,
+              (SELECT COUNT(*) FROM task_needs n JOIN tasks t ON t.id = n.task_id WHERE n.need = 'browser' AND t.status IN ('open', 'leased')) AS browser,
+              (SELECT COUNT(*) FROM tasks t INDEXED BY tasks_open WHERE t.status IN ('open', 'leased')
+                 AND EXISTS (SELECT 1 FROM revisions v INDEXED BY revisions_record WHERE v.record_id = t.record_id AND v.actor = ?1 AND v.action IN ('unsure', 'defer'))) AS mine`,
     )
-    .first<{ blocked: number | null; review: number | null }>();
+    .bind(token.id)
+    .first<{ blocked: number | null; review: number | null; browser: number | null; mine: number | null }>();
   const reasons = [
     row?.own ? `${row.own} open ${row.own === 1 ? 'task is' : 'tasks are'} for records this token sent, and a maintainer never reviews its own: another maintainer will. To add records yourself, send them with a collector token (POST /api/join) and keep this one for reviewing.` : '',
     row?.held ? `${row.held} ${row.held === 1 ? 'is' : 'are'} leased to other maintainers until their leases end.` : '',
-    waiting?.blocked ? `${waiting.blocked} wait for their place to be verified first.` : '',
+    waiting?.browser ? `${waiting.browser} need a maintainer with a browser.` : '',
+    waiting?.mine ? `${waiting.mine} ${waiting.mine === 1 ? 'is a record' : 'are records'} you could not decide: another maintainer looks at ${waiting.mine === 1 ? 'it' : 'them'}.` : '',
+    waiting?.blocked ? `${waiting.blocked} wait for their place to be verified first, or for the record they duplicate to be decided.` : '',
     waiting?.review ? `${waiting.review} wait for the site team, because a maintainer was unsure of them; the site team decides them or sends them back.` : '',
     row?.flagged ? `${row.flagged} ${row.flagged === 1 ? 'is' : 'are'} held for the site team.` : '',
   ].filter(Boolean);
@@ -312,7 +383,138 @@ const COULD_NOT_READ: readonly RegExp[] = [
 
 export const couldNotRead = (reason: string): boolean => COULD_NOT_READ.some((pattern) => pattern.test(reason));
 
-type Prepared = { task: TaskRow; verdict: Verdict; statements: D1PreparedStatement[]; recordStatus: RecordStatus } | { errors: FieldError[] };
+type Prepared = { task: TaskRow; verdict: Verdict; statements: D1PreparedStatement[]; recordStatus: RecordStatus; routed?: Routed } | { errors: FieldError[] };
+
+type RevisionOf = (recordId: string, action: string, beforeJson: string, after: unknown, extra?: { reason?: string; source_url?: string; evidence?: string }) => D1PreparedStatement;
+
+const isUnsureType = (value: unknown): value is UnsureType => typeof value === 'string' && (UNSURE_TYPES as readonly string[]).includes(value);
+
+/** Tasks this token sent to the site team since midnight UTC. */
+async function escalatedToday(db: D1Database, token: Token, now: Date): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM revisions INDEXED BY revisions_actor_time WHERE actor = ? AND created_at >= ? AND action = 'unsure'`)
+    .bind(token.id, dayStart(now))
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+/** Other maintainers who already found this record's sources in conflict. */
+async function conflictsBefore(db: D1Database, recordId: string, token: Token): Promise<number> {
+  const { results } = await db
+    .prepare(`SELECT actor, after_json FROM revisions INDEXED BY revisions_record WHERE record_id = ? AND action IN ('unsure', 'defer') AND actor != ?`)
+    .bind(recordId, token.id)
+    .all<{ actor: string; after_json: string }>();
+  return new Set(results.filter((row) => (JSON.parse(row.after_json) as { unsure_type?: string }).unsure_type === 'conflict').map((row) => row.actor)).size;
+}
+
+/**
+ * An unsure verdict, routed by its unsure_type: to a maintainer with a browser, to a second
+ * maintainer, parked behind the record it duplicates, or to the site team. Only the site team's
+ * share counts against HUMAN_DAILY_MAX.
+ */
+async function prepareUnsure(
+  db: D1Database,
+  token: Token,
+  task: TaskRow,
+  item: Record<string, unknown>,
+  reason: string,
+  before: string,
+  revision: RevisionOf,
+  closeTask: (status: 'done' | 'review') => D1PreparedStatement,
+  now: Date,
+  fetcher: typeof fetch,
+): Promise<Prepared> {
+  const type = item.unsure_type;
+  if (!isUnsureType(type)) return { errors: [{ field: 'unsure_type', message: `must say why you cannot decide: ${UNSURE_HELP}` }] };
+  const at = now.toISOString();
+  const config = KIND_CONFIGS[task.kind];
+  const after = (extra: Record<string, unknown> = {}) => ({ status: task.status, unsure_type: type, ...extra });
+  const toSiteTeam = async (extra: Record<string, unknown> = {}): Promise<Prepared> => {
+    const sent = await escalatedToday(db, token, now);
+    if (sent >= HUMAN_DAILY_MAX) {
+      return {
+        errors: [{
+          field: 'verdict',
+          message: `you have sent ${sent} tasks to the site team today, the most one token may: decide this one if the checks settle it, or give it back with POST /api/tasks/release for another maintainer`,
+        }],
+      };
+    }
+    return {
+      task,
+      verdict: 'unsure',
+      recordStatus: task.status,
+      routed: 'site-team',
+      statements: [revision(task.id, 'unsure', before, after(extra), { reason }), closeTask('review'), db.prepare('DELETE FROM task_needs WHERE task_id = ?').bind(task.task_id)],
+    };
+  };
+  const handOn = (routed: Routed, statements: D1PreparedStatement[], extra: Record<string, unknown> = {}): Prepared => ({
+    task,
+    verdict: 'unsure',
+    recordStatus: task.status,
+    routed,
+    statements: [revision(task.id, 'defer', before, after({ routed, ...extra }), { reason }), ...statements],
+  });
+  const reopen = db.prepare(`UPDATE tasks SET status = 'open', leased_to = NULL, lease_expires_at = NULL WHERE id = ?`).bind(task.task_id);
+
+  switch (type) {
+    case 'policy':
+      return toSiteTeam();
+    case 'cannot_open': {
+      if (config.provenance === 'upload') {
+        return { errors: [{ field: 'unsure_type', message: `a ${config.noun.en.one} is an image sent here: open media_url with your token while you hold the lease` }] };
+      }
+      const page = await fetchPage(task.source_url, fetcher);
+      if (page.text !== null && quoteOnPage(page.text, task.evidence)) {
+        return {
+          errors: [{
+            field: 'unsure_type',
+            message: `the server just read ${task.source_url} and found the passage on it, so no browser is needed: check the record against that page and send verified or rejected`,
+          }],
+        };
+      }
+      // A maintainer with a browser who cannot open it either, or none to hand it to: the site team.
+      if ((await capabilitiesOf(db, token.id)).includes('browser') || !(await someoneCan(db, 'browser'))) return toSiteTeam();
+      return handOn('browser', [reopen, db.prepare(`INSERT INTO task_needs (task_id, need, since) VALUES (?, 'browser', ?) ON CONFLICT (task_id) DO NOTHING`).bind(task.task_id, at)]);
+    }
+    case 'conflict':
+      if ((await conflictsBefore(db, task.id, token)) > 0) return toSiteTeam();
+      return handOn('second-opinion', [reopen]);
+    case 'duplicate_pending': {
+      if (task.type !== 'verify') return { errors: [{ field: 'unsure_type', message: `only a new ${config.noun.en.one} can be a duplicate; decide this ${task.type} task on its own` }] };
+      const twinId = typeof item.duplicate_of === 'string' ? item.duplicate_of : '';
+      const twin = await db
+        .prepare(`SELECT id, status FROM records WHERE id = ? AND kind = ? AND target_id IS NULL AND id != ?`)
+        .bind(twinId, task.kind, task.id)
+        .first<{ id: string; status: RecordStatus }>();
+      if (!twin) return { errors: [{ field: 'duplicate_of', message: `must be the id of another ${config.noun.en.one} that waits for review` }] };
+      if (twin.status === 'verified' || twin.status === 'stale') {
+        return { errors: [{ field: 'duplicate_of', message: `${twin.id} is ${twin.status}: send verdict duplicate with duplicate_of ${twin.id}` }] };
+      }
+      if (twin.status !== 'pending') return { errors: [{ field: 'duplicate_of', message: `${twin.id} is ${twin.status}, not waiting for review: decide this ${config.noun.en.one} on its own` }] };
+      // Two records each parked on the other would wait for ever.
+      const loop = await db
+        .prepare(`SELECT 1 AS yes FROM task_waits w JOIN tasks t ON t.id = w.task_id WHERE w.record_id = ? AND w.waits_for = ? AND t.status = 'blocked'`)
+        .bind(twin.id, task.id)
+        .first<{ yes: number }>();
+      if (loop) {
+        return { errors: [{ field: 'duplicate_of', message: `${twin.id} already waits for this one as its duplicate: decide this one on its own (verified or rejected), and ${twin.id} follows it` }] };
+      }
+      return handOn(
+        'parked',
+        [
+          db.prepare(`UPDATE tasks SET status = 'blocked', leased_to = NULL, lease_expires_at = NULL WHERE id = ?`).bind(task.task_id),
+          db
+            .prepare(
+              `INSERT INTO task_waits (task_id, record_id, waits_for, by_token, created_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (task_id) DO UPDATE SET waits_for = excluded.waits_for, by_token = excluded.by_token, created_at = excluded.created_at`,
+            )
+            .bind(task.task_id, task.id, twin.id, token.id, at),
+        ],
+        { duplicate_of: twin.id },
+      );
+    }
+  }
+}
 
 /** The next version of a record: list patches (against the leased hash), then corrections, then the rules. */
 async function nextData(
@@ -367,6 +569,7 @@ async function prepareVerdict(
   item: Record<string, unknown>,
   now: Date,
   locate: (postcodes: string[]) => Promise<Map<string, PostcodeAnswer>>,
+  fetcher: typeof fetch,
 ): Promise<Prepared> {
   const at = now.toISOString();
   const taskId = typeof item.task_id === 'string' ? item.task_id : '';
@@ -397,7 +600,7 @@ async function prepareVerdict(
   const config = KIND_CONFIGS[task.kind];
   const data = JSON.parse(task.data_json) as RecordData;
   const before = JSON.stringify({ status: task.status, data });
-  const revision = (recordId: string, action: string, beforeJson: string, after: unknown, extra: { reason?: string; source_url?: string; evidence?: string } = {}) =>
+  const revision: RevisionOf = (recordId, action, beforeJson, after, extra = {}) =>
     db
       .prepare(
         `INSERT INTO revisions (record_id, kind, actor, action, before_json, after_json, reason, source_url, evidence, created_at)
@@ -502,14 +705,12 @@ async function prepareVerdict(
   // rejected, stale and unsure carry a reason and nothing else.
   const reason = reasonOf(item.reason);
   if (!reason || reason.length > REASON_MAX) return { errors: [{ field: 'reason', message: `must say why, in 1 to ${REASON_MAX} characters` }] };
-  if (verdict === 'unsure') {
-    return { task, verdict, recordStatus: task.status, statements: [revision(task.id, 'unsure', before, { status: task.status }, { reason }), closeTask('review')] };
-  }
+  if (verdict === 'unsure') return prepareUnsure(db, token, task, item, reason, before, revision, closeTask, now, fetcher);
   if (couldNotRead(reason)) {
     return {
       errors: [{
         field: 'verdict',
-        message: 'the reason says you could not open the page or image, which says nothing about the record; send verdict unsure with this reason, and a person will check it',
+        message: 'the reason says you could not open the page or image, which says nothing about the record; send verdict unsure with unsure_type cannot_open and this reason',
       }],
     };
   }
@@ -542,7 +743,7 @@ async function applyProposal(
   provenance: Provenance,
   item: Record<string, unknown>,
   now: Date,
-  revision: (recordId: string, action: string, beforeJson: string, after: unknown, extra?: { reason?: string; source_url?: string; evidence?: string }) => D1PreparedStatement,
+  revision: RevisionOf,
   closeTask: (status: 'done' | 'review') => D1PreparedStatement,
 ): Promise<Prepared> {
   const at = now.toISOString();
@@ -554,7 +755,7 @@ async function applyProposal(
     return { errors: [{ field: 'task_id', message: `the record this proposal updates is ${target?.status ?? 'gone'}; send verdict rejected` }] };
   }
   if (target.updated_at > task.created_at) {
-    return { errors: [{ field: 'task_id', message: 'the record changed after this proposal was made; send verdict unsure, and a person will settle it' }] };
+    return { errors: [{ field: 'task_id', message: 'the record changed after this proposal was made; send verdict unsure with unsure_type policy, and the site team will settle it' }] };
   }
   const key = config.identity.length === 0 ? target.identity_key : identityKey(config, next, provenance);
   if (key !== target.identity_key) {
@@ -622,7 +823,7 @@ export async function applyVerdicts(db: D1Database, token: Token, body: unknown,
   for (const [index, raw] of items.entries()) {
     const item = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
     const taskId = typeof item.task_id === 'string' ? item.task_id : null;
-    const prepared = await prepareVerdict(db, token, item, now, locate);
+    const prepared = await prepareVerdict(db, token, item, now, locate, fetcher);
     if ('errors' in prepared) {
       results.push({ index, task_id: taskId, status: 'error', errors: prepared.errors });
       continue;
@@ -643,11 +844,30 @@ export async function applyVerdicts(db: D1Database, token: Token, body: unknown,
     if (prepared.task.type !== 'recheck' && (prepared.verdict === 'verified' || prepared.verdict === 'rejected')) {
       reviewed.add(prepared.task.submitted_by);
     }
-    results.push({ index, task_id: prepared.task.task_id, status: 'applied', record_status: prepared.recordStatus });
+    results.push({ index, task_id: prepared.task.task_id, status: 'applied', record_status: prepared.recordStatus, ...(prepared.routed ? { routed: prepared.routed } : {}) });
   }
 
   await suspendIfFailing(db, reviewed, now);
   return { ...(await workOf(db, token, now)), results };
+}
+
+/**
+ * A maintainer gives tasks it holds back to the queue, untouched, for someone else: it ran out of
+ * time, or the task needs what it does not have. No verdict, and nothing counts against it.
+ */
+export async function releaseTasks(db: D1Database, token: Token, body: unknown, now: Date): Promise<ReleaseResponse> {
+  const ids = (body as { task_ids?: unknown } | null)?.task_ids;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > LEASE_MAX || !ids.every((id) => typeof id === 'string')) {
+    throw new HttpError(422, 'invalid_body', `Send JSON like {"task_ids": ["tsk_..."]} with 1 to ${LEASE_MAX} tasks you hold.`);
+  }
+  const result = await db
+    .prepare(
+      `UPDATE tasks SET status = 'open', leased_to = NULL, lease_expires_at = NULL
+       WHERE id IN (SELECT value FROM json_each(?)) AND status = 'leased' AND leased_to = ? AND lease_expires_at > ?`,
+    )
+    .bind(JSON.stringify(ids), token.id, now.toISOString())
+    .run();
+  return { ...(await workOf(db, token, now)), released: Number(result.meta.changes ?? 0) };
 }
 
 /**

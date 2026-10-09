@@ -32,13 +32,13 @@ export default defineKind({
     evidence: 'Example Tea has twelve shops across London, all pouring the same menu of fresh fruit teas and milk teas.',
   },
   scope: {
-    in: 'Chains with places in London whose places share one menu, such as bubble tea chains, noodle chains and supermarket chains. Send a brand once, then each of its London places as a place with brand set.',
-    out: 'A single restaurant (send it as a place only); a group of restaurants whose menus differ.',
+    in: 'Chains with a place in London whose places share one menu, such as bubble tea and dessert franchises, noodle chains and supermarket chains (for a supermarket, one range of goods). A chain with one London place counts. Send a brand once, then each of its London places as a place with brand set.',
+    out: 'A single restaurant (send it as a place only); a group of restaurants whose branches publish different menus (send each branch as a place); a chain with no place trading in London.',
   },
   sourceHints: ["the brand's own website", 'its store finder or locations page'],
   maintainerChecks: [
-    'The brand exists and its website is its own.',
-    'Its places share one menu.',
+    'The brand exists, has a place trading in London, and its website is its own (only the home page is kept).',
+    'Its places share one menu. A franchise that supplies every shop (bubble tea, desserts) or a supermarket chain with one range counts even when a branch page shows no menu. A restaurant group whose branches publish different menus does not: reject it, saying its branches go in as places.',
     'Names are as the brand writes them.',
   ],
   display: ['name_en', 'name_zh'],

@@ -79,6 +79,30 @@ export interface SubmitResponse {
 export type TaskType = 'verify' | 'update' | 'recheck';
 export type Verdict = 'verified' | 'rejected' | 'duplicate' | 'stale' | 'unsure';
 
+/**
+ * Why a maintainer cannot decide, which says who decides instead:
+ *   cannot_open        no page that would settle it opens without a browser: a maintainer with one
+ *   duplicate_pending  it duplicates another record still waiting: decided when that one is
+ *   conflict           its sources disagree: a second maintainer, then the site team
+ *   policy             the rules do not say: the site team
+ */
+export type UnsureType = 'cannot_open' | 'duplicate_pending' | 'conflict' | 'policy';
+export const UNSURE_TYPES: readonly UnsureType[] = ['cannot_open', 'duplicate_pending', 'conflict', 'policy'];
+
+/** Where an unsure verdict sent its task. */
+export type Routed = 'site-team' | 'browser' | 'second-opinion' | 'parked';
+
+/** What the server looked up about a place for its maintainers: hints to check, never proof by themselves. */
+export interface PlaceFacts {
+  checked_at: string;
+  /** The Food Standards Agency's business at the place's postcode most like it by name, if any. */
+  fsa: { id: string; name: string; address: string; business_type: string; last_inspection: string | null; match: 'exact' | 'similar' } | null;
+  /** Delivery listings at the place's postcode, most like it by name first. */
+  listings: { site: 'just-eat'; name: string; address: string; cuisines: string[]; open_now: boolean; offline: boolean; url: string }[];
+  /** What could not be looked up. */
+  missing: string[];
+}
+
 export interface LeasedRecord {
   id: string;
   kind: Kind;
@@ -109,6 +133,10 @@ export interface LeasedTask {
   media_url: string | null;
   /** For a menu typed up from visitors' photos: every page, in order. */
   pages?: string[];
+  /** What only some maintainers can do, such as open a page in a real browser. */
+  needs: string | null;
+  /** For a place: what the server looked up about it (FSA, delivery listings), to start from. */
+  facts: PlaceFacts | null;
 }
 
 export interface LeaseResponse extends Work {
@@ -118,8 +146,13 @@ export interface LeaseResponse extends Work {
 }
 
 export type VerdictResult =
-  | { index: number; task_id: string; status: 'applied'; record_status: RecordStatus }
+  | { index: number; task_id: string; status: 'applied'; record_status: RecordStatus; routed?: Routed }
   | { index: number; task_id: string | null; status: 'error'; errors: FieldError[] };
+
+/** POST /api/tasks/release: tasks given back to the queue. */
+export interface ReleaseResponse extends Work {
+  released: number;
+}
 
 export interface VerdictsResponse extends Work {
   results: VerdictResult[];
@@ -174,6 +207,24 @@ export interface AdminToken {
   created_at: string;
   records: { pending: number; verified: number; rejected: number };
   verdicts: { total: number; today: number };
+  /** What the token can do beyond its role, such as open pages in a browser. */
+  capabilities: string[];
+  /** A maintainer's record over the last 30 days; null for collectors. */
+  quality: MaintainerQuality | null;
+}
+
+/**
+ * How a maintainer's verdicts held up over the last 30 days: how many the site team checked (its
+ * own decisions on those records, and spot checks), how many of those it overturned, and how
+ * often the maintainer could not decide.
+ */
+export interface MaintainerQuality {
+  verdicts: number;
+  unsure: number;
+  deferred: number;
+  checked: number;
+  overturned: number;
+  warnings: string[];
 }
 
 export interface IssuedToken extends AdminToken {
@@ -231,18 +282,37 @@ export interface AdminRecordDetail {
   children: { kind: Kind; status: RecordStatus; count: number }[];
 }
 
+/** A decision of the site team's that states a rule, until the rule is written into a kind. */
+export interface Precedent {
+  id: number;
+  record_id: string;
+  kind: Kind;
+  decision: string;
+  rule: string;
+  created_at: string;
+  adopted_at: string | null;
+}
+
 export interface KindOverview {
   kind: Kind;
   counts: Record<RecordStatus, number>;
   open_tasks: number;
   blocked_tasks: number;
   review: number;
+  /** Open tasks only a maintainer with a browser can do. */
+  needs_browser: number;
+  /** When the oldest item still waiting for the site team began to wait. */
+  oldest_review_at: string | null;
 }
 
 export interface ReviewItem {
   type: 'unsure' | 'flagged' | 'report';
   record: AdminRecord;
   reason: string;
+  /** For an unsure verdict: why the maintainer could not decide. */
+  unsure_type: UnsureType | null;
+  /** For a place: what the server looked up about it. */
+  facts: PlaceFacts | null;
   /** Who was unsure, or who sent a flagged record: a token id, and its label. */
   by: string | null;
   by_label: string | null;

@@ -5,6 +5,7 @@
 
 import { vi } from 'vitest';
 import { app } from '../src/worker/index';
+import { skillVersion } from '../src/worker/skill';
 import type { Env } from '../src/worker/types';
 import { createD1 } from './d1';
 
@@ -156,6 +157,11 @@ export function world(extra: Partial<Env> = {}): World {
     const headers = new Headers(init.headers);
     if (init.json !== undefined) headers.set('content-type', 'application/json');
     if (init.token) headers.set('authorization', `Bearer ${init.token}`);
+    // Maintainers send the version of the instructions they read; a test can send its own, or none.
+    if (init.token && /^\/api\/(tasks|verdicts)\b/.test(path) && !headers.has('x-skill-version') && !headers.has('x-no-skill-version')) {
+      headers.set('x-skill-version', await skillVersion('maintainer'));
+    }
+    headers.delete('x-no-skill-version');
     if (init.admin) headers.set('x-admin-password', ADMIN);
     headers.set('cf-connecting-ip', headers.get('cf-connecting-ip') ?? '203.0.113.7');
     return app.request(`${SITE}${path}`, { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : init.body }, env);

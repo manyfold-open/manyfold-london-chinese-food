@@ -139,6 +139,12 @@ export interface KindConfig {
   submit: 'agents' | 'agent-uploads' | 'visitor-uploads';
   /** Longest excerpt, by script: CJK text says more per character. */
   excerptMax?: { latin: number; cjk: number };
+  /**
+   * Sites whose pages name a record without showing what it needs, such as the Food Standards
+   * Agency's listings for places: a page there is never the record's source. `message` says why
+   * and what to cite instead, to the agent that sent one.
+   */
+  sourceNotAlone?: { hosts: readonly string[]; message: string };
   rules?: readonly Rule[];
   /** Submissions must fall inside these ranges, read at submit time ('today' included). */
   accept?: Readonly<Record<string, { from?: string; to?: string }>>;
@@ -166,6 +172,7 @@ export function defineKind<const T extends KindConfig>(config: T): T {
 }
 
 const FIELD = /^[a-z][a-z0-9_]{0,31}$/;
+const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const RESERVED_FIELDS: readonly string[] = ['id', 'status', 'kind', 'q', 'sort', 'page', 'limit'];
 
 /** Everything wrong with a config, as readable lines. Empty means valid. */
@@ -240,6 +247,12 @@ export function validateConfig(config: KindConfig, all: readonly KindConfig[] = 
   for (const name of Object.keys(config.accept ?? {})) need(name, 'accept', ['date']);
   if (config.perParent) need(config.perParent.field, 'perParent');
   config.display.forEach((name) => need(name, 'display'));
+  if (config.sourceNotAlone) {
+    if (config.provenance === 'upload') fail('sourceNotAlone needs a kind with a source page');
+    if (config.sourceNotAlone.hosts.length === 0) fail('sourceNotAlone needs hosts');
+    for (const name of config.sourceNotAlone.hosts) if (!HOST.test(name)) fail(`sourceNotAlone: "${name}" is not a host name`);
+    if (!config.sourceNotAlone.message.trim()) fail('sourceNotAlone needs a message');
+  }
   if (config.provenance === 'excerpt' && !config.excerptMax) fail('an excerpt kind needs excerptMax');
   if (config.provenance === 'upload' && config.submit === 'agents') fail('an upload kind is submitted through an upload route');
 
@@ -318,6 +331,17 @@ export function parseHttpsUrl(raw: string): string | null {
   }
   if (url.protocol !== 'https:' || url.username || url.password || !url.hostname.includes('.')) return null;
   return url.toString();
+}
+
+/** Whether a URL is on one of these hosts or a subdomain of one, a leading www. aside. */
+export function onHosts(url: string, hosts: readonly string[]): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return false;
+  }
+  return hosts.some((name) => host === name || host.endsWith(`.${name}`));
 }
 
 const POSTCODE = /^([A-Z]{1,2}[0-9][A-Z0-9]?)([0-9][A-Z]{2})$/;
@@ -652,6 +676,8 @@ export function validateProvenance(
           ? `must be the full https:// URL of the page the excerpt comes from; got ${show(input.source_url)}`
           : `must be the full https:// URL of the page that states the facts; got ${show(input.source_url)}`,
     });
+  } else if (config.sourceNotAlone && onHosts(source, config.sourceNotAlone.hosts)) {
+    errors.push({ field: 'source_url', message: config.sourceNotAlone.message });
   }
 
   const evidence = typeof input.evidence === 'string' ? cleanText(input.evidence) : '';

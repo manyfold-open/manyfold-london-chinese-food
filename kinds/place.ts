@@ -58,9 +58,15 @@ export default defineKind({
     borough: { type: 'text', max: 60, server: true, label: { en: 'Borough', zh: '行政区' } },
     borough_code: { type: 'text', max: 12, server: true, label: { en: 'Borough code', zh: '行政区代码' } },
     outcode: { type: 'text', max: 4, server: true, label: { en: 'Postcode district', zh: '邮区' } },
+    fsa_id: { type: 'text', max: 12, server: true, label: { en: 'FSA id', zh: 'FSA 编号' } },
   },
   identity: ['postcode', { firstOf: ['name_en', 'name_zh'] }],
   provenance: 'quote',
+  sourceNotAlone: {
+    hosts: ['ratings.food.gov.uk'],
+    message:
+      "is a Food Standards Agency listing, which shows a business's name and address but never what it sells, so it cannot be a place's source: use a page that shows the food, such as its menu, a delivery listing, its own site or a review.",
+  },
   submit: 'agents',
   rules: [
     { rule: 'oneOf', fields: ['name_en', 'name_zh'] },
@@ -97,12 +103,13 @@ export default defineKind({
   ],
   maintainerChecks: [
     'The place exists at that address and serves or sells Chinese food.',
-    "If the source shows the name and address but not the food (a Food Standards Agency listing never shows it), find one more page yourself: its menu, a delivery listing, its own site, a review. If it shows Chinese food, verify with that page as your passage. Unsure only when no page you can open shows what it sells; a name like \"China Garden\" alone is not proof.",
-    'The names are exactly as the place writes them.',
+    "Your passage comes from a page that shows the food: its menu, a delivery listing, its own site, a review. A Food Standards Agency listing gives only the name and address, so it is never your passage; the task's facts may point you to a page. If you can read the pages but none shows Chinese food there, reject it and say so: the collector can send it again with a page that does. A name like \"China Garden\" alone is not proof.",
+    'The names are exactly as the place writes them. When it trades under another name now (its listings, its sign, the FSA), correct the name: a business renamed is the same place.',
     'The category and cuisines fit what it serves.',
-    'Trading: a dated page from the last two years showing it open (a Food Standards Agency inspection, a review, a listing taking orders), with none saying it closed, is enough; set trading to what the most recent source says.',
-    'It is not another record of a place at the same postcode under a different spelling.',
-    'menu_url, when given, opens this place\'s own menu (a page, PDF or image on its site).',
+    'Trading: a dated page from the last two years showing it open (a Food Standards Agency inspection, a review, a listing taking orders now), with none saying it closed, is enough; so is an older inspection with a current listing that takes orders. Set trading to what the most recent source says.',
+    'A place that closed in 2020 or later stays: verify it with trading closed, and closed_on when a page dates the closure. If another business trades at the address now and no page shows this one trading in 2020 or later, reject it.',
+    'It is not another record of a place at the same postcode under another spelling, phone or website. If that one is verified, the verdict is duplicate; if it is still pending, send unsure with unsure_type duplicate_pending and its id as duplicate_of.',
+    "menu_url, when given, opens this place's own menu (a page, PDF or image on its site).",
   ],
   display: ['name_en', 'name_zh'],
 });

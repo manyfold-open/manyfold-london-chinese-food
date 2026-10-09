@@ -8,24 +8,27 @@
  */
 
 import { KIND_CONFIGS } from '../../kinds/index';
-import { cleanText, identityKey, KINDS, recordName, validateRecordData, type Kind, type RecordData } from '../shared/kinds';
+import { cleanText, identityKey, KINDS, onHosts, recordName, validateProvenance, validateRecordData, type Kind, type Provenance, type RecordData } from '../shared/kinds';
 import type {
   ActivityItem,
   AdminRecord,
   AdminRecordDetail,
   AdminRevision,
   KindOverview,
+  PlaceFacts,
+  Precedent,
   RecordStatus,
   Report,
   RevertReport,
   ReviewItem,
   SpotCheck,
+  UnsureType,
 } from '../shared/types';
 import { RECORD_STATUSES } from '../shared/types';
 import { cancelTasks, statusEffects, SYSTEM, type ChangingRecord } from './effects';
 import { newId, sha256Hex } from './ids';
 import { blockedHosts, hostOf, putSetting } from './settings';
-import { moveStanding } from './tokens';
+import { moveStanding, suspendMaintainerIfFailing } from './tokens';
 import { HttpError } from './types';
 
 const ADMIN = 'admin';
@@ -157,7 +160,7 @@ export async function recordDetail(db: D1Database, id: string): Promise<AdminRec
 /* ───────── overview and review queue ───────── */
 
 export async function overview(db: D1Database): Promise<KindOverview[]> {
-  const [counts, tasks, review] = await db.batch([
+  const [counts, tasks, review, browser, oldest] = await db.batch([
     db.prepare('SELECT kind, status, COUNT(*) AS n FROM records GROUP BY kind, status'),
     db.prepare(`SELECT record_kind AS kind, status, COUNT(*) AS n FROM tasks WHERE status IN ('open', 'leased', 'blocked', 'review') GROUP BY record_kind, status`),
     db.prepare(
@@ -166,6 +169,11 @@ export async function overview(db: D1Database): Promise<KindOverview[]> {
          UNION ALL SELECT kind FROM records WHERE status = 'pending' AND flagged = 1)
        GROUP BY kind`,
     ),
+    db.prepare(
+      `SELECT t.record_kind AS kind, COUNT(*) AS n FROM task_needs n JOIN tasks t ON t.id = n.task_id
+       WHERE n.need = 'browser' AND t.status IN ('open', 'leased') GROUP BY t.record_kind`,
+    ),
+    db.prepare(`SELECT record_kind AS kind, MIN(done_at) AS at FROM tasks INDEXED BY tasks_review WHERE status = 'review' GROUP BY record_kind`),
   ]);
   return KINDS.map((kind) => {
     const byStatus = Object.fromEntries(RECORD_STATUSES.map((status) => [status, 0])) as Record<RecordStatus, number>;
@@ -173,7 +181,15 @@ export async function overview(db: D1Database): Promise<KindOverview[]> {
     const taskRows = ((tasks?.results ?? []) as { kind: Kind; status: string; n: number }[]).filter((row) => row.kind === kind);
     const taskCount = (statuses: string[]) => taskRows.filter((row) => statuses.includes(row.status)).reduce((sum, row) => sum + row.n, 0);
     const extra = ((review?.results ?? []) as { kind: Kind; n: number }[]).find((row) => row.kind === kind)?.n ?? 0;
-    return { kind, counts: byStatus, open_tasks: taskCount(['open', 'leased']), blocked_tasks: taskCount(['blocked']), review: taskCount(['review']) + extra };
+    return {
+      kind,
+      counts: byStatus,
+      open_tasks: taskCount(['open', 'leased']),
+      blocked_tasks: taskCount(['blocked']),
+      review: taskCount(['review']) + extra,
+      needs_browser: ((browser?.results ?? []) as { kind: Kind; n: number }[]).find((row) => row.kind === kind)?.n ?? 0,
+      oldest_review_at: ((oldest?.results ?? []) as { kind: Kind; at: string | null }[]).find((row) => row.kind === kind)?.at ?? null,
+    };
   });
 }
 
@@ -187,6 +203,7 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
            (SELECT reason FROM revisions WHERE record_id = r.id AND action = 'unsure' ORDER BY id DESC LIMIT 1) AS note,
            (SELECT actor FROM revisions WHERE record_id = r.id AND action = 'unsure' ORDER BY id DESC LIMIT 1) AS note_by,
            (SELECT t2.label FROM revisions v2 JOIN tokens t2 ON t2.id = v2.actor WHERE v2.record_id = r.id AND v2.action = 'unsure' ORDER BY v2.id DESC LIMIT 1) AS note_by_label,
+           (SELECT after_json FROM revisions WHERE record_id = r.id AND action = 'unsure' ORDER BY id DESC LIMIT 1) AS note_after,
            k.done_at AS at`)}
          JOIN tasks k ON k.record_id = r.id WHERE k.status = 'review' AND (? IS NULL OR r.kind = ?)`,
       )
@@ -199,12 +216,26 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       )
       .bind(only, only),
   ]);
-  type Row = RecordRow & { task_id?: string; report_id?: number; report_type?: string; note?: string; note_by?: string; note_by_label?: string | null; at?: string };
+  type Row = RecordRow & {
+    task_id?: string;
+    report_id?: number;
+    report_type?: string;
+    note?: string;
+    note_by?: string;
+    note_by_label?: string | null;
+    note_after?: string | null;
+    at?: string;
+  };
+  const rows = [unsure, flagged, reports].flatMap((result) => (result?.results ?? []) as Row[]);
+  const facts = await factsOf(db, rows.filter((row) => row.kind === 'place').map((row) => row.id));
+  const factsFor = (row: Row) => facts.get(row.id) ?? null;
   const items: ReviewItem[] = [
     ...((unsure?.results ?? []) as Row[]).map((row) => ({
       type: 'unsure' as const,
       record: toAdminRecord(row),
       reason: row.note ?? '',
+      unsure_type: row.note_after ? ((JSON.parse(row.note_after) as { unsure_type?: UnsureType }).unsure_type ?? null) : null,
+      facts: factsFor(row),
       by: row.note_by ?? null,
       by_label: row.note_by ? actorLabel(row.note_by, row.note_by_label) : null,
       at: row.at ?? row.updated_at,
@@ -215,6 +246,8 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       type: 'flagged' as const,
       record: toAdminRecord(row),
       reason: 'Text that looks aimed at AI agents',
+      unsure_type: null,
+      facts: factsFor(row),
       by: row.submitted_by,
       by_label: actorLabel(row.submitted_by, row.submitter_label),
       at: row.created_at,
@@ -225,6 +258,8 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
       type: 'report' as const,
       record: toAdminRecord(row),
       reason: `${row.report_type === 'takedown' ? 'Takedown request: ' : ''}${row.note ?? ''}`,
+      unsure_type: null,
+      facts: factsFor(row),
       by: null,
       by_label: null,
       at: row.at ?? row.updated_at,
@@ -233,6 +268,18 @@ export async function reviewQueue(db: D1Database, kind?: string): Promise<Review
     })),
   ];
   return items.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** What the server looked up about these places, by id. */
+async function factsOf(db: D1Database, ids: readonly string[]): Promise<Map<string, PlaceFacts>> {
+  const facts = new Map<string, PlaceFacts>();
+  if (ids.length === 0) return facts;
+  const { results } = await db
+    .prepare('SELECT record_id, facts_json FROM facts WHERE record_id IN (SELECT value FROM json_each(?))')
+    .bind(JSON.stringify(ids))
+    .all<{ record_id: string; facts_json: string }>();
+  for (const row of results) facts.set(row.record_id, JSON.parse(row.facts_json) as PlaceFacts);
+  return facts;
 }
 
 /* ───────── the admin's own changes ───────── */
@@ -244,13 +291,56 @@ const reasonOf = (value: unknown, required: boolean): string | null => {
   return reason || null;
 };
 
-const adminRevision = (db: D1Database, row: RecordRow, action: string, after: unknown, reason: string | null, at: string) =>
+const adminRevision = (db: D1Database, row: RecordRow, action: string, after: unknown, reason: string | null, at: string, provenance: Provenance | null = null) =>
   db
     .prepare(
-      `INSERT INTO revisions (record_id, kind, actor, action, before_json, after_json, reason, created_at)
-       VALUES (?, ?, 'admin', ?, ?, ?, ?, ?)`,
+      `INSERT INTO revisions (record_id, kind, actor, action, before_json, after_json, reason, source_url, evidence, created_at)
+       VALUES (?, ?, 'admin', ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(row.id, row.kind, action, JSON.stringify({ status: row.status, data: JSON.parse(row.data_json) }), JSON.stringify(after), reason, at);
+    .bind(
+      row.id,
+      row.kind,
+      action,
+      JSON.stringify({ status: row.status, data: JSON.parse(row.data_json) }),
+      JSON.stringify(after),
+      reason,
+      provenance?.source_url ?? null,
+      provenance?.evidence ?? null,
+      at,
+    );
+
+/** The admin's own passage for a decision, checked like a maintainer's, or null when none was sent. */
+function provenanceOf(row: RecordRow, body: { source_url?: unknown; evidence?: unknown; observed_at?: unknown }, now: Date): Provenance | null {
+  if (body.source_url === undefined && body.evidence === undefined) return null;
+  const config = KIND_CONFIGS[row.kind];
+  if (config.provenance === 'upload') throw new HttpError(422, 'invalid_body', `A ${config.noun.en.one} is an image sent here: it has no source page.`);
+  const checked = validateProvenance(config, { source_url: body.source_url, evidence: body.evidence, observed_at: body.observed_at ?? now.toISOString() }, now);
+  if (!checked.ok) throw new HttpError(422, 'invalid_body', checked.errors.map((error) => `${error.field} ${error.message}`).join('; '));
+  return checked.value;
+}
+
+/** A precedent the admin wants written into the rules, checked for length. */
+function precedentOf(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const rule = typeof value === 'string' ? cleanText(value) : '';
+  if (rule.length < 10 || rule.length > 300) throw new HttpError(422, 'invalid_body', 'precedent must state the rule in 10 to 300 characters.');
+  return rule;
+}
+
+/**
+ * After the admin decides a record a maintainer had decided, that maintainer's standing is read
+ * again: one whose checked verdicts are mostly overturned is suspended (tokens.ts).
+ */
+async function checkMaintainerOf(db: D1Database, recordId: string, now: Date): Promise<void> {
+  const last = await db
+    .prepare(
+      `SELECT v.actor FROM revisions v INDEXED BY revisions_record JOIN tokens t ON t.id = v.actor
+       WHERE v.record_id = ? AND t.role = 'maintainer' AND v.action IN ('verify', 'reject', 'merge', 'stale', 'apply') ORDER BY v.id DESC LIMIT 1`,
+    )
+    .bind(recordId)
+    .first<{ actor: string }>();
+  if (last) await suspendMaintainerIfFailing(db, last.actor, now);
+}
 
 const newTask = (db: D1Database, row: RecordRow, status: 'open' | 'blocked', now: Date) =>
   db
@@ -268,21 +358,40 @@ async function parentPending(db: D1Database, row: RecordRow): Promise<boolean> {
  * The admin sets a record's status: verified, rejected, stale, merged (with duplicate_of), or
  * pending, which sends it back to the maintainers. Open reports on it are resolved. A proposal is
  * decided by its maintainers; the admin rejects it or sends it back, never applies it here.
+ *
+ * The admin may send a passage of its own (source_url, evidence), checked like a maintainer's and
+ * kept with the revision; a place or menu verified with one takes it as its source. A `precedent`
+ * states the rule the decision follows, for the rules to learn (listPrecedents).
  */
-export async function decide(db: D1Database, id: string, body: { status?: unknown; reason?: unknown; duplicate_of?: unknown }, now: Date): Promise<AdminRecordDetail> {
+export async function decide(
+  db: D1Database,
+  id: string,
+  body: { status?: unknown; reason?: unknown; duplicate_of?: unknown; source_url?: unknown; evidence?: unknown; observed_at?: unknown; precedent?: unknown },
+  now: Date,
+): Promise<AdminRecordDetail> {
   const row = await recordRow(db, id);
   const at = now.toISOString();
   const status = body.status;
   const statements: D1PreparedStatement[] = [];
+  const provenance = provenanceOf(row, body, now);
+  const precedent = precedentOf(body.precedent);
 
   if (row.target_id && status !== 'rejected' && status !== 'pending') {
     throw new HttpError(422, 'invalid_body', 'A proposal is applied by a maintainer verdict; here it can only be rejected or sent back (pending).');
   }
   if (status === 'verified') {
+    const newSource = provenance && KIND_CONFIGS[row.kind].provenance === 'quote';
     statements.push(
       moveStanding(db, id, 'verified'),
-      db.prepare(`UPDATE records SET status = 'verified', flagged = 0, merged_into = NULL, verified_at = ?, updated_at = ? WHERE id = ?`).bind(at, at, id),
-      adminRevision(db, row, 'verify', { status: 'verified' }, reasonOf(body.reason, false), at),
+      newSource
+        ? db
+            .prepare(
+              `UPDATE records SET status = 'verified', flagged = 0, merged_into = NULL, source_url = ?, evidence = ?, observed_at = ?, verified_at = ?, updated_at = ?
+               WHERE id = ?`,
+            )
+            .bind(provenance.source_url, provenance.evidence, provenance.observed_at, at, at, id)
+        : db.prepare(`UPDATE records SET status = 'verified', flagged = 0, merged_into = NULL, verified_at = ?, updated_at = ? WHERE id = ?`).bind(at, at, id),
+      adminRevision(db, row, 'verify', { status: 'verified' }, reasonOf(body.reason, false), at, provenance),
       cancelTasks(db, id, at),
       ...(await statusEffects(db, changingOf(row), 'verified', at)),
     );
@@ -291,7 +400,7 @@ export async function decide(db: D1Database, id: string, body: { status?: unknow
     statements.push(
       moveStanding(db, id, status),
       db.prepare('UPDATE records SET status = ?, updated_at = ? WHERE id = ?').bind(status, at, id),
-      adminRevision(db, row, status === 'rejected' ? 'reject' : 'stale', { status }, reason, at),
+      adminRevision(db, row, status === 'rejected' ? 'reject' : 'stale', { status }, reason, at, provenance),
       cancelTasks(db, id, at),
       ...(await statusEffects(db, changingOf(row), status, at, { reason })),
     );
@@ -322,12 +431,18 @@ export async function decide(db: D1Database, id: string, body: { status?: unknow
     throw new HttpError(422, 'invalid_body', 'status must be verified, rejected, stale, merged or pending.');
   }
   statements.push(db.prepare(`UPDATE reports SET status = 'resolved' WHERE record_id = ? AND status = 'open'`).bind(id));
+  if (precedent) {
+    statements.push(
+      db.prepare('INSERT INTO precedents (record_id, kind, decision, rule, created_at) VALUES (?, ?, ?, ?, ?)').bind(id, row.kind, String(status), precedent, at),
+    );
+  }
   try {
     await db.batch(statements);
   } catch (error) {
     if (!/UNIQUE/i.test(String(error))) throw error;
     throw new HttpError(409, 'conflict', 'Another live record already has this identity. Merge this one into it instead.');
   }
+  await checkMaintainerOf(db, id, now);
   return recordDetail(db, id);
 }
 
@@ -347,11 +462,24 @@ export async function editRecord(db: D1Database, id: string, body: { corrections
   }
   const checked = validateRecordData(config, merged, { allowServer: true });
   if (!checked.ok) throw new HttpError(422, 'invalid_body', checked.errors.map((error) => `${error.field} ${error.message}`).join('; '));
+  // A place's brand is mirrored in ref_id, which a brand's merge and its pages follow.
+  let refId = row.ref_id;
+  if (row.kind === 'place') {
+    const brand = typeof checked.value.brand === 'string' ? checked.value.brand : null;
+    if (brand && brand !== row.ref_id) {
+      const found = await db
+        .prepare(`SELECT id FROM records WHERE id = ? AND kind = 'brand' AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL`)
+        .bind(brand)
+        .first<{ id: string }>();
+      if (!found) throw new HttpError(422, 'invalid_body', `brand must be the id of a live brand; ${brand} is not one.`);
+    }
+    refId = brand;
+  }
   const at = now.toISOString();
   const key = config.identity.length === 0 ? row.identity_key : identityKey(config, checked.value, row);
   try {
     await db.batch([
-      db.prepare('UPDATE records SET data_json = ?, identity_key = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(checked.value), key, at, id),
+      db.prepare('UPDATE records SET data_json = ?, identity_key = ?, ref_id = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(checked.value), key, refId, at, id),
       adminRevision(db, row, 'admin_edit', { status: row.status, data: checked.value }, reasonOf(body.reason, false), at),
     ]);
   } catch (error) {
@@ -460,7 +588,7 @@ export async function revertToken(db: D1Database, tokenId: string, since: unknow
   const reason = `Undid changes by ${token.label} since ${sinceIso}`;
 
   const { results: touched } = await db
-    .prepare(`SELECT DISTINCT record_id FROM revisions WHERE actor = ? AND created_at >= ? AND action NOT IN ('revert', 'unsure')`)
+    .prepare(`SELECT DISTINCT record_id FROM revisions WHERE actor = ? AND created_at >= ? AND action NOT IN ('revert', 'unsure', 'defer')`)
     .bind(tokenId, sinceIso)
     .all<{ record_id: string }>();
 
@@ -496,9 +624,9 @@ async function restore(db: D1Database, recordId: string, mine: (revision: Histor
     .prepare('SELECT id, actor, action, before_json, after_json, caused_by, created_at FROM revisions WHERE record_id = ? ORDER BY id')
     .bind(recordId)
     .all<HistoryRow>();
-  const last = history.filter((revision) => revision.action !== 'unsure').at(-1);
+  const last = history.filter((revision) => revision.action !== 'unsure' && revision.action !== 'defer').at(-1);
   if (!last || !mine(last)) return 'changed by someone else since; settle it by hand';
-  const first = history.find((revision) => mine(revision) && revision.action !== 'revert' && revision.action !== 'unsure')!;
+  const first = history.find((revision) => mine(revision) && revision.action !== 'revert' && revision.action !== 'unsure' && revision.action !== 'defer')!;
   const row = await db.prepare(`${RECORD_SELECT} WHERE r.id = ?`).bind(recordId).first<RecordRow>();
   if (!row) return 'gone';
   const config = KIND_CONFIGS[row.kind];
@@ -653,5 +781,80 @@ export async function markSpotCheck(db: D1Database, kind: string, recordId: stri
     )
     .bind(check.week, kind, recordId, body.correct ? 1 : 0, note || null, now.toISOString())
     .run();
+  if (!body.correct) await checkMaintainerOf(db, recordId, now);
   return spotCheck(db, kind, now);
+}
+
+/* ───────── precedents ───────── */
+
+/** The site team's decisions that state a rule, newest first: the ones not yet in the rules, or all. */
+export async function listPrecedents(db: D1Database, all: boolean): Promise<Precedent[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.record_id, p.kind, p.decision, p.rule, p.created_at, p.adopted_at FROM precedents p
+       WHERE (? = 1 OR p.adopted_at IS NULL) ORDER BY p.id DESC LIMIT 200`,
+    )
+    .bind(all ? 1 : 0)
+    .all<Precedent>();
+  return results;
+}
+
+/** A precedent now written into a kind's config (its checks or scope), so agents read it. */
+export async function adoptPrecedent(db: D1Database, id: number, now: Date): Promise<Precedent[]> {
+  const result = await db.prepare('UPDATE precedents SET adopted_at = ? WHERE id = ? AND adopted_at IS NULL').bind(now.toISOString(), id).run();
+  if (!Number(result.meta.changes ?? 0)) throw new HttpError(404, 'not_found', 'No open precedent has that id.');
+  return listPrecedents(db, false);
+}
+
+/* ───────── rechecks of weak sources ───────── */
+
+/** The note a recheck of a record verified on a source that cannot stand alone carries. */
+const WEAK_SOURCE_NOTE = (hosts: readonly string[]) =>
+  `Verified earlier on ${hosts.join(', ')}, which does not show what this record needs. Find a page that does and verify with it as your passage; if it closed, verify with trading closed; if no page shows it belongs here, reject it and say so.`;
+
+/**
+ * Verified records of a kind whose source is on a host that cannot stand alone (sourceNotAlone):
+ * how many there are without a recheck waiting, and, with `limit`, rechecks queued for that many,
+ * longest verified first. Reads the kind's verified records' sources once; for the admin and the
+ * daily backfill, never readers.
+ */
+export async function queueWeakSourceRechecks(db: D1Database, kind: Kind, limit: number, now: Date): Promise<{ queued: number; remaining: number }> {
+  const config = KIND_CONFIGS[kind];
+  if (!config.sourceNotAlone) return { queued: 0, remaining: 0 };
+  const { results } = await db
+    .prepare(
+      `SELECT r.id, r.source_url FROM records r INDEXED BY records_due WHERE r.kind = ? AND r.status = 'verified' AND r.target_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM tasks t INDEXED BY tasks_record WHERE t.record_id = r.id AND t.status IN ('open', 'leased', 'review', 'blocked'))
+       ORDER BY r.verified_at`,
+    )
+    .bind(kind)
+    .all<{ id: string; source_url: string }>();
+  const weak = results.filter((row) => onHosts(row.source_url, config.sourceNotAlone!.hosts));
+  const chosen = weak.slice(0, Math.max(0, limit));
+  if (chosen.length > 0) {
+    const at = now.toISOString();
+    const note = WEAK_SOURCE_NOTE(config.sourceNotAlone.hosts);
+    await db.batch(
+      chosen.map((row) =>
+        db
+          .prepare(`INSERT INTO tasks (id, record_id, record_kind, type, status, note, created_at) VALUES (?, ?, ?, 'recheck', 'open', ?, ?)`)
+          .bind(newId('tsk', now.getTime()), row.id, kind, note, at),
+      ),
+    );
+  }
+  return { queued: chosen.length, remaining: weak.length - chosen.length };
+}
+
+/** How many rechecks of weak sources the daily run queues (0: none), set by the admin. */
+export async function weakSourceDaily(db: D1Database): Promise<number> {
+  const row = await db.prepare(`SELECT value FROM settings WHERE scope = '*' AND key = 'weak-sources-daily'`).first<{ value: string }>();
+  return Number(row?.value ?? 0) || 0;
+}
+
+export async function setWeakSourceDaily(db: D1Database, value: unknown, now: Date): Promise<number> {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 500) {
+    throw new HttpError(422, 'invalid_body', 'daily must be a whole number from 0 to 500.');
+  }
+  await putSetting(db, 'weak-sources-daily', String(value), now).run();
+  return value;
 }

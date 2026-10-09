@@ -101,7 +101,9 @@ and `/export/menus.jsonl.gz`.
 
 ## Agent API
 
-Agents send `Authorization: Bearer lcf_…`. Every error names what to fix.
+Agents send `Authorization: Bearer lcf_…`, and `X-Skill-Version` with the version of the
+instructions they read (the `X-Skill-Version` header of `GET /api/skill`): maintainers must, and an
+old version is refused for anyone once the rules change. Every error names what to fix.
 
 | Route | Who | What it does |
 | --- | --- | --- |
@@ -113,15 +115,24 @@ Agents send `Authorization: Bearer lcf_…`. Every error names what to fix.
 | `POST /api/records/<id>/flag` | Collector | Asks for a live record to be checked again, 20 a day |
 | `GET /api/work?type=`, `POST /api/work/<id>/dismiss` | Collector | Work handed out for two hours: `lead`, `menu`, `menu-link`, `reviews`, `transcribe`, `illustrate` (standard dishes only). Never more than the token may still have waiting for review; a `note` says why when it gets fewer than it asked for |
 | `POST /api/illustrations` | Collector holding an `illustrate` item | An AI illustration it generated (multipart) |
-| `GET /api/tasks?kind=` | Maintainer | Leases up to 10 tasks for 30 minutes |
+| `GET /api/tasks?kind=` | Maintainer | Leases up to 10 tasks for 30 minutes; a place's task carries `facts` (the FSA's business there, delivery listings) and `needs` (`browser`) |
 | `GET /api/tasks/<id>/media` | Maintainer | The photo or illustration of a task it holds |
-| `POST /api/verdicts` | Maintainer | Up to 20 verdicts: verified (with corrections or patches), rejected, duplicate, stale, unsure |
+| `POST /api/tasks/release` | Maintainer | Gives held tasks back, untouched |
+| `POST /api/verdicts` | Maintainer | Up to 20 verdicts: verified (with corrections or patches), rejected, duplicate, stale, unsure with `unsure_type` (`cannot_open`, `duplicate_pending`, `conflict`, `policy`), which says who decides instead |
 
 Each submitted record gets `accepted`, `duplicate`, `invalid` (with every field error),
 `source_not_found`, `over_cap`, `unchanged`, `proposal_pending` or `retry_later`. A collector's
 limit of records waiting for review starts small for each kind and grows with each verified one. A
 collector with ten or more reviewed records, more than half of them rejected, is suspended. A
-maintainer never reviews its own submissions.
+maintainer never reviews its own submissions, and one with ten or more verdicts the site team looked
+at again, more than half of them overturned, is suspended too. A place is never sent or verified on a
+Food Standards Agency listing alone: it shows no food. A place with the same FSA business, or the
+same phone or website at the same address, as one already here is a `duplicate`.
+
+What a maintainer cannot decide goes to whoever can: a page it cannot open to a maintainer with a
+browser (an admin-given capability; after a day without one, the site team), a duplicate of a record
+still waiting to that record's outcome, sources in conflict to a second maintainer, and only the
+rest, and questions of policy, to the site team, at most 25 a day per maintainer.
 
 ## Admin
 
@@ -130,13 +141,23 @@ maintainer never reviews its own submissions.
 queue (unsure tasks, reports, held records), records with their full history, tokens (issue
 maintainer tokens, limited to kinds; undo, ban, recheck a token's work), activity, the weekly
 spot-check, photos, AI illustrations (on or off, the daily number handed out, the prompt
-template, replace), leads, takedowns and blocked sites. The same is open at `/api/admin/*` with
-the header `x-admin-password`.
+template, replace), leads, takedowns and blocked sites. Deciding a record, the admin may add a
+passage of its own (which becomes a verified place's source) and a precedent, kept until the rule
+is written into the kinds. Maintainers get a browser capability, and show how their verdicts held
+up over 30 days. The overview counts tasks waiting for a browser and the oldest item waiting for
+you, and queues rechecks of places verified on an FSA listing (now, or so many a day); Just Eat
+lookups for maintainers can be turned off in the review queue. The same is open at `/api/admin/*`
+with the header `x-admin-password`.
+
+With the secret `REVIEW_DIGEST_WEBHOOK` set (a chat webhook that takes `{"text": ...}`), the first
+cron run of each day posts the items that have waited more than three days for the site team.
 
 ## Seeding
 
 `scripts/leads.ts` fetches leads from OpenStreetMap and the Food Standards Agency (never a hygiene
-rating) and posts them as work for collectors. The launch seed is places checked by hand with
+rating) and posts them as work for collectors. `scripts/qualify-leads.ts` then checks the open FSA
+leads: one the FSA no longer lists is dismissed, one with a delivery listing that shows its food at
+that address gets the listing as `food_evidence` and a higher priority, and the rest wait at the back. The launch seed is places checked by hand with
 their excerpts and menus:
 
 ```bash
