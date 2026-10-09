@@ -1,8 +1,11 @@
 /**
  * The two ways an image arrives (AGENTS.md, invariants 18–20):
  *
- *   uploadPhoto          a visitor's photo of a public place, from the site's form: checked
- *                        cheapest first, Turnstile on the server, the site's daily count last
+ *   uploadPhoto          a visitor's photo of a public place (or up to ten pages of its menu),
+ *                        from the site's form: checked cheapest first, Turnstile on the server,
+ *                        the site's daily count last
+ *   suggestMenuLink      a visitor's link to a place's menu online: a hint for collectors, never
+ *                        published itself
  *   uploadIllustration   an agent's generated picture of a standard dish, answering an
  *                        `illustrate` work item handed to it
  *
@@ -14,7 +17,8 @@ import { KIND_CONFIGS } from '../../kinds/index';
 import { normDish } from '../shared/dish';
 import { cleanText, validateRecordData, type RecordData } from '../shared/kinds';
 import { newId, sha256Hex } from './ids';
-import { deleteImage, encodeImage, ILLUSTRATION_RULES, PHOTO_RULES, storeImage, type MediaKind } from './media';
+import { deleteImage, encodeImage, ILLUSTRATION_RULES, PHOTO_RULES, storeImage, type Encoded, type MediaKind } from './media';
+import { blockedBy, blockedHosts } from './settings';
 import { enforce, RULES } from './ratelimit';
 import { standing, type Token } from './tokens';
 import { verifyTurnstile } from './turnstile';
@@ -22,6 +26,11 @@ import { HttpError, type Env } from './types';
 
 export const PHOTO_BYTES_MAX = 15 * 1024 * 1024;
 export const ILLUSTRATION_BYTES_MAX = 10 * 1024 * 1024;
+/** The pages of one menu a visitor may send together, and all of them at most this big. */
+export const MENU_PAGES_MAX = 10;
+const UPLOAD_BYTES_MAX = 60 * 1024 * 1024;
+/** Links to one place's menu kept for collectors. */
+export const MENU_LINKS_MAX = 5;
 
 const field = (form: FormData, name: string): string | undefined => {
   const value = form.get(name);
@@ -38,13 +47,24 @@ function fileOf(form: FormData, max: number): File {
   return file;
 }
 
-async function insertImageRecord(
+/** The images of a multipart field, at most `most` of them, each within `max` bytes. */
+function filesOf(form: FormData, max: number, most: number): File[] {
+  const files = form.getAll('file').filter((value): value is File => value instanceof File && value.size > 0);
+  if (files.length === 0) throw new HttpError(422, 'invalid_body', 'Send the image as the multipart field "file".');
+  if (files.length > most) {
+    throw new HttpError(422, 'invalid_body', most === 1 ? 'Send one photo at a time; only the pages of a menu go together.' : `Send at most ${most} pages of a menu at once.`);
+  }
+  for (const file of files) if (file.size > max) throw new HttpError(413, 'too_large', `Each image must be at most ${Math.round(max / 1024 / 1024)} MB.`);
+  return files;
+}
+
+function imageRecordStatements(
   env: Env,
   kind: MediaKind,
   id: string,
   row: { parentId: string | null; identity: string; data: RecordData; submittedBy: string; workItem?: string; tokenId?: string },
   now: Date,
-): Promise<void> {
+): D1PreparedStatement[] {
   const at = now.toISOString();
   const statements = [
     env.DB
@@ -67,16 +87,20 @@ async function insertImageRecord(
         .bind(id, at, row.workItem, row.tokenId ?? ''),
     );
   }
-  await env.DB.batch(statements);
+  return statements;
 }
 
-/** A visitor's photo of a public place. */
+async function insertImageRecord(env: Env, kind: MediaKind, id: string, row: Parameters<typeof imageRecordStatements>[3], now: Date): Promise<void> {
+  await env.DB.batch(imageRecordStatements(env, kind, id, row, now));
+}
+
+/** A visitor's photo of a public place, or the pages of its menu (one record each, one set). */
 export async function uploadPhoto(
   env: Env,
   placeId: string,
   request: Request,
   context: { ip: string; hosts: readonly string[]; now: Date },
-): Promise<{ id: string; status: 'pending' }> {
+): Promise<{ id: string; ids: string[]; status: 'pending' }> {
   const { now } = context;
   const subject = await ipBucket(context.ip);
   await enforce(env.DB, [
@@ -84,14 +108,14 @@ export async function uploadPhoto(
     { scope: 'photo-day', subject, rule: RULES.photoPerDay },
   ]);
   const length = Number(request.headers.get('content-length') ?? 0);
-  if (length > PHOTO_BYTES_MAX + 100_000) throw new HttpError(413, 'too_large', 'The photo must be at most 15 MB.');
+  if (length > UPLOAD_BYTES_MAX + 100_000) throw new HttpError(413, 'too_large', 'Send at most 60 MB at once.');
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
     throw new HttpError(400, 'bad_form', 'Send the photo as multipart/form-data.');
   }
-  const file = fileOf(form, PHOTO_BYTES_MAX);
+  const files = filesOf(form, PHOTO_BYTES_MAX, field(form, 'subject') === 'menu' ? MENU_PAGES_MAX : 1);
   if (field(form, 'license') !== 'CC-BY-4.0') {
     throw new HttpError(422, 'license_required', 'To share a photo here, agree to publish it under CC BY 4.0: tick the box.');
   }
@@ -113,19 +137,108 @@ export async function uploadPhoto(
   });
   if (!verdict.ok) throw new HttpError(403, 'turnstile_failed', verdict.reason);
   // The site's daily bound comes last: an upload refused for any other reason never uses it up.
-  await enforce(env.DB, [{ scope: 'photos-day', subject: 'site', rule: RULES.photosPerDay }]);
+  // Every page counts: each is a photo for maintainers to look at.
+  for (let page = 0; page < files.length; page += 1) await enforce(env.DB, [{ scope: 'photos-day', subject: 'site', rule: RULES.photosPerDay }]);
 
-  const encoded = await encodeImage(env.IMAGES, file, PHOTO_RULES);
-  const id = newId('rec', now.getTime());
-  await storeImage(env.MEDIA, 'photo', id, encoded);
-  const data: RecordData = { ...checked.value, width: encoded.width, height: encoded.height, license: 'CC-BY-4.0' };
+  // Every page is re-encoded before any is kept: one that is not a usable image refuses them all.
+  const encoded: Encoded[] = [];
+  for (const file of files) encoded.push(await encodeImage(env.IMAGES, file, PHOTO_RULES));
+  const ids = encoded.map(() => newId('rec', now.getTime()));
+  const stored: string[] = [];
   try {
-    await insertImageRecord(env, 'photo', id, { parentId: placeId, identity: id, data, submittedBy: 'visitor' }, now);
+    for (const [index, image] of encoded.entries()) {
+      await storeImage(env.MEDIA, 'photo', ids[index]!, image);
+      stored.push(ids[index]!);
+    }
+    await env.DB.batch(
+      encoded.flatMap((image, index) => {
+        const data: RecordData = {
+          ...checked.value,
+          width: image.width,
+          height: image.height,
+          license: 'CC-BY-4.0',
+          ...(encoded.length > 1 ? { set: ids[0]!, page_no: index + 1 } : {}),
+        };
+        return imageRecordStatements(env, 'photo', ids[index]!, { parentId: placeId, identity: ids[index]!, data, submittedBy: 'visitor' }, now);
+      }),
+    );
   } catch (error) {
-    await deleteImage(env.MEDIA, 'photo', id);
+    for (const id of stored) await deleteImage(env.MEDIA, 'photo', id);
     throw error;
   }
-  return { id, status: 'pending' };
+  return { id: ids[0]!, ids, status: 'pending' };
+}
+
+/**
+ * A visitor's link to a place's menu online (a page, PDF or image): it joins the place's
+ * `menu-link` work item for collectors to transcribe. Links are never shown; the menu typed up from
+ * one is, once a maintainer has checked it against the link.
+ */
+export async function suggestMenuLink(
+  env: Env,
+  placeId: string,
+  input: Record<string, unknown>,
+  context: { ip: string; hosts: readonly string[]; now: Date },
+): Promise<{ status: 'received'; links: number }> {
+  const subject = await ipBucket(context.ip);
+  await enforce(env.DB, [
+    { scope: 'menu-link-hour', subject, rule: RULES.menuLinkPerHour },
+    { scope: 'menu-link-day', subject, rule: RULES.menuLinkPerDay },
+  ]);
+  const raw = typeof input.url === 'string' ? input.url.trim() : '';
+  let url: URL | null = null;
+  try {
+    url = new URL(raw);
+  } catch {
+    url = null;
+  }
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:') || raw.length > 500 || !url.hostname.includes('.')) {
+    throw new HttpError(422, 'invalid_url', 'Send the address of the menu online: a link starting with https://.');
+  }
+  if (blockedBy(url.toString(), await blockedHosts(env.DB))) throw new HttpError(422, 'blocked_host', 'That site asked us not to quote it.');
+  const place = await env.DB
+    .prepare(`SELECT status, data_json FROM records WHERE id = ? AND kind = 'place'`)
+    .bind(placeId)
+    .first<{ status: string; data_json: string }>();
+  if (!place || (place.status !== 'verified' && place.status !== 'stale')) throw new HttpError(404, 'not_found', 'No public place has that id.');
+
+  const answer = typeof input['cf-turnstile-response'] === 'string' ? input['cf-turnstile-response'] : '';
+  const verdict = await verifyTurnstile(env.TURNSTILE_SECRET, answer, { ip: context.ip, hosts: context.hosts, idempotencyKey: crypto.randomUUID() });
+  if (!verdict.ok) throw new HttpError(403, 'turnstile_failed', verdict.reason);
+
+  const data = JSON.parse(place.data_json) as RecordData;
+  const brand = typeof data.brand === 'string' ? data.brand : null;
+  const [existing, menus] = await env.DB.batch([
+    env.DB.prepare(`SELECT payload_json FROM work_items WHERE type = 'menu-link' AND subject = ?`).bind(placeId),
+    env.DB
+      .prepare(`SELECT id FROM records INDEXED BY records_children WHERE parent_id IN (?, ?) AND kind = 'menu' AND status IN ('verified', 'stale')`)
+      .bind(placeId, brand ?? placeId),
+  ]);
+  const before = ((existing?.results[0] as { payload_json: string | null } | undefined)?.payload_json ?? null);
+  const known = before ? ((JSON.parse(before) as { links?: string[] }).links ?? []) : [];
+  const link = url.toString();
+  const links = [...known.filter((other) => other !== link), link].slice(-MENU_LINKS_MAX);
+  const payload = {
+    place: placeId,
+    name: data.name_en ?? data.name_zh ?? null,
+    postcode: data.postcode ?? null,
+    links,
+    // A place that has a menu: compare, and send an update if it changed.
+    menus: ((menus?.results ?? []) as { id: string }[]).map((menu) => menu.id),
+  };
+  const at = context.now.toISOString();
+  await env.DB
+    .prepare(
+      `INSERT INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
+       VALUES (?, 'menu-link', ?, 8, ?, 'open', ?, ?)
+       ON CONFLICT (type, subject) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at,
+         status = CASE WHEN work_items.status IN ('done', 'dismissed') THEN 'open' ELSE work_items.status END,
+         record_id = CASE WHEN work_items.status IN ('done', 'dismissed') THEN NULL ELSE work_items.record_id END,
+         note = CASE WHEN work_items.status IN ('done', 'dismissed') THEN NULL ELSE work_items.note END`,
+    )
+    .bind(newId('wrk', context.now.getTime()), placeId, JSON.stringify(payload), at, at)
+    .run();
+  return { status: 'received', links: links.length };
 }
 
 /** An agent's illustration of a standard dish, answering a work item it holds. */

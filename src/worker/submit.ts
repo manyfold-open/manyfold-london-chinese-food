@@ -205,14 +205,23 @@ interface WorkRow {
 }
 
 /** The kind of record that answers each type of work item. */
-const ANSWERED_BY: Record<string, Kind> = { lead: 'place', menu: 'menu', reviews: 'review', transcribe: 'menu' };
+const ANSWERED_BY: Record<string, Kind> = { lead: 'place', menu: 'menu', 'menu-link': 'menu', reviews: 'review', transcribe: 'menu' };
 
 /**
  * Why a record cannot answer the work item it names, or null. A lead is answered by the place it
  * points to: the same outcode or a similar name, so a batch whose work item ids were mixed up is
  * refused rather than closing the wrong leads.
  */
-function workItemProblem(item: WorkRow | undefined, id: string, token: Token, kind: Kind, data: RecordData, owner: { id: string; kind: Kind } | null, now: Date): string | null {
+function workItemProblem(
+  item: WorkRow | undefined,
+  id: string,
+  token: Token,
+  kind: Kind,
+  data: RecordData,
+  owner: { id: string; kind: Kind } | null,
+  photoSet: string | null,
+  now: Date,
+): string | null {
   if (!item || item.handed_to !== token.id || item.status !== 'open' || !item.handed_until || item.handed_until <= now.toISOString()) {
     return `${id} is not a work item you hold open; GET /api/work lists yours, or send the record without work_item`;
   }
@@ -228,10 +237,10 @@ function workItemProblem(item: WorkRow | undefined, id: string, token: Token, ki
     }
   }
   if (item.type === 'reviews' && owner?.id !== item.subject) return `${id} asks for reviews of ${item.subject}, but this review is of ${owner?.id ?? 'another place'}`;
-  if (item.type === 'menu' && owner?.id !== item.subject && owner?.kind !== 'brand') {
+  if ((item.type === 'menu' || item.type === 'menu-link') && owner?.id !== item.subject && owner?.kind !== 'brand') {
     return `${id} asks for the menu of ${item.subject} (or its brand's), but this menu belongs to ${owner?.id ?? 'another place'}`;
   }
-  if (item.type === 'transcribe' && data.photo !== item.subject) return `${id} asks for the menu in photo ${item.subject}; set "photo" to it`;
+  if (item.type === 'transcribe' && photoSet !== item.subject) return `${id} asks for the menu in the photos of ${item.subject}; set "photo" to the first page the work item gives`;
   return null;
 }
 
@@ -508,7 +517,9 @@ export async function submitRecords(db: D1Database, token: Token, body: unknown,
     }
 
     if (candidate.workItem) {
-      const problem = workItemProblem(workItems.get(candidate.workItem), candidate.workItem, token, config.kind, data, parentRow, now);
+      const photo = typeof data.photo === 'string' ? follow(data.photo) : undefined;
+      const photoSet = photo ? (((JSON.parse(photo.data_json) as RecordData).set as string | undefined) ?? photo.id) : null;
+      const problem = workItemProblem(workItems.get(candidate.workItem), candidate.workItem, token, config.kind, data, parentRow, photoSet, now);
       if (problem) {
         results[index] = { index, status: 'invalid', errors: [{ field: 'work_item', message: problem }] };
         continue;

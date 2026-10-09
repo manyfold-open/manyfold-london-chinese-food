@@ -159,7 +159,7 @@ function runSteps(focus: Focus, api: string): string {
     case 'places':
       return `1. Ask for leads: \`GET ${api}/work?type=lead&limit=10\`. Each is a place someone suggests exists, with what they know (name, address, postcode, a hint why it may serve Chinese food). You hold it for two hours.
 2. For each lead, find the place's own website or social page, or a listing (Just Eat, Deliveroo, Uber Eats, Google Maps). Check it is in Greater London, serves or sells Chinese food, and is still trading. Your \`source_url\` must show the food (its cuisine, menu or a description) as well as the name and address: the Food Standards Agency listing shows only the name and address, so on its own a maintainer cannot verify the place.
-3. If it is, send it as a \`place\` with \`"work_item": "<the lead's id>"\`. A branch of a chain: send the \`brand\` first (once), then the place with \`"brand": "#n"\` or the brand's id.
+3. If it is, send it as a \`place\` with \`"work_item": "<the lead's id>"\`. When it publishes its own menu (a page, PDF or image on its website), give that address as \`menu_url\`. A branch of a chain: send the \`brand\` first (once), then the place with \`"brand": "#n"\` or the brand's id.
 4. If it is not a place to list (not Chinese food, closed before 2020, a duplicate, not in London), dismiss it: \`POST ${api}/work/<id>/dismiss\` with \`{"reason": "..."}\`.
 5. You may also send places you find yourself, without a work item: search first so you do not send one we have.`;
     case 'reviews-en':
@@ -176,10 +176,12 @@ function runSteps(focus: Focus, api: string): string {
 5. You may also review places you find yourself: get their id with \`GET ${api}/search?q=<name>\`.`;
     }
     case 'menus':
-      return `1. First, menu photos visitors uploaded: \`GET ${api}/work?type=transcribe&limit=3\`. Each gives a photo; open its \`image_url\`, type up every item, and send a \`menu\` with \`"source_kind": "visitor-photo"\`, \`"photo": "<the photo id>"\`, \`source_url\` the image URL, and \`"work_item"\`.
-2. Then places with no menu: \`GET ${api}/work?type=menu&limit=3\`. Find the menu on the place's website (pages, PDFs, images) or, failing that, a delivery app (mark it \`delivery-app\`).
-3. Transcribe every item as printed: section, names, price in pence, notes, printed dietary marks and chilli counts. Set \`canonical\` to the standard dish name when an item is a standard dish (\`GET ${api}/schema\` lists them).
-4. A menu we have but whose prices or dishes changed: send the whole new version with \`"updates": "<the menu's id>"\`.`;
+      return `1. First, links visitors sent to a place's menu online: \`GET ${api}/work?type=menu-link&limit=3\`. Each gives the place, its \`links\` and \`menus\` (the ids of the menus we already have). If a link opens this place's menu and we have none, type it up and send it with \`"work_item"\`. If we have one, compare: when prices or dishes changed, send the whole new version with \`"updates": "<the menu's id>"\` and \`"work_item"\`. Nothing new, or not this place's menu: dismiss the item with the reason.
+2. Then menu photos visitors uploaded: \`GET ${api}/work?type=transcribe&limit=3\`. Each gives the pages of one menu, in order, in \`image_urls\`. Type up every item from all of them into one menu and send it with \`"source_kind": "visitor-photo"\`, \`"photo": "<the item's photo>"\`, \`source_url\` the first image URL, and \`"work_item"\`.
+3. Then places with no menu: \`GET ${api}/work?type=menu&limit=3\`. Start from \`menu_url\` when the item gives one (the place's own menu); otherwise find the menu on the place's website (pages, PDFs, images) or, failing that, a delivery app (mark it \`delivery-app\`).
+4. A PDF: read its text (pdftotext); if its pages are only images, render them and read them. Skip a page you cannot read clearly, and say so in your notes.
+5. Transcribe every item as printed: section, names, price in pence, notes, printed dietary marks and chilli counts. Set \`canonical\` to the standard dish name when an item is a standard dish (\`GET ${api}/schema\` lists them).
+6. A menu we have but whose prices or dishes changed: send the whole new version with \`"updates": "<the menu's id>"\`.`;
     case 'illustrations':
       return `1. Ask for dishes to illustrate: \`GET ${api}/work?type=illustrate&limit=5\`. Each gives a standard dish, what it looks like, and the prompt to use.
 2. Generate one image per dish with your image model from that prompt (you may add your tool's own settings, never change the dish). Square, at least 1024 pixels.

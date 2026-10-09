@@ -85,6 +85,7 @@ export default defineKind({
   sourceHints: ["the place's website and its menu PDFs or images", 'its menu on Deliveroo, Uber Eats or Just Eat', 'menu photos visitors uploaded here (GET /api/work?type=transcribe)'],
   maintainerChecks: [
     'Every item, name and price matches the source; nothing the source lists is missing, nothing is added.',
+    'A menu read from visitors\' photos: the task lists every page in pages; check the items against all of them.',
     'The menu belongs to this place (or every branch of this brand).',
     'source_kind says where it was read; a delivery app is marked so.',
     'Standard dish names, where given, are the right dish.',

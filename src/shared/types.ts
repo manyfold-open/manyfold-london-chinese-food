@@ -107,6 +107,8 @@ export interface LeasedTask {
   target: LeasedRecord | null;
   /** For a photo or illustration: the image, for the token holding this lease only. */
   media_url: string | null;
+  /** For a menu typed up from visitors' photos: every page, in order. */
+  pages?: string[];
 }
 
 export interface LeaseResponse extends Work {
@@ -142,8 +144,8 @@ export interface AdminWorkItem extends WorkItem {
   updated_at: string;
 }
 
-export type WorkType = 'lead' | 'menu' | 'reviews' | 'transcribe' | 'illustrate';
-export const WORK_TYPES: readonly WorkType[] = ['lead', 'menu', 'reviews', 'transcribe', 'illustrate'];
+export type WorkType = 'lead' | 'menu' | 'menu-link' | 'reviews' | 'transcribe' | 'illustrate';
+export const WORK_TYPES: readonly WorkType[] = ['lead', 'menu', 'menu-link', 'reviews', 'transcribe', 'illustrate'];
 
 /* ───────── admin ───────── */
 

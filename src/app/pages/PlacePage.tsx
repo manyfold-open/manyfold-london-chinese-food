@@ -8,7 +8,7 @@ import type { DocItem, DocMenu, DocReview, PlaceDoc } from '../../shared/place-d
 import { useAiPreference } from '../ai';
 import { appUrl } from '../base';
 import { DishImage } from '../components/DishImage';
-import { ReportSheet, UploadSheet } from '../components/Sheets';
+import { MenuSheet, ReportSheet, UploadSheet } from '../components/Sheets';
 import { useIllustrations, usePlace } from '../data';
 import { day, displayUrl, partialDate, price, safeHref } from '../format';
 import { useCopy, useLocale } from '../i18n';
@@ -22,6 +22,12 @@ type Tab = 'menu' | 'reviews' | 'photos' | 'history';
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
+/** What a menu link opens, from its address: a PDF, an image, or a page. */
+const linkKind = (url: string): 'pdf' | 'image' | 'page' => {
+  const path = url.split(/[?#]/)[0]!.toLowerCase();
+  return path.endsWith('.pdf') ? 'pdf' : /\.(jpe?g|png|webp|gif|heic)$/.test(path) ? 'image' : 'page';
+};
+
 export function PlacePage({ id }: { id: string }) {
   const copy = useCopy();
   const locale = useLocale();
@@ -29,6 +35,7 @@ export function PlacePage({ id }: { id: string }) {
   const illustrations = useIllustrations();
   const [tab, setTab] = useState<Tab>('menu');
   const [uploading, setUploading] = useState(false);
+  const [addingMenu, setAddingMenu] = useState(false);
   const [reporting, setReporting] = useState<string | null>(null);
 
   if (error?.status === 404) return <NotFoundPage />;
@@ -46,6 +53,7 @@ export function PlacePage({ id }: { id: string }) {
   const trading = (text(doc.place.trading) ?? 'open') as 'open' | 'temporarily-closed' | 'closed';
   const cuisines = Array.isArray(doc.place.cuisines) ? (doc.place.cuisines as string[]) : [];
   const website = safeHref(text(doc.place.website));
+  const menuUrl = safeHref(text(doc.place.menu_url));
   const phone = text(doc.place.phone);
   const lat = typeof doc.place.lat === 'number' ? doc.place.lat : null;
   const lng = typeof doc.place.lng === 'number' ? doc.place.lng : null;
@@ -96,6 +104,16 @@ export function PlacePage({ id }: { id: string }) {
               </dd>
             </div>
           ) : null}
+          {menuUrl ? (
+            <div>
+              <dt>{copy.place.menu}</dt>
+              <dd>
+                <a href={menuUrl} target="_blank" rel="nofollow noopener noreferrer">
+                  {copy.place.ownMenu(linkKind(menuUrl))} <Icon name="external" size={12} />
+                </a>
+              </dd>
+            </div>
+          ) : null}
           {phone ? (
             <div>
               <dt>{copy.place.phone}</dt>
@@ -131,7 +149,7 @@ export function PlacePage({ id }: { id: string }) {
         </Button>
       </div>
 
-      {tab === 'menu' ? <MenuTab doc={doc} illustrations={illustrations.data} onReviews={() => setTab('reviews')} /> : null}
+      {tab === 'menu' ? <MenuTab doc={doc} illustrations={illustrations.data} onReviews={() => setTab('reviews')} onAddMenu={() => setAddingMenu(true)} /> : null}
       {tab === 'reviews' ? <ReviewsTab reviews={doc.reviews} onReport={setReporting} pending={doc.pending.review ?? 0} /> : null}
       {tab === 'photos' ? <PhotosTab doc={doc} /> : null}
       {tab === 'history' ? <HistoryTab doc={doc} /> : null}
@@ -151,12 +169,23 @@ export function PlacePage({ id }: { id: string }) {
       </footer>
 
       <UploadSheet open={uploading} onClose={() => setUploading(false)} placeId={doc.id} dishes={[...new Set(dishNames)]} />
+      <MenuSheet open={addingMenu} onClose={() => setAddingMenu(false)} placeId={doc.id} />
       <ReportSheet open={reporting !== null} onClose={() => setReporting(null)} recordId={reporting} />
     </article>
   );
 }
 
-function MenuTab({ doc, illustrations, onReviews }: { doc: PlaceDoc; illustrations: { shown: boolean; dishes: Record<string, string> } | null; onReviews: () => void }) {
+function MenuTab({
+  doc,
+  illustrations,
+  onReviews,
+  onAddMenu,
+}: {
+  doc: PlaceDoc;
+  illustrations: { shown: boolean; dishes: Record<string, string> } | null;
+  onReviews: () => void;
+  onAddMenu: () => void;
+}) {
   const copy = useCopy();
   const locale = useLocale();
   const [aiWanted, setAiWanted] = useAiPreference();
@@ -169,7 +198,16 @@ function MenuTab({ doc, illustrations, onReviews }: { doc: PlaceDoc; illustratio
     ];
     return unphotographed.some((dish) => dish !== null && Object.hasOwn(illustrations.dishes, dish));
   }, [doc, illustrations]);
-  if (doc.menus.length === 0 && doc.mentioned.length === 0) return <p className="empty">{copy.place.noMenu}</p>;
+  const empty = (
+    <div className="menu-empty">
+      <p className="empty">{copy.place.noMenu}</p>
+      <p className="muted">{copy.place.noMenuHelp}</p>
+      <Button icon="plus" onClick={onAddMenu}>
+        {copy.place.addMenu}
+      </Button>
+    </div>
+  );
+  if (doc.menus.length === 0 && doc.mentioned.length === 0) return empty;
   return (
     <section className="menus">
       {illustrated ? (
@@ -177,6 +215,7 @@ function MenuTab({ doc, illustrations, onReviews }: { doc: PlaceDoc; illustratio
           <CheckRow checked={aiWanted} label={copy.ai.toggle} sub={copy.ai.explain} onToggle={() => setAiWanted(!aiWanted)} />
         </div>
       ) : null}
+      {doc.menus.length === 0 ? empty : null}
       {doc.menus.map((menu) => (
         <MenuBlock key={menu.id} menu={menu} doc={doc} illustrations={illustrations} onReviews={onReviews} />
       ))}
@@ -199,6 +238,13 @@ function MenuTab({ doc, illustrations, onReviews }: { doc: PlaceDoc; illustratio
             ))}
           </div>
         </div>
+      ) : null}
+      {doc.menus.length > 0 ? (
+        <p className="menu-more">
+          <button type="button" className="link-button" onClick={onAddMenu}>
+            {copy.place.menuChanged}
+          </button>
+        </p>
       ) : null}
     </section>
   );

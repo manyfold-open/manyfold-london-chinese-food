@@ -19,6 +19,7 @@ export function Sheet({
   onClose,
   action,
   footer,
+  closeLabel = 'Done',
   children,
 }: {
   open: boolean;
@@ -26,6 +27,8 @@ export function Sheet({
   onClose: () => void;
   /** A control at the right of the title row, e.g. Reset. */
   action?: ReactNode;
+  /** The close button's words, in the page's language. */
+  closeLabel?: string;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -127,7 +130,7 @@ export function Sheet({
             <h2 id={titleId}>{title}</h2>
             {action ?? (
               <button type="button" className="link-button" onClick={onClose}>
-                Done
+                {closeLabel}
               </button>
             )}
           </div>

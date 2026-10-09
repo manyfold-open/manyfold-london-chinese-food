@@ -35,6 +35,9 @@ export const RULES = {
   photosPerDay: { limit: 300, windowMs: DAY },
   /** Illustrations per agent token. */
   illustrationPerHour: { limit: 30, windowMs: HOUR },
+  /** Menu links a visitor sends, per client IP. */
+  menuLinkPerHour: { limit: 10, windowMs: HOUR },
+  menuLinkPerDay: { limit: 30, windowMs: DAY },
 } as const satisfies Record<string, RateRule>;
 
 const windowIndex = (nowMs: number, windowMs: number) => Math.floor(nowMs / windowMs);

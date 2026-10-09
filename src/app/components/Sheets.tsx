@@ -1,4 +1,4 @@
-/** The two things a reader can send: a photo they took, and a report on something wrong. */
+/** What a reader can send: a photo they took, a place's menu (a link, or photos of its pages), and a report on something wrong. */
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, getJson, postForm, postJson } from '../api';
@@ -104,7 +104,7 @@ export function UploadSheet({ open, onClose, placeId, dishes }: { open: boolean;
   };
 
   return (
-    <Sheet open={open} title={copy.upload.title} onClose={onClose}>
+    <Sheet open={open} title={copy.upload.title} onClose={onClose} closeLabel={copy.close}>
       <div className="form">
         <p className="form-note">{copy.upload.rules}</p>
         <label className="field">
@@ -145,6 +145,104 @@ export function UploadSheet({ open, onClose, placeId, dishes }: { open: boolean;
   );
 }
 
+const MENU_PAGES_MAX = 10;
+
+/** A place's menu, two ways: where it is online, or photos of its pages. Agents type it up; it shows once checked. */
+export function MenuSheet({ open, onClose, placeId }: { open: boolean; onClose: () => void; placeId: string }) {
+  const copy = useCopy();
+  const toast = useToast();
+  const [how, setHow] = useState<'link' | 'photos'>('link');
+  const [url, setUrl] = useState('');
+  const [pages, setPages] = useState<File[]>([]);
+  const [credit, setCredit] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const linked = /^https?:\/\/[^\s/]+\.[^\s]+$/.test(url.trim());
+  const ready = Boolean(answer) && (how === 'link' ? linked : pages.length > 0 && pages.length <= MENU_PAGES_MAX && agreed);
+
+  const send = async () => {
+    if (!answer) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (how === 'link') {
+        await postJson(`/api/places/${placeId}/menu-links`, { url: url.trim(), 'cf-turnstile-response': answer });
+      } else {
+        const form = new FormData();
+        for (const page of pages) form.append('file', page);
+        form.set('subject', 'menu');
+        if (credit.trim()) form.set('attribution', credit.trim());
+        form.set('license', 'CC-BY-4.0');
+        form.set('cf-turnstile-response', answer);
+        await postForm(`/api/places/${placeId}/photos`, form);
+      }
+      toast(copy.menuSheet.sent);
+      setUrl('');
+      setPages([]);
+      onClose();
+    } catch (failure) {
+      setError(failure instanceof ApiError ? failure.message : copy.upload.failed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} title={copy.menuSheet.title} onClose={onClose} closeLabel={copy.close}>
+      <div className="form">
+        <p className="form-note">{copy.menuSheet.lead}</p>
+        <div className="field">
+          <span>{copy.menuSheet.how}</span>
+          <RadioPills
+            label={copy.menuSheet.how}
+            choices={[
+              { value: 'link' as const, label: copy.menuSheet.byLink },
+              { value: 'photos' as const, label: copy.menuSheet.byPhotos },
+            ]}
+            value={how}
+            onChange={setHow}
+          />
+        </div>
+        {how === 'link' ? (
+          <label className="field">
+            <span>{copy.menuSheet.link}</span>
+            <TextField type="url" inputMode="url" placeholder="https://" value={url} maxLength={500} onChange={(event) => setUrl(event.target.value)} />
+            <small className="field-help">{copy.menuSheet.linkHelp}</small>
+          </label>
+        ) : (
+          <>
+            <label className="field">
+              <span>{copy.menuSheet.pages}</span>
+              <input
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                onChange={(event) => setPages([...(event.target.files ?? [])])}
+              />
+              <small className="field-help">
+                {pages.length > MENU_PAGES_MAX ? copy.menuSheet.tooManyPages : pages.length > 0 ? copy.menuSheet.pagesChosen(pages.length) : copy.menuSheet.pagesHelp}
+              </small>
+            </label>
+            <label className="field">
+              <span>{copy.upload.attribution}</span>
+              <TextField value={credit} maxLength={60} onChange={(event) => setCredit(event.target.value)} />
+            </label>
+            <CheckRow checked={agreed} label={copy.menuSheet.license} onToggle={() => setAgreed(!agreed)} />
+          </>
+        )}
+        {open ? <Turnstile onAnswer={setAnswer} /> : null}
+        {error ? <p className="form-error">{error}</p> : null}
+        <Button variant="primary" disabled={!ready || busy} onClick={send}>
+          {busy ? copy.upload.sending : copy.menuSheet.send}
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
 export function ReportSheet({ open, onClose, recordId }: { open: boolean; onClose: () => void; recordId: string | null }) {
   const copy = useCopy();
   const toast = useToast();
@@ -170,7 +268,7 @@ export function ReportSheet({ open, onClose, recordId }: { open: boolean; onClos
   };
 
   return (
-    <Sheet open={open} title={copy.report.title} onClose={onClose}>
+    <Sheet open={open} title={copy.report.title} onClose={onClose} closeLabel={copy.close}>
       <div className="form">
         <RadioPills
           label={copy.report.title}

@@ -43,6 +43,10 @@ export default defineKind({
       type: 'ref', to: ['brand'], label: { en: 'Brand', zh: '品牌' },
       help: 'For a branch of a chain: the brand record id (rec_...), or "#n" for a brand sent earlier in the same batch.',
     },
+    menu_url: {
+      type: 'url', label: { en: 'Menu', zh: '菜单' },
+      help: "The place's own menu: the page, PDF or image on its website where the menu is. Not a delivery app's page.",
+    },
     trading: {
       type: 'enum', required: true, label: { en: 'Trading', zh: '营业状态' }, values: PLACE_STATUSES, valueLabels: STATUS_LABELS,
       help: 'open, temporarily-closed or closed, as the most recent source says.',
@@ -98,6 +102,7 @@ export default defineKind({
     'The category and cuisines fit what it serves.',
     'Trading: a dated page from the last two years showing it open (a Food Standards Agency inspection, a review, a listing taking orders), with none saying it closed, is enough; set trading to what the most recent source says.',
     'It is not another record of a place at the same postcode under a different spelling.',
+    'menu_url, when given, opens this place\'s own menu (a page, PDF or image on its site).',
   ],
   display: ['name_en', 'name_zh'],
 });

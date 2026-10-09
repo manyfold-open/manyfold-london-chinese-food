@@ -9,12 +9,13 @@ import { Action, Badge, formatCount, Labelled, Loading, messageOf, Notice, plura
 const TYPE: Record<WorkType, string> = {
   lead: 'Leads',
   menu: 'Menus wanted',
+  'menu-link': 'Menu links from visitors',
   reviews: 'Reviews wanted',
   transcribe: 'Menu photos to type up',
   illustrate: 'Illustrations wanted',
 };
 
-/** Work items' statuses (src/worker/work.ts): handed out while open, submitted with a record, then done; leads may be dismissed. */
+/** Work items' statuses (src/worker/work.ts): handed out while open, submitted with a record, then done; leads and menu links may be dismissed. */
 const STATUSES = ['open', 'submitted', 'done', 'dismissed'] as const;
 
 const isWorkType = (value: string | null): value is WorkType => (WORK_TYPES as readonly (string | null)[]).includes(value);
@@ -37,15 +38,18 @@ function Subject({ item }: { item: AdminWorkItem }) {
     const sources = Array.isArray(payload.sources) ? payload.sources.filter((source): source is string => typeof source === 'string') : [];
     sources.forEach((source) => lines.push(<SourceLink key={source} url={source} />));
     lines.push(<code key="subject" className="muted">{item.subject}</code>);
-  } else if (item.type === 'menu' || item.type === 'reviews') {
+  } else if (item.type === 'menu' || item.type === 'reviews' || item.type === 'menu-link') {
     lines.push(<strong key="name">{text('name') || 'A place'}</strong>);
     if (text('postcode')) lines.push(<span key="postcode">{text('postcode')}</span>);
+    if (text('menu_url')) lines.push(<SourceLink key="menu_url" url={text('menu_url')} />);
+    const links = Array.isArray(payload.links) ? payload.links.filter((link): link is string => typeof link === 'string') : [];
+    links.forEach((link) => lines.push(<SourceLink key={link} url={link} />));
     if (item.type === 'reviews' && typeof payload.en === 'number' && typeof payload.zh === 'number') {
       lines.push(<span key="has" className="muted">{`Has ${plural(payload.en, 'English excerpt')} and ${plural(payload.zh, 'Chinese excerpt')}`}</span>);
     }
     lines.push(<RecordLink key="place" id={item.subject} kind="place" />);
   } else if (item.type === 'transcribe') {
-    lines.push(<strong key="name">A menu photo</strong>);
+    lines.push(<strong key="name">The photos of a menu</strong>);
     lines.push(<RecordLink key="photo" id={item.subject} kind="photo" />);
     if (text('place')) lines.push(<span key="place">at <RecordLink id={text('place')} kind="place" /></span>);
   } else {

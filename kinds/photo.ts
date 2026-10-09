@@ -18,6 +18,8 @@ export default defineKind({
     width: { type: 'number', server: true, label: { en: 'Width', zh: '宽' } },
     height: { type: 'number', server: true, label: { en: 'Height', zh: '高' } },
     license: { type: 'text', max: 20, server: true, label: { en: 'Licence', zh: '许可' } },
+    set: { type: 'text', max: 40, server: true, label: { en: 'Pages of', zh: '同一组' }, help: 'The first photo of the pages of one menu sent together.' },
+    page_no: { type: 'number', server: true, label: { en: 'Page', zh: '页' } },
   },
   parent: 'place',
   identity: [],

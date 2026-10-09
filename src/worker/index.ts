@@ -34,7 +34,7 @@ import { KINDS, normName, type Kind } from '../shared/kinds';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import type { Locale } from '../shared/i18n';
 import { queryPlaces } from '../shared/places-query';
-import type { IssuedToken, JoinResponse, MeResponse, Role, WorkType } from '../shared/types';
+import { WORK_TYPES, type IssuedToken, type JoinResponse, type MeResponse, type Role, type WorkType } from '../shared/types';
 import { requireAdmin, SESSION_COOKIE, SESSION_DAYS, sessionToken, validSession } from './admin';
 import { cachedFor, cachedJson, cacheKeyOf, forget, isDailyLimit } from './cache';
 import {
@@ -64,14 +64,14 @@ import { mountOf, publicUrl, withMount } from './mount';
 import { replaceIllustration, syncIllustrateWork, updateIllustrationSettings } from './illustrations';
 import { asJpeg, deleteImage, imageResponse, type MediaKind } from './media';
 import { enforce, RULES, sweep } from './ratelimit';
-import { uploadIllustration, uploadPhoto } from './uploads';
+import { suggestMenuLink, uploadIllustration, uploadPhoto } from './uploads';
 import { pathMeta, placeMeta, preferredLocale, sitemap, withMeta } from './seo';
 import { blockedHosts, illustrationSettings } from './settings';
 import { collectorSkill, FOCUSES, maintainerSkill, publicSkill, schemaDocument, type Focus } from './skill';
 import { fetchPage, idempotencyKey, recall, remember, submitRecords } from './submit';
 import { adminTokens, authenticate, createCollectorToken, createMaintainerToken, kindsOf, requireRole, standing, TOKEN_ENV, updateToken, type Token } from './tokens';
 import { HttpError, type Env } from './types';
-import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, reopenWork, workAdmin } from './work';
+import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, reopenWork, workAdmin } from './work';
 
 const SERVICE = 'manyfold-london-chinese-food';
 const BODY_MAX = 1_000_000;
@@ -282,6 +282,13 @@ app.post('/api/places/:id/photos', async (c) => {
   return c.json(await uploadPhoto(c.env, c.req.param('id'), c.req.raw, { ip: ipOf(c), hosts: formHosts(c), now: new Date() }), 201);
 });
 
+/** A visitor's link to the place's menu online: a hint for collectors (uploads.ts, suggestMenuLink). */
+app.post('/api/places/:id/menu-links', async (c) => {
+  const origin = c.req.header('origin');
+  if (origin !== undefined && origin !== new URL(c.req.url).origin) throw new HttpError(403, 'cross_origin', 'Send menu links from this site’s own form.');
+  return c.json(await suggestMenuLink(c.env, c.req.param('id'), await body(c), { ip: ipOf(c), hosts: formHosts(c), now: new Date() }), 201);
+});
+
 /* ───────── agents ───────── */
 
 app.post('/api/join', async (c) => {
@@ -354,15 +361,19 @@ app.post('/api/records/:id/flag', async (c) => {
 app.get('/api/work', async (c) => {
   const token = await agentToken(c);
   const type = c.req.query('type');
-  if (!isWorkType(type)) throw new HttpError(422, 'invalid_query', 'type must be one of lead, menu, reviews, transcribe, illustrate.');
+  if (!isWorkType(type)) throw new HttpError(422, 'invalid_query', `type must be one of ${WORK_TYPES.join(', ')}.`);
   const limit = parseLimit(c.req.query('limit'), HANDOUT_MAX, 5);
   const items = await handOut(c.env.DB, token, type as WorkType, limit, new Date());
-  // A menu photo to transcribe is still waiting for no one but its reader: give its address.
-  return c.json({
-    items: items.map((item) =>
-      item.type === 'transcribe' ? { ...item, payload: { ...item.payload, image_url: publicUrl(c, `/media/p/${item.subject}/full.webp`) } } : item,
-    ),
-  });
+  // A menu's photos are public once verified: give every page's address, in order.
+  const shown = await Promise.all(
+    items.map(async (item) => {
+      if (item.type !== 'transcribe') return item;
+      const pages = await menuPages(c.env.DB, String(item.payload?.place ?? ''), item.subject);
+      const urls = pages.map((id) => publicUrl(c, `/media/p/${id}/full.webp`));
+      return { ...item, payload: { ...item.payload, photo: pages[0] ?? item.subject, pages, image_url: urls[0] ?? null, image_urls: urls } };
+    }),
+  );
+  return c.json({ items: shown });
 });
 
 app.post('/api/work/:id/dismiss', async (c) => {
@@ -376,7 +387,14 @@ app.get('/api/tasks', async (c) => {
   const kind = parseKind(c.req.query('kind'));
   if (kind && !kindsOf(token).includes(kind)) throw new HttpError(403, 'wrong_kind', `This token reviews ${token.kinds.join(', ')}, not ${kind}.`);
   const limit = parseLimit(c.req.query('limit'), LEASE_MAX, LEASE_MAX);
-  return c.json(await leaseTasks(c.env.DB, token, { limit, kind, mediaUrl: (taskId) => publicUrl(c, `/api/tasks/${taskId}/media`) }, new Date()));
+  return c.json(
+    await leaseTasks(
+      c.env.DB,
+      token,
+      { limit, kind, mediaUrl: (taskId) => publicUrl(c, `/api/tasks/${taskId}/media`), photoUrl: (id) => publicUrl(c, `/media/p/${id}/full.webp`) },
+      new Date(),
+    ),
+  );
 });
 
 /** The image of a photo or illustration task, for the maintainer holding it, while the lease lasts. */

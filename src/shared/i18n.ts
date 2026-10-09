@@ -66,6 +66,10 @@ export interface Copy {
     photos: string;
     history: string;
     noMenu: string;
+    noMenuHelp: string;
+    addMenu: string;
+    menuChanged: string;
+    ownMenu: (kind: 'pdf' | 'image' | 'page') => string;
     noReviews: string;
     noPhotos: string;
     brandMenu: (brand: string) => string;
@@ -117,6 +121,22 @@ export interface Copy {
     rules: string;
     failed: string;
   };
+  menuSheet: {
+    title: string;
+    lead: string;
+    how: string;
+    byLink: string;
+    byPhotos: string;
+    link: string;
+    linkHelp: string;
+    pages: string;
+    pagesHelp: string;
+    pagesChosen: (count: number) => string;
+    tooManyPages: string;
+    license: string;
+    send: string;
+    sent: string;
+  };
   report: { title: string; wrong: string; takedown: string; reason: string; send: string; sent: string };
   contribute: { title: string; lead: string; agentTitle: string; agentText: string; copy: string; copied: string; skill: string; photosTitle: string; photosText: string };
   about: { title: string; paragraphs: string[]; dataTitle: string; dataText: string; downloads: { csv: string; json: string; menus: string } };
@@ -124,6 +144,8 @@ export interface Copy {
   notFound: { title: string; text: string; home: string };
   attribution: string;
   theme: { light: string; dark: string };
+  /** The words that close a sheet. */
+  close: string;
 }
 
 const zh: Copy = {
@@ -164,6 +186,10 @@ const zh: Copy = {
     photos: '照片',
     history: '记录',
     noMenu: '还没有菜单。',
+    noMenuHelp: '知道菜单在网上哪里，或者手边有纸质菜单？帮忙添加，agent 会把它录成可搜索的菜单，审核后显示。',
+    addMenu: '添加菜单',
+    menuChanged: '菜单变了？提交新的',
+    ownMenu: (kind) => (kind === 'pdf' ? '店家官网菜单（PDF）' : kind === 'image' ? '店家官网菜单（图片）' : '店家官网菜单'),
     noReviews: '还没有评价摘录。',
     noPhotos: '还没有照片。',
     brandMenu: (brand) => `${brand}各分店共用的菜单`,
@@ -224,6 +250,22 @@ const zh: Copy = {
     rules: '只传你自己拍的照片。请避开人脸。照片的位置信息会被删除。',
     failed: '上传失败',
   },
+  menuSheet: {
+    title: '添加菜单',
+    lead: '菜单不会直接公开：agent 会照着它录成菜单，审核通过后才显示。',
+    how: '菜单在哪里',
+    byLink: '网上（网址）',
+    byPhotos: '纸质（拍照）',
+    link: '菜单网址',
+    linkHelp: '餐厅官网上的菜单页面、PDF 或图片最好。外卖平台的价格常常比店里高。',
+    pages: '菜单照片',
+    pagesHelp: '每页拍一张，按页码顺序选好，最多 10 张。拍清楚菜名和价格，避开人脸。',
+    pagesChosen: (count) => `已选 ${count} 页`,
+    tooManyPages: '一次最多 10 页。',
+    license: '这些照片是我拍的，我同意以 CC BY 4.0 许可发布。',
+    send: '提交',
+    sent: '收到了！录好并审核通过后，菜单就会出现在这里。',
+  },
   report: { title: '报告问题', wrong: '信息有误', takedown: '我是作者或权利人，请下架', reason: '说明', send: '发送', sent: '收到了，我们会尽快处理。' },
   contribute: {
     title: '参与贡献',
@@ -234,7 +276,7 @@ const zh: Copy = {
     copied: '已复制',
     skill: '阅读 SKILL.md',
     photosTitle: '上传照片',
-    photosText: '在任意店铺页面点“上传照片”。照片经审核后公开，以 CC BY 4.0 许可署你的名字。',
+    photosText: '在任意店铺页面点“上传照片”。照片经审核后公开，以 CC BY 4.0 许可署你的名字。菜单也一样：在店铺的菜单栏点“添加菜单”，贴上菜单网址，或者拍下每一页。',
   },
   about: {
     title: '关于',
@@ -261,6 +303,7 @@ const zh: Copy = {
   notFound: { title: '找不到这个页面', text: '这个地址没有内容，或这家店已不再收录。', home: '回到首页' },
   attribution: '数据：店铺与菜单 CC BY 4.0；评价摘录版权归原作者；邮编数据 © ONS / Royal Mail，OGL。',
   theme: { light: '浅色', dark: '深色' },
+  close: '关闭',
 };
 
 const en: Copy = {
@@ -301,6 +344,10 @@ const en: Copy = {
     photos: 'Photos',
     history: 'History',
     noMenu: 'No menu yet.',
+    noMenuHelp: 'Know where the menu is online, or have the paper menu to hand? Add it: an agent types it up into a menu you can search, shown once it is checked.',
+    addMenu: 'Add the menu',
+    menuChanged: 'Menu changed? Send the new one',
+    ownMenu: (kind) => (kind === 'pdf' ? 'On their website (PDF)' : kind === 'image' ? 'On their website (image)' : 'On their website'),
     noReviews: 'No review excerpts yet.',
     noPhotos: 'No photos yet.',
     brandMenu: (brand) => `The menu every ${brand} shares`,
@@ -361,6 +408,22 @@ const en: Copy = {
     rules: 'Only photos you took yourself. Please keep faces out. Location data is removed.',
     failed: 'Upload failed',
   },
+  menuSheet: {
+    title: 'Add the menu',
+    lead: 'What you send is not shown as it is: an agent types the menu up from it, and it appears once checked.',
+    how: 'Where is the menu',
+    byLink: 'Online (a link)',
+    byPhotos: 'On paper (photos)',
+    link: 'Link to the menu',
+    linkHelp: "Best is the menu page, PDF or image on the restaurant's own website. Delivery apps often charge more than the restaurant.",
+    pages: 'Photos of the menu',
+    pagesHelp: 'One photo a page, chosen in page order, up to 10. Make the names and prices sharp, and keep faces out.',
+    pagesChosen: (count) => `${count} ${count === 1 ? 'page' : 'pages'} chosen`,
+    tooManyPages: 'At most 10 pages at once.',
+    license: 'I took these photos and agree to publish them under CC BY 4.0.',
+    send: 'Send',
+    sent: 'Thank you! Once it is typed up and checked, the menu shows here.',
+  },
   report: { title: 'Report a problem', wrong: 'Something is wrong', takedown: 'I am the author or rights holder: take it down', reason: 'What is it?', send: 'Send', sent: 'Thank you, we will look at it soon.' },
   contribute: {
     title: 'Contribute',
@@ -371,7 +434,7 @@ const en: Copy = {
     copied: 'Copied',
     skill: 'Read SKILL.md',
     photosTitle: 'Add photos',
-    photosText: 'On any place’s page, use “Add a photo”. Photos are published under CC BY 4.0 with your credit, once checked.',
+    photosText: 'On any place’s page, use “Add a photo”. Photos are published under CC BY 4.0 with your credit, once checked. Menus too: in a place’s menu tab, use “Add the menu” to send the link to it, or a photo of each page.',
   },
   about: {
     title: 'About',
@@ -398,6 +461,7 @@ const en: Copy = {
   notFound: { title: 'Page not found', text: 'Nothing is here, or the place is no longer listed.', home: 'Back to the start' },
   attribution: 'Data: places and menus CC BY 4.0; review excerpts remain their authors’; postcode data © ONS / Royal Mail, OGL.',
   theme: { light: 'Light', dark: 'Dark' },
+  close: 'Done',
 };
 
 export const COPY: Record<Locale, Copy> = { zh, en };

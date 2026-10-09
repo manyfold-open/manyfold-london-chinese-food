@@ -10,7 +10,8 @@
  *                               that would duplicate one already there is merged into it
  *   any record decided          the work item it answered is done, or open again for someone else
  *   an illustration verified    its dish shows it; one that stops being verified stops showing
- *   a photo of a menu verified  becomes a menu for collectors to transcribe
+ *   a photo of a menu verified  becomes a menu for collectors to transcribe (one item for the pages
+ *                               of one menu sent together)
  *
  * Changes the server makes this way are revisions by 'system' that name their cause, so undoing
  * the cause can undo them too (src/worker/console.ts revertToken).
@@ -149,16 +150,19 @@ export async function statusEffects(
     }
   }
 
+  // The pages of one menu sent together share one item, named by the set (its first page). It is
+  // handed out only once none of its pages waits for review (src/worker/work.ts).
   if (record.kind === 'photo' && to === 'verified') {
     const data = JSON.parse(record.data_json) as RecordData;
     if (data.subject === 'menu') {
+      const set = typeof data.set === 'string' ? data.set : record.id;
       statements.push(
         db
           .prepare(
             `INSERT OR IGNORE INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
              VALUES (?, 'transcribe', ?, 10, ?, 'open', ?, ?)`,
           )
-          .bind(newId('wrk', Date.parse(at)), record.id, JSON.stringify({ place: data.place, photo: record.id }), at, at),
+          .bind(newId('wrk', Date.parse(at)), set, JSON.stringify({ place: data.place, set }), at, at),
       );
     }
   }

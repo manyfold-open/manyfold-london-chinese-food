@@ -40,6 +40,7 @@ import { sha256Hex } from './ids';
 import { lookupPostcodes, placeFieldsFrom, type PostcodeAnswer } from './postcodes';
 import { MINUTE } from './ratelimit';
 import { DAILY_TASK_LIMIT, kindsOf, moveStanding, tallyOf, VERDICT_ACTIONS, type Token } from './tokens';
+import { menuPages } from './work';
 import { HttpError } from './types';
 
 export const LEASE_MS = 30 * MINUTE;
@@ -129,7 +130,7 @@ async function leasedRecord(row: PlainRow): Promise<LeasedRecord> {
 export async function leaseTasks(
   db: D1Database,
   token: Token,
-  options: { limit: number; kind?: Kind; mediaUrl: (taskId: string) => string },
+  options: { limit: number; kind?: Kind; mediaUrl: (taskId: string) => string; photoUrl?: (photoId: string) => string },
   now: Date,
 ): Promise<LeaseResponse> {
   const at = now.toISOString();
@@ -206,11 +207,22 @@ export async function leaseTasks(
           : null,
         target: target ? await leasedRecord(target) : null,
         media_url: KIND_CONFIGS[row.kind].provenance === 'upload' ? options.mediaUrl(row.task_id) : null,
+        ...(row.kind === 'menu' ? await menuPhotoPages(db, row, options.photoUrl) : {}),
       };
     }),
   );
   if (tasks.length > 0) return { ...work, leased: tasks.length, tasks };
   return { ...work, leased: 0, tasks, note: await nothingToLease(db, token, kinds, room, work, at) };
+}
+
+/** A menu typed up from visitors' photos: every page, so the maintainer checks it against all of them. */
+async function menuPhotoPages(db: D1Database, row: HeldRow, photoUrl?: (photoId: string) => string): Promise<{ pages?: string[] }> {
+  const photo = (JSON.parse(row.data_json) as RecordData).photo;
+  if (typeof photo !== 'string' || !photoUrl) return {};
+  const first = await db.prepare(`SELECT parent_id, data_json FROM records WHERE id = ? AND kind = 'photo'`).bind(photo).first<{ parent_id: string; data_json: string }>();
+  if (!first) return {};
+  const set = ((JSON.parse(first.data_json) as RecordData).set as string | undefined) ?? photo;
+  return { pages: (await menuPages(db, first.parent_id, set)).map(photoUrl) };
 }
 
 /** Why a maintainer got no task: its daily limit, its kinds, or tasks it may not take. */

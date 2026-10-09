@@ -6,7 +6,9 @@
  *               research it, then send it as a place, or dismiss it with a reason
  *   menu        a public place with no menu yet
  *   reviews     a public place with few review excerpts
- *   transcribe  a menu photo a visitor uploaded, to type up as a menu
+ *   menu-link   links visitors sent to a place's menu online, to type up (or compare with the
+ *               menu we have)
+ *   transcribe  the photos of a menu a visitor uploaded (one or more pages), to type up as a menu
  *   illustrate  a standard dish no illustration shows yet: generate one, upload it
  *
  * An item is handed out for HANDOUT_MS; an agent that answers it sends `work_item` with its
@@ -50,6 +52,23 @@ const toItem = (row: ItemRow): WorkItem => ({
 
 export const isWorkType = (value: unknown): value is WorkType => typeof value === 'string' && (WORK_TYPES as readonly string[]).includes(value);
 
+/** A menu's pages go out together: not while one of them still waits for a maintainer. */
+const READY_PAGES = ` AND NOT EXISTS (SELECT 1 FROM records p INDEXED BY records_age
+  WHERE p.kind = 'photo' AND p.status = 'pending' AND json_extract(p.data_json, '$.set') = work_items.subject)`;
+
+/** The verified pages of a menu set (or the one photo), in page order. */
+export async function menuPages(db: D1Database, place: string, set: string): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT id, data_json FROM records INDEXED BY records_children WHERE parent_id = ? AND kind = 'photo' AND status = 'verified'`)
+    .bind(place)
+    .all<{ id: string; data_json: string }>();
+  return results
+    .map((row) => ({ id: row.id, data: JSON.parse(row.data_json) as { set?: string; page_no?: number } }))
+    .filter((row) => row.id === set || row.data.set === set)
+    .sort((a, b) => (a.data.page_no ?? 1) - (b.data.page_no ?? 1))
+    .map((row) => row.id);
+}
+
 /** How many illustrate items went out today, for the admin's daily bound. */
 async function illustratedToday(db: D1Database, now: Date): Promise<number> {
   const row = await db
@@ -79,7 +98,7 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
         `UPDATE work_items SET handed_to = ?1, handed_until = ?2, updated_at = ?3
          WHERE id IN (
            SELECT id FROM work_items INDEXED BY work_items_open
-           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3
+           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3${type === 'transcribe' ? READY_PAGES : ''}
            ORDER BY priority DESC, created_at LIMIT ?5)`,
       )
       .bind(token.id, new Date(now.getTime() + HANDOUT_MS).toISOString(), at, type, room)
@@ -114,7 +133,7 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
   return items;
 }
 
-/** A held item the agent gives up on: a lead that is not a place to list is dismissed for good, anything else goes back. */
+/** A held item the agent gives up on: a lead that is not a place to list, or menu links with nothing new, are dismissed for good; anything else goes back. */
 export async function dismiss(db: D1Database, token: Token, id: string, body: { reason?: unknown }, now: Date): Promise<WorkItem> {
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
   if (reason.length < 3) throw new HttpError(422, 'invalid_body', 'Say why, in 3 to 300 characters: e.g. "closed in 2023", "a Thai restaurant", "same as rec_...".');
@@ -123,7 +142,8 @@ export async function dismiss(db: D1Database, token: Token, id: string, body: { 
     throw new HttpError(404, 'not_found', 'You hold no open work item with that id; ask for work with GET /api/work first.');
   }
   const at = now.toISOString();
-  if (row.type === 'lead') {
+  if (row.type === 'lead' || row.type === 'menu-link') {
+    // A lead that is no place to list, or links that hold no new menu, are done with.
     await db.prepare(`UPDATE work_items SET status = 'dismissed', note = ?, updated_at = ? WHERE id = ?`).bind(reason, at, id).run();
   } else {
     // Someone else may find what this agent could not; it goes to the back of the queue.
