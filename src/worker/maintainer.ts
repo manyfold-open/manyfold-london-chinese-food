@@ -655,6 +655,16 @@ async function prepareVerdict(
 
     if (task.type === 'update') return applyProposal(db, token, task, config, nextValue, provenance, item, now, revision, closeTask);
 
+    // A place's brand is mirrored in ref_id; a corrected brand must be a live one.
+    const brand = task.kind === 'place' && typeof nextValue.brand === 'string' ? nextValue.brand : null;
+    if (brand && brand !== data.brand) {
+      const live = await db
+        .prepare(`SELECT id FROM records WHERE id = ? AND kind = 'brand' AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL`)
+        .bind(brand)
+        .first<{ id: string }>();
+      if (!live) return { errors: [{ field: 'corrections.brand', message: `${brand} is not a brand here; search for it with GET /api/search?q=<its name>` }] };
+    }
+
     const key = config.identity.length === 0 ? task.identity_key : identityKey(config, nextValue, provenance);
     if (key !== task.identity_key) {
       const twin = await db
@@ -669,11 +679,11 @@ async function prepareVerdict(
       moveStanding(db, task.id, 'verified', task.status),
       db
         .prepare(
-          `UPDATE records SET status = 'verified', data_json = ?, identity_key = ?, source_url = ?, evidence = ?, observed_at = ?,
-             verified_at = ?, updated_at = ?
+          `UPDATE records SET status = 'verified', data_json = ?, identity_key = ?, ref_id = CASE WHEN kind = 'place' THEN ? ELSE ref_id END,
+             source_url = ?, evidence = ?, observed_at = ?, verified_at = ?, updated_at = ?
            WHERE id = ? AND status = ?`,
         )
-        .bind(JSON.stringify(nextValue), key, provenance.source_url, provenance.evidence, provenance.observed_at, at, at, task.id, task.status),
+        .bind(JSON.stringify(nextValue), key, brand, provenance.source_url, provenance.evidence, provenance.observed_at, at, at, task.id, task.status),
       revision(task.id, 'verify', before, { status: 'verified', data: nextValue }, { source_url: provenance.source_url, evidence: provenance.evidence }),
       closeTask('done'),
       ...(await statusEffects(db, { ...changing, data_json: JSON.stringify(nextValue) }, 'verified', at)),

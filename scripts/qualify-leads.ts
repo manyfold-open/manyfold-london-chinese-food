@@ -2,6 +2,7 @@
  * Qualifies the open leads from the Food Standards Agency before collectors get them, so a lead
  * handed out can be finished (AGENTS.md, invariant 24). For each:
  *
+ *   a place here at its postcode, named like it  dismissed: it is already listed
  *   the FSA no longer lists it                  dismissed: it closed or was registered again
  *   Just Eat lists it at that postcode, Chinese  food_evidence (the listing) and priority 3
  *   Just Eat lists it there, plainly not Chinese dismissed, with the cuisines it lists
@@ -109,8 +110,24 @@ async function justEatAt(postcode: string): Promise<JustEatRestaurant[] | null> 
   return justEatByPostcode.get(postcode)!;
 }
 
+const placesByPostcode = new Map<string, { id: string; name_en: string | null; name_zh: string | null }[]>();
+
+/** The places already here at a postcode, from the site's own search. */
+async function placesAt(postcode: string): Promise<{ id: string; name_en: string | null; name_zh: string | null }[]> {
+  if (!placesByPostcode.has(postcode)) {
+    const found = await getJson<{ places?: { id: string; name_en: string | null; name_zh: string | null }[] }>(`${site}/api/search?postcode=${encodeURIComponent(postcode)}`);
+    placesByPostcode.set(postcode, found && found !== 'gone' ? (found.places ?? []) : []);
+  }
+  return placesByPostcode.get(postcode)!;
+}
+
 async function qualify(lead: Lead, today: string): Promise<Update> {
   const id = lead.subject.slice('fsa:'.length);
+  const leadPostcode = canonicalPostcode(lead.payload.postcode ?? '');
+  if (leadPostcode && lead.payload.name) {
+    const here = (await placesAt(leadPostcode)).find((place) => namesAlike({ name_en: place.name_en ?? place.name_zh ?? '' }, { name_en: lead.payload.name! }));
+    if (here) return { subject: lead.subject, dismiss: `Already here as ${here.id} ("${here.name_en ?? here.name_zh}").` };
+  }
   const fsa = await getJson<{ BusinessName?: string }>(`https://api.ratings.food.gov.uk/Establishments/${encodeURIComponent(id)}`, { 'x-api-version': '2' });
   await sleep(150);
   if (fsa === 'gone') return { subject: lead.subject, dismiss: `The FSA no longer lists business ${id} (checked ${today}): it closed, or was registered again under another id.` };

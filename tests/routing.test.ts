@@ -340,6 +340,24 @@ describe('the site team', () => {
     expect(wrong.status).toBe(422);
   });
 
+  it("keeps a place's brand reference in step when a maintainer corrects the brand", async () => {
+    const w = world();
+    const { collector, keeper } = await people(w);
+    const [brand, branch] = (await submit(w, collector, [
+      { kind: 'brand', data: { name_en: 'Example Tea', website: 'https://example-tea.com/', category: 'tea-drinks' }, source_url: 'https://example-tea.com/about', evidence: 'Example Tea has twelve shops.', observed_at: NOW_ISO() },
+      place({ brand: '#0' }),
+    ])).results;
+    expect((await row<{ ref_id: string }>(w, branch!.id!))!.ref_id).toBe(brand!.id);
+    const tasks = (await lease(w, keeper)).tasks;
+    const brandTask = tasks.find((task) => task.record.id === brand!.id)!;
+    await verdicts(w, keeper, [{ task_id: brandTask.id, verdict: 'verified', source_url: 'https://example-tea.com/about', evidence: 'Example Tea has twelve shops.', observed_at: NOW_ISO() }]);
+    const [placeTask] = (await lease(w, keeper)).tasks;
+    const wrong = await verdicts(w, keeper, [verifyQuote(placeTask!.id, { corrections: { brand: placeTask!.record.id } })]);
+    expect(wrong.results[0]!.errors![0]).toMatchObject({ field: 'corrections.brand' });
+    await verdicts(w, keeper, [verifyQuote(placeTask!.id, { corrections: { brand: null } })]);
+    expect((await row<{ ref_id: string | null }>(w, branch!.id!))!.ref_id).toBeNull();
+  });
+
   it('suspends a maintainer once more than half of ten verdicts it looked at again were overturned', async () => {
     const w = world();
     const { collector, keeper } = await people(w);
