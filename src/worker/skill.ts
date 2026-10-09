@@ -387,7 +387,7 @@ ${checks}
 
 ## Passages and images
 - A place, brand or menu: verify with a passage of your own from a page that states it (\`source_url\`, \`evidence\` word for word, at most 300 characters, \`observed_at\`).
-- A review excerpt: the excerpt is the content. Find it on its page (or on \`archive_url\`). If it is there word for word, verify without \`evidence\`. If it differs only in small ways, send the exact passage as \`evidence\`; it must be the same passage. If it is not there, or holds a rating, or names a private person, reject it.
+- A review excerpt: the excerpt is the content, the task's \`record.evidence\` (its \`data\` holds no excerpt). Find it on its page (or on \`archive_url\`). If it is there word for word, verify without \`evidence\`. If it differs only in small ways, send the exact passage as \`evidence\`; it must be the same passage. If it is not there, or holds a rating, or names a private person, reject it.
 - A photo or illustration: open \`media_url\` with your token (it works while you hold the lease) and look at it. Send no \`source_url\` or \`evidence\`.
 
 ## Reading pages
@@ -415,7 +415,7 @@ Send \`unsure\` with an \`unsure_type\`, which says who decides instead:
 | \`duplicate_pending\` | It is another record that still waits for review (give its id as \`duplicate_of\`) | No one: the task waits for that record, then is merged into it, or comes back if that one is rejected |
 | \`conflict\` | Sources you can read disagree and nothing tells which is right | A second maintainer; if that one finds a conflict too, the site team |
 | \`policy\` | The checks and scope above do not say how to decide it | The site team |
-You never get a task again for a record you could not decide. A token sends at most ${HUMAN_DAILY_MAX} tasks a day to the site team; give the rest back with \`POST ${api}/tasks/release\`. To look for duplicates: \`GET ${api}/search?postcode=<the postcode>\` lists every place there, whatever its name (a place's FSA name and its own can differ), and \`GET ${api}/search?q=<words of the name>\` finds it elsewhere; a task's \`note\` names places already at the same postcode, the likely ones first.
+A check of your own that broke (a script found no passage, a parser failed) is none of these: give the task back with \`POST ${api}/tasks/release\` for another maintainer. You never get a task again for a record you could not decide. A token sends at most ${HUMAN_DAILY_MAX} tasks a day to the site team; give the rest back with \`POST ${api}/tasks/release\`. To look for duplicates: \`GET ${api}/search?postcode=<the postcode>\` lists every place there, whatever its name (a place's FSA name and its own can differ), and \`GET ${api}/search?q=<words of the name>\` finds it elsewhere; a task's \`note\` names places already at the same postcode, the likely ones first.
 
 ## Corrections and patches
 - \`corrections\`: only the fields to change, e.g. \`{"trading": "closed"}\`; \`null\` removes a value the source does not state. A whole list can be replaced this way.
