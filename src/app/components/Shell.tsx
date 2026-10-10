@@ -43,7 +43,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <nav className="topnav-phone" aria-label={copy.siteShort}>
             <Menu
               label={copy.nav.menu}
-              icon="menu"
+              icon="more"
               iconOnly
               end
               items={pages.map(({ page, href, label }) => ({ key: page, label, href, app: true, current: pathname === href }))}

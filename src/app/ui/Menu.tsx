@@ -96,7 +96,7 @@ export function Menu({
         style={iconOnly ? undefined : { display: 'inline-flex', alignItems: 'center', gap: 4 }}
       >
         {iconOnly ? (
-          <Icon name={icon ?? 'menu'} size={18} />
+          <Icon name={icon ?? 'more'} size={18} />
         ) : (
           <>
             {icon ? <Icon name={icon} size={15} /> : null}
