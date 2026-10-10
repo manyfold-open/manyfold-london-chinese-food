@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlaceDoc } from '../src/shared/place-doc';
 import { pathMeta, placeMeta, preferredLocale, sitemap } from '../src/worker/seo';
+import { world } from './harness';
 
 const doc = {
   id: 'rec_01k70q4mgw8b1r7f3s5t9v2x4y',
@@ -54,5 +55,33 @@ describe('page meta', () => {
     const xml = sitemap('https://site', [{ id: 'rec_x', s: 'slug', u: '2026-10-01T00:00:00Z' } as never], [['油泼面', '油泼面', null, 3]]);
     expect(xml).toContain('<loc>https://site/zh/place/rec_x/slug</loc><lastmod>2026-10-01</lastmod>');
     expect(xml).toContain('<loc>https://site/en/dish/%E6%B2%B9%E6%B3%BC%E9%9D%A2</loc>');
+  });
+});
+
+describe('a page asked for again', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // A browser revalidates its copy with the ETag it was given. Every page is built from the app's
+  // HTML, so that asset is asked for in full: a 304 from it once went out as an empty 200 page.
+  it('is sent in full, without the app’s validators, whatever the browser holds', async () => {
+    const asked: (string | null)[] = [];
+    const w = world({
+      ASSETS: {
+        fetch: async (request: Request) => {
+          asked.push(request.headers.get('if-none-match'));
+          return request.headers.get('if-none-match') === '"v1"'
+            ? new Response(null, { status: 304, headers: { etag: '"v1"' } })
+            : new Response('<!doctype html><title>app</title>', { headers: { 'content-type': 'text/html', etag: '"v1"', 'last-modified': 'Thu, 08 Oct 2026 12:00:00 GMT' } });
+        },
+      } as unknown as Fetcher,
+    });
+    for (const page of ['/en/about', '/zh/']) {
+      const response = await w.call(page, { headers: { 'if-none-match': '"v1"', 'if-modified-since': 'Thu, 08 Oct 2026 12:00:00 GMT' } });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('<title>app</title>');
+      expect(response.headers.get('etag')).toBeNull();
+      expect(response.headers.get('last-modified')).toBeNull();
+    }
+    expect(asked).toEqual([null, null]);
   });
 });

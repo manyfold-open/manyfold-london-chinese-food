@@ -165,9 +165,15 @@ export function withMeta(response: Response, meta: PageMeta, site: string, index
   return finish(rewritten, meta.status, csp);
 }
 
-/** A page's status and headers: its security policy, and no caching of HTML that names bundles. */
+/**
+ * A page's status and headers: its security policy, and no caching of HTML that names bundles.
+ * The app's validators go: they name the HTML every page is built from, not this page, and a
+ * browser revalidating with them would be told its copy of any page is current.
+ */
 function finish(response: Response, status: number, csp: boolean): Response {
   const headers = new Headers(response.headers);
+  headers.delete('etag');
+  headers.delete('last-modified');
   if (csp) headers.set('content-security-policy', PAGE_CSP);
   headers.set('x-content-type-options', 'nosniff');
   headers.set('referrer-policy', 'strict-origin-when-cross-origin');

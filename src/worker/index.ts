@@ -812,7 +812,12 @@ async function page(c: AppContext): Promise<Response> {
   const match = /^\/(zh|en)(\/.*)?$/.exec(url.pathname)!;
   const locale = match[1] as Locale;
   let rest = match[2] ?? '/';
-  const html = await c.env.ASSETS.fetch(new Request(new URL('/', url), { headers: c.req.raw.headers }));
+  // The app's HTML is asked for in full whatever the browser holds: the page is built from it, and
+  // an asset answered "not modified" (304, no body) would go out as an empty page.
+  const headers = new Headers(c.req.raw.headers);
+  for (const name of ['if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since', 'if-range', 'range']) headers.delete(name);
+  const html = await c.env.ASSETS.fetch(new Request(new URL('/', url), { headers }));
+  if (!html.ok) return html;
   const site = canonicalSite(c);
   const place = /^\/place\/(rec_[0-9a-z]{26})(?:\/[^/]*)?\/?$/.exec(rest);
   let meta;
