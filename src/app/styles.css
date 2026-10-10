@@ -2046,6 +2046,16 @@ th[aria-sort='ascending'] .sort-button svg {
   margin-right: 6px;
 }
 
+/* The links' menu, for a phone's top bar (below). */
+.topnav-phone {
+  display: none;
+}
+
+.menu-item[aria-current='page'] {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
 .topnav a,
 .lang-switch {
   display: inline-flex;
@@ -3004,30 +3014,26 @@ a.dish-name:hover {
 }
 
 @media (max-width: 767px) {
-  /* A phone's top bar keeps About: the front page has no words of its own on what the site is. */
+  /* A phone's top bar keeps the name whole: Contribute and About fold into a menu at its end. */
   .topnav {
-    margin-right: 0;
-  }
-
-  .topnav .topnav-contribute {
     display: none;
   }
 
-  .topnav a,
-  .lang-switch {
-    padding: 0 7px;
+  .topnav-phone {
+    display: flex;
   }
 
   .lang-switch {
     margin-right: 0;
+    padding: 0 7px;
   }
 
-  /* The links have padding of their own: closer together, the English name fits a 360px phone. */
+  /* The controls have padding of their own: closer together, the English name fits a 360px phone. */
   .topbar-inner {
     gap: 2px;
   }
 
-  /* As wide as the site's name, which gives way before the links do on the narrowest phones. */
+  /* As wide as the site's name, which gives way before the controls do on the narrowest phones. */
   .topbar-inner .brand {
     flex: 0 1 auto;
     gap: 8px;

@@ -35,7 +35,7 @@ export interface Copy {
   tagline: string;
   description: string;
   switchTo: string;
-  nav: { home: string; contribute: string; about: string };
+  nav: { home: string; contribute: string; about: string; menu: string };
   home: {
     searchPlaceholder: string;
     searchLabel: string;
@@ -194,7 +194,7 @@ const zh: Copy = {
   tagline: '伦敦哪里吃得到中国菜',
   description: '伦敦能吃到、买到中国食物的店：菜单、照片和来自全网的评价原文。没有评分，读历史自己判断。',
   switchTo: 'English',
-  nav: { home: '首页', contribute: '参与贡献', about: '关于' },
+  nav: { home: '首页', contribute: '参与贡献', about: '关于', menu: '菜单' },
   home: {
     searchPlaceholder: '搜店名、菜名或邮区，例如 小笼包、W1D',
     searchLabel: '搜索',
@@ -385,7 +385,7 @@ const en: Copy = {
   tagline: 'Where to find Chinese food in London',
   description: 'Every place in London to eat or buy Chinese food: menus, photos and review excerpts from across the web. No ratings: read the history and judge for yourself.',
   switchTo: '中文',
-  nav: { home: 'Home', contribute: 'Contribute', about: 'About' },
+  nav: { home: 'Home', contribute: 'Contribute', about: 'About', menu: 'Menu' },
   home: {
     searchPlaceholder: 'Search places, dishes or a postcode district: xiaolongbao, W1D',
     searchLabel: 'Search',
