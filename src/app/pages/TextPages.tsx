@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { appUrl } from '../base';
+import { PlaceSheet } from '../components/Sheets';
 import { useCopy, useLocale } from '../i18n';
 import { Link } from '../router';
 import { paths } from '../routes';
@@ -11,6 +12,7 @@ export function ContributePage() {
   const copy = useCopy();
   const toast = useToast();
   const [copied, setCopied] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const skill = new URL(appUrl('/SKILL.md'), location.href).toString();
   const instruction = `Read ${skill} and contribute to London Chinese Food as a collector.`;
   return (
@@ -19,6 +21,15 @@ export function ContributePage() {
         <h1>{copy.contribute.title}</h1>
         <p className="desc">{copy.contribute.lead}</p>
       </header>
+      <section className="section contribute suggest-place">
+        <h2>
+          <Icon name="pin" /> {copy.contribute.placeTitle}
+        </h2>
+        <p>{copy.contribute.placeText}</p>
+        <Button variant="primary" icon="plus" onClick={() => setSuggesting(true)}>
+          {copy.contribute.placeButton}
+        </Button>
+      </section>
       <section className="section contribute">
         <h2>
           <Icon name="bot" /> {copy.contribute.agentTitle}
@@ -51,6 +62,7 @@ export function ContributePage() {
         </h2>
         <p>{copy.contribute.photosText}</p>
       </section>
+      <PlaceSheet open={suggesting} onClose={() => setSuggesting(false)} />
     </div>
   );
 }

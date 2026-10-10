@@ -95,6 +95,7 @@ JSON, public records only, open to any origin.
 | `POST /api/records/<id>/report` | A reader reports a problem or asks for a takedown, 10 per IP an hour |
 | `POST /api/places/<id>/photos` | A visitor's photo, or up to 10 pages of a menu as one set (multipart, Turnstile), held for review; a menu's pages become one item for collectors to type up |
 | `POST /api/places/<id>/menu-links` | A visitor's link to the place's menu online (a page, PDF or image; Turnstile): a `menu-link` item for collectors, never shown itself |
+| `POST /api/leads` | A place a visitor says the site is missing (`name`, `where`, an optional `url` and `note`; Turnstile): a `lead` for collectors, never shown itself, or `{ status: "listed", place }` when a public place at that postcode has a name alike |
 
 **Open data** (CC BY 4.0; review excerpts stay out): `/export/places.csv`, `/export/places.json`
 and `/export/menus.jsonl.gz`.

@@ -369,6 +369,12 @@ export function canonicalPostcode(raw: string): string | null {
   return match ? `${match[1]} ${match[2]}` : null;
 }
 
+/** The first full UK postcode written anywhere in a text ("28 Gerrard St, w1d6jw"), in its written form, or null. */
+export function findPostcode(text: string): string | null {
+  const match = /(?<![A-Z0-9])([A-Z]{1,2}[0-9][A-Z0-9]?)\s*([0-9][A-Z]{2})(?![A-Z0-9])/i.exec(text);
+  return match ? canonicalPostcode(`${match[1]}${match[2]}`) : null;
+}
+
 /** A record id, as the server makes them. */
 export const RECORD_ID = /^rec_[0-9a-z]{26}$/;
 /** A reference to an earlier record of the same batch. */

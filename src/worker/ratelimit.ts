@@ -38,6 +38,14 @@ export const RULES = {
   /** Menu links a visitor sends, per client IP. */
   menuLinkPerHour: { limit: 10, windowMs: HOUR },
   menuLinkPerDay: { limit: 30, windowMs: DAY },
+  /** Places a visitor suggests, per client IP. */
+  leadPerHour: { limit: 5, windowMs: HOUR },
+  leadPerDay: { limit: 20, windowMs: DAY },
+  /**
+   * Visitors' suggestions the whole site takes in a day: each is a lead some collector researches.
+   * Counted only for suggestions that passed every other check.
+   */
+  leadsPerDay: { limit: 100, windowMs: DAY },
 } as const satisfies Record<string, RateRule>;
 
 const windowIndex = (nowMs: number, windowMs: number) => Math.floor(nowMs / windowMs);

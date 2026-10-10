@@ -45,6 +45,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <p>{copy.attribution}</p>
           <p className="foot-links">
             <Link href={paths.page(locale, 'about')}>{copy.nav.about}</Link>
+            <Link href={paths.page(locale, 'contribute')}>{copy.nav.contribute}</Link>
             <Link href={paths.page(locale, 'privacy')}>{copy.privacy.title}</Link>
             <a href="https://github.com/manyfold-open/manyfold-london-chinese-food" rel="noopener">
               GitHub <Icon name="external" size={12} />

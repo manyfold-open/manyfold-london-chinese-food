@@ -4,7 +4,8 @@
  * by how good they are: by distance, by the newest review, or by name.
  */
 
-import { normName } from './kinds.ts';
+import { findPostcode, normName } from './kinds.ts';
+import { coreName, namesAlike } from './names.ts';
 import type { IndexEntry } from './place-doc.ts';
 
 export type PlaceSort = 'distance' | 'recent' | 'name';
@@ -121,4 +122,40 @@ export function facetCounts(entries: readonly IndexEntry[], query: PlaceQuery): 
     if (counted('withPhotos') && entry.p > 0) counts.withPhotos += 1;
   }
   return counts;
+}
+
+/**
+ * Whether a name being typed may be a place listed under `listed`, anywhere in London: the listed
+ * name holds what was typed (in full, or its start), or is the same name spelled another way, or
+ * most of a longer name typed. A short listed name inside a long typed one ("Noodle Express" in
+ * "Palace Test Noodles") is not enough without the postcode.
+ */
+function typedLike(typed: string, listed: string): boolean {
+  const mine = coreName({ name_en: typed });
+  const theirs = coreName({ name_en: listed });
+  if (!mine || !theirs) return false;
+  if (theirs.includes(mine)) return mine === theirs || mine.length >= (/\p{Script=Han}/u.test(mine) ? 2 : 3);
+  return namesAlike({ name_en: typed }, { name_en: listed }) && theirs.length * 5 >= mine.length * 3;
+}
+
+/**
+ * Places already listed that may be the one a visitor is about to suggest: those at the postcode
+ * they wrote named alike (as the server tells a duplicate), those elsewhere named like what they
+ * typed, then the others at that postcode. The suggestion form shows them before anything is sent.
+ */
+export function listedLike(entries: readonly IndexEntry[], name: string, where: string, most = 5): IndexEntry[] {
+  const wanted = name.trim();
+  const postcode = findPostcode(where);
+  const names = (entry: IndexEntry) => [entry.n, entry.z].filter((other): other is string => other !== null);
+  const here = (entry: IndexEntry) => postcode !== null && entry.pc !== null && compact(entry.pc) === compact(postcode);
+  const rank = (entry: IndexEntry) => {
+    if (here(entry)) return names(entry).some((other) => namesAlike({ name_en: wanted }, { name_en: other })) ? 0 : 2;
+    return names(entry).some((other) => typedLike(wanted, other)) ? 1 : 3;
+  };
+  return entries
+    .map((entry) => ({ entry, rank: rank(entry) }))
+    .filter(({ rank }) => rank < 3)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, most)
+    .map(({ entry }) => entry);
 }

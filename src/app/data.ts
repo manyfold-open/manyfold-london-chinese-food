@@ -3,7 +3,8 @@
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import { useApi } from './api';
 
-export const useIndex = () => useApi<{ places: IndexEntry[] }>('/api/index');
+/** Every public place, one short line each; `wanted` false leaves it unloaded until a page needs it. */
+export const useIndex = (wanted = true) => useApi<{ places: IndexEntry[] }>(wanted ? '/api/index' : null);
 
 export const usePlace = (id: string) => useApi<PlaceDoc>(`/api/places/${encodeURIComponent(id)}`);
 

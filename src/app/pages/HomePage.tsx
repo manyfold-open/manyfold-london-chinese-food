@@ -17,13 +17,14 @@ import { normName } from '../../shared/kinds';
 import type { IndexEntry } from '../../shared/place-doc';
 import { distanceKm, facetCounts, queryPlaces, type PlaceSort } from '../../shared/places-query';
 import { FilterPanel, filterCount, NO_FILTERS, readFilters, type Filters } from '../components/Filters';
-import type { Camera } from '../components/MapView';
 import { PlaceCard, PlaceRow } from '../components/PlaceRow';
+import { PlaceSheet } from '../components/Sheets';
 import { useDishCatalog, useIndex } from '../data';
+import { readCamera, readNear, useLocate, type Camera, type Near } from '../geo';
 import { useCopy, useLocale } from '../i18n';
 import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
-import { Button, Icon, Pill, SearchField, Segmented, Select, Sheet, Skeleton, useToast } from '../ui';
+import { Button, Icon, Pill, SearchField, Segmented, Select, Sheet, Skeleton } from '../ui';
 
 const MapView = lazy(() => import('../components/MapView'));
 
@@ -40,7 +41,7 @@ interface HomeState {
   layout: Layout;
   /** Places shown so far: "Show more" adds a page. */
   shown: number;
-  near: { lat: number; lng: number } | null;
+  near: Near | null;
   camera: Camera | null;
 }
 
@@ -48,7 +49,6 @@ const SORTS: readonly PlaceSort[] = ['distance', 'recent', 'name'];
 const LAYOUTS: readonly Layout[] = ['list', 'grid', 'map'];
 const isSort = (value: unknown): value is PlaceSort => SORTS.includes(value as PlaceSort);
 const isLayout = (value: unknown): value is Layout => LAYOUTS.includes(value as Layout);
-const finite = (...values: unknown[]) => values.every((value) => typeof value === 'number' && Number.isFinite(value));
 
 /** The search this tab had last: a new visit to the page in the same tab starts from it. */
 let last: HomeState | null = null;
@@ -68,29 +68,26 @@ function saved(): Pick<HomeState, 'filters' | 'sort' | 'layout'> {
 function readHome(stored: unknown): HomeState {
   if (!stored || typeof stored !== 'object') return last ? { ...last, shown: PAGE } : { ...saved(), q: '', shown: PAGE, near: null, camera: null };
   const value = stored as Partial<Record<keyof HomeState, unknown>>;
-  const near = value.near as Partial<{ lat: unknown; lng: unknown }> | null | undefined;
-  const camera = value.camera as Partial<Record<keyof Camera, unknown>> | null | undefined;
   return {
     q: typeof value.q === 'string' ? value.q : '',
     filters: readFilters(value.filters),
     sort: isSort(value.sort) ? value.sort : 'recent',
     layout: isLayout(value.layout) ? value.layout : 'list',
     shown: typeof value.shown === 'number' && value.shown > PAGE ? Math.floor(value.shown) : PAGE,
-    near: near && finite(near.lat, near.lng) ? { lat: near.lat as number, lng: near.lng as number } : null,
-    camera: camera && finite(camera.lng, camera.lat, camera.zoom) ? (camera as Camera) : null,
+    near: readNear(value.near),
+    camera: readCamera(value.camera),
   };
 }
 
 export function HomePage() {
   const copy = useCopy();
   const locale = useLocale();
-  const toast = useToast();
   const index = useIndex();
   const [home, setHome] = useEntryState('home', readHome);
   const { filters, sort, layout, shown, near } = home;
   const q = useDeferredValue(home.q.trim());
-  const [locating, setLocating] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const head = useRef<HTMLDivElement>(null);
   const sortLabel = useId();
   const catalog = useDishCatalog(q.length > 0);
@@ -133,28 +130,9 @@ export function HomePage() {
     toTop();
   };
 
-  const locate = () => {
-    if (near) {
-      refine({ near: null, sort: sort === 'distance' ? 'recent' : sort });
-      return;
-    }
-    if (!navigator.geolocation) {
-      toast(copy.home.nearDenied);
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocating(false);
-        refine({ near: { lat: position.coords.latitude, lng: position.coords.longitude }, sort: 'distance' });
-      },
-      () => {
-        setLocating(false);
-        toast(copy.home.nearDenied);
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
-    );
-  };
+  // Where the reader is sorts the list by distance and marks them on the map; "Near me" again forgets it.
+  const { locating, locate } = useLocate((found) => refine({ near: found, sort: 'distance' }));
+  const toggleNear = () => (near ? refine({ near: null, sort: sort === 'distance' ? 'recent' : sort }) : locate());
 
   const set = filterCount(filters);
   const km = (entry: IndexEntry) => (near && entry.la !== null && entry.lo !== null ? distanceKm(near, { lat: entry.la, lng: entry.lo }) : null);
@@ -205,7 +183,7 @@ export function HomePage() {
             {copy.home.filters}
             {set > 0 ? ` · ${set}` : ''}
           </Pill>
-          <Pill icon="locate" active={near !== null} aria-pressed={near !== null} onClick={locate} disabled={locating}>
+          <Pill icon="locate" active={near !== null} aria-pressed={near !== null} onClick={toggleNear} disabled={locating}>
             {copy.home.near}
           </Pill>
           <span className="sort">
@@ -249,7 +227,15 @@ export function HomePage() {
       <div className="results">
         {layout === 'map' ? (
           <Suspense fallback={<div className="map" />}>
-            <MapView entries={found} locale={locale} near={near} camera={home.camera} onCamera={(camera) => setHome((previous) => ({ ...previous, camera }))} />
+            <MapView
+              entries={found}
+              locale={locale}
+              near={near}
+              camera={home.camera}
+              onCamera={(camera) => setHome((previous) => ({ ...previous, camera }))}
+              onLocate={locate}
+              locating={locating}
+            />
           </Suspense>
         ) : index.data === null ? (
           <div className={layout === 'grid' ? 'place-grid' : 'place-list'}>
@@ -283,7 +269,17 @@ export function HomePage() {
             ) : null}
           </>
         )}
+        {/* Someone searching by name who does not find a place may know one the site is missing. */}
+        {q && layout !== 'map' && index.data ? (
+          <p className="suggest-line">
+            <button type="button" className="link-button" onClick={() => setSuggesting(true)}>
+              <Icon name="plus" size={14} /> {copy.home.suggest}
+            </button>
+          </p>
+        ) : null}
       </div>
+
+      <PlaceSheet open={suggesting} onClose={() => setSuggesting(false)} name={dishes.length === 0 ? q : ''} />
 
       <Sheet
         open={sheet}

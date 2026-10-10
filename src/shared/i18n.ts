@@ -65,7 +65,9 @@ export interface Copy {
     placesMatching: string;
     loading: string;
     servedAt: (count: number) => string;
+    suggest: string;
   };
+  map: { locate: string; you: string };
   place: {
     menu: string;
     reviews: string;
@@ -94,6 +96,7 @@ export interface Copy {
     website: string;
     phone: string;
     address: string;
+    mapApps: { google: string; apple: string; osm: string };
     opened: string;
     closedOn: string;
     reviewsNotice: string;
@@ -144,7 +147,37 @@ export interface Copy {
     sent: string;
   };
   report: { title: string; wrong: string; takedown: string; reason: string; send: string; sent: string };
-  contribute: { title: string; lead: string; agentTitle: string; agentText: string; copy: string; copied: string; skill: string; photosTitle: string; photosText: string };
+  contribute: {
+    title: string;
+    lead: string;
+    placeTitle: string;
+    placeText: string;
+    placeButton: string;
+    agentTitle: string;
+    agentText: string;
+    copy: string;
+    copied: string;
+    skill: string;
+    photosTitle: string;
+    photosText: string;
+  };
+  suggest: {
+    title: string;
+    lead: string;
+    name: string;
+    nameHelp: string;
+    where: string;
+    whereHelp: string;
+    link: string;
+    linkHelp: string;
+    note: string;
+    notePlaceholder: string;
+    maybeListed: string;
+    listed: string;
+    send: string;
+    sent: string;
+    errors: Record<'outside_london' | 'unknown_postcode' | 'rate_limited', string>;
+  };
   about: { title: string; paragraphs: string[]; dataTitle: string; dataText: string; downloads: { csv: string; json: string; menus: string } };
   privacy: { title: string; paragraphs: string[] };
   notFound: { title: string; text: string; home: string };
@@ -191,7 +224,9 @@ const zh: Copy = {
     placesMatching: '店铺',
     loading: '加载中',
     servedAt: (count) => `${count} 家店有`,
+    suggest: '没找到想找的店？推荐给我们',
   },
+  map: { locate: '显示我的位置', you: '你的位置' },
   place: {
     menu: '菜单',
     reviews: '评价',
@@ -220,6 +255,7 @@ const zh: Copy = {
     website: '网站',
     phone: '电话',
     address: '地址',
+    mapApps: { google: 'Google 地图', apple: 'Apple 地图', osm: 'OpenStreetMap' },
     opened: '开业',
     closedOn: '关闭',
     reviewsNotice: '这里只摘录评价原文、不收评分。按时间读下去，自己判断。',
@@ -281,7 +317,10 @@ const zh: Copy = {
   report: { title: '报告问题', wrong: '信息有误', takedown: '我是作者或权利人，请下架', reason: '说明', send: '发送', sent: '收到了，我们会尽快处理。' },
   contribute: {
     title: '参与贡献',
-    lead: '这里的数据由 AI agent 收集、由另一些 agent 逐条核对。你可以让自己的 agent 来帮忙，也可以上传你拍的照片。',
+    lead: '这里的数据由 AI agent 收集、由另一些 agent 逐条核对。你可以推荐还没收录的店、上传你拍的照片，也可以让自己的 agent 来帮忙。',
+    placeTitle: '推荐一家还没收录的店',
+    placeText: '知道一家能吃到或买到中国食物、这里却还没有的店？告诉我们店名和在哪里就行。agent 会去网上找到它、核实它卖中国食物，审核通过后就会出现在网站上。',
+    placeButton: '推荐一家店',
     agentTitle: '让你的 AI agent 参与',
     agentText: '把下面这句话发给你的 agent：',
     copy: '复制',
@@ -289,6 +328,27 @@ const zh: Copy = {
     skill: '阅读 SKILL.md',
     photosTitle: '上传照片',
     photosText: '在任意店铺页面点“上传照片”。照片经审核后公开，以 CC BY 4.0 许可署你的名字。菜单也一样：在店铺的菜单栏点“添加菜单”，贴上菜单网址，或者拍下每一页。',
+  },
+  suggest: {
+    title: '推荐一家店',
+    lead: '你填的内容不会直接公开：agent 会照着它去网上找到这家店，核对通过后才显示。',
+    name: '店名',
+    nameHelp: '中文名或英文名都可以。',
+    where: '地址或邮编',
+    whereHelp: '例如 28 Gerrard Street, W1D 6JW。只收大伦敦地区的店。',
+    link: '相关链接（选填）',
+    linkHelp: '店家官网或社交媒体、Google 地图、外卖平台或一篇评价都行，最好能看出它卖什么。',
+    note: '补充说明（选填）',
+    notePlaceholder: '例如 主要卖什么、什么时候开的',
+    maybeListed: '这些店已经收录了，是其中一家吗？',
+    listed: '这家店已经收录了：',
+    send: '提交',
+    sent: '收到了，谢谢！agent 核实后，这家店就会出现在网站上。',
+    errors: {
+      outside_london: '这个邮编不在大伦敦地区，这里只收伦敦的店。',
+      unknown_postcode: '找不到这个邮编。请检查一下，或者去掉邮编，只写街道和区域。',
+      rate_limited: '你刚刚提交了好几次，请过一会儿再试。',
+    },
   },
   about: {
     title: '关于',
@@ -306,8 +366,8 @@ const zh: Copy = {
   privacy: {
     title: '隐私',
     paragraphs: [
-      '这个网站不用分析或广告 cookie。你选的语言、主题和筛选条件只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序，不会发送给我们。',
-      '上传照片时，我们会删除照片里的全部元数据（包括位置），只保存重新编码后的图片。为了防止滥用，我们会对 IP 地址做哈希后计数，不保存 IP 本身。上传表单使用 Cloudflare Turnstile 验证你是人。',
+      '这个网站不用分析或广告 cookie。你选的语言、主题和筛选条件只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序、在地图上标出你在哪，不会发送给我们。',
+      '上传照片时，我们会删除照片里的全部元数据（包括位置），只保存重新编码后的图片。为了防止滥用，我们按 IP 地址的哈希计算你上传和提交的次数（照片、菜单、推荐的店），不保存 IP 本身。这些表单使用 Cloudflare Turnstile 验证你是人。',
       '地图由 OpenFreeMap 提供，查看地图时你的浏览器会向它请求地图图块。',
       '想删除你上传的照片或其他内容，请写信到 hi@manyfold.ai。',
     ],
@@ -355,7 +415,9 @@ const en: Copy = {
     placesMatching: 'Places',
     loading: 'Loading',
     servedAt: (count) => `at ${count} ${count === 1 ? 'place' : 'places'}`,
+    suggest: 'Not finding a place? Suggest it',
   },
+  map: { locate: 'Show where I am', you: 'You are here' },
   place: {
     menu: 'Menu',
     reviews: 'Reviews',
@@ -384,6 +446,7 @@ const en: Copy = {
     website: 'Website',
     phone: 'Phone',
     address: 'Address',
+    mapApps: { google: 'Google Maps', apple: 'Apple Maps', osm: 'OpenStreetMap' },
     opened: 'Opened',
     closedOn: 'Closed',
     reviewsNotice: 'Only what reviewers wrote, never their scores. Read through the years and judge for yourself.',
@@ -445,7 +508,10 @@ const en: Copy = {
   report: { title: 'Report a problem', wrong: 'Something is wrong', takedown: 'I am the author or rights holder: take it down', reason: 'What is it?', send: 'Send', sent: 'Thank you, we will look at it soon.' },
   contribute: {
     title: 'Contribute',
-    lead: 'AI agents collect the data here, and other agents check every record before it is public. Your agent can help, and you can add photos you took.',
+    lead: 'AI agents collect the data here, and other agents check every record before it is public. You can suggest a place we have not listed, add photos you took, or let your own agent help.',
+    placeTitle: 'Suggest a place we have not listed',
+    placeText: 'Know a place to eat or buy Chinese food that is not here yet? Tell us its name and where it is. An agent finds it online and checks that it sells Chinese food, and it appears on the site once checked.',
+    placeButton: 'Suggest a place',
     agentTitle: 'Contribute with your AI agent',
     agentText: 'Give your agent this sentence:',
     copy: 'Copy',
@@ -453,6 +519,27 @@ const en: Copy = {
     skill: 'Read SKILL.md',
     photosTitle: 'Add photos',
     photosText: 'On any place’s page, use “Add a photo”. Photos are published under CC BY 4.0 with your credit, once checked. Menus too: in a place’s menu tab, use “Add the menu” to send the link to it, or a photo of each page.',
+  },
+  suggest: {
+    title: 'Suggest a place',
+    lead: 'What you send is not shown as it is: an agent looks the place up from it, and it appears once checked.',
+    name: 'Name',
+    nameHelp: 'In English or Chinese.',
+    where: 'Address or postcode',
+    whereHelp: 'For example 28 Gerrard Street, W1D 6JW. Places in Greater London only.',
+    link: 'A link (optional)',
+    linkHelp: 'Its website or social media, Google Maps, a delivery app or a review: ideally a page that shows what it sells.',
+    note: 'Anything else (optional)',
+    notePlaceholder: 'What it serves, when it opened…',
+    maybeListed: 'Already listed? It may be one of these:',
+    listed: 'We list it already:',
+    send: 'Send',
+    sent: 'Thank you! Once an agent has found and checked it, it appears on the site.',
+    errors: {
+      outside_london: 'That postcode is outside Greater London, and the site lists places in London only.',
+      unknown_postcode: 'We cannot find that postcode. Check it, or leave it out and give the street and area.',
+      rate_limited: 'You have sent several just now: try again in a while.',
+    },
   },
   about: {
     title: 'About',
@@ -470,8 +557,8 @@ const en: Copy = {
   privacy: {
     title: 'Privacy',
     paragraphs: [
-      'This site uses no analytics or advertising cookies. Your choice of language, theme and filters is kept in your browser only. When you use “Near me”, your location sorts places by distance in your browser and is never sent to us.',
-      'When you upload a photo, all its metadata (location included) is removed and only the re-encoded image is kept. To prevent abuse we count uploads by a hash of your IP address and never store the address. The upload form uses Cloudflare Turnstile to check you are a person.',
+      'This site uses no analytics or advertising cookies. Your choice of language, theme and filters is kept in your browser only. When you use “Near me”, your location sorts places by distance and marks where you are on the map, in your browser, and is never sent to us.',
+      'When you upload a photo, all its metadata (location included) is removed and only the re-encoded image is kept. To prevent abuse we count what you send (photos, menus, places you suggest) by a hash of your IP address and never store the address. These forms use Cloudflare Turnstile to check you are a person.',
       'Maps come from OpenFreeMap: viewing a map, your browser asks it for map tiles.',
       'To remove a photo you uploaded, or anything else, write to hi@manyfold.ai.',
     ],

@@ -184,6 +184,14 @@ export interface AdminWorkItem extends WorkItem {
   updated_at: string;
 }
 
+/**
+ * What a visitor's suggestion of a place gets back (POST /api/leads): received, as a lead for
+ * collectors; or the public place it already is.
+ */
+export type SuggestPlaceResponse =
+  | { status: 'received' }
+  | { status: 'listed'; place: { id: string; name_en: string | null; name_zh: string | null } };
+
 export type WorkType = 'lead' | 'menu' | 'menu-link' | 'reviews' | 'transcribe' | 'illustrate';
 export const WORK_TYPES: readonly WorkType[] = ['lead', 'menu', 'menu-link', 'reviews', 'transcribe', 'illustrate'];
 

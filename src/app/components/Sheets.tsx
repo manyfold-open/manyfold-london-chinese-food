@@ -1,9 +1,17 @@
-/** What a reader can send: a photo they took, a place's menu (a link, or photos of its pages), and a report on something wrong. */
+/**
+ * What a reader can send: a photo they took, a place's menu (a link, or photos of its pages), a
+ * place the site is missing, and a report on something wrong.
+ */
 
-import { useEffect, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { listedLike } from '../../shared/places-query';
+import type { SuggestPlaceResponse } from '../../shared/types';
 import { ApiError, getJson, postForm, postJson } from '../api';
+import { useIndex } from '../data';
 import { useCopy, useLocale } from '../i18n';
-import { subjectLabel } from '../labels';
+import { boroughLabel, placeNames, subjectLabel } from '../labels';
+import { Link } from '../router';
+import { paths } from '../routes';
 import { Button, CheckRow, RadioPills, Sheet, Textarea, TextField, useToast } from '../ui';
 
 const SUBJECTS = ['dish', 'menu', 'storefront', 'interior', 'other'] as const;
@@ -237,6 +245,134 @@ export function MenuSheet({ open, onClose, placeId }: { open: boolean; onClose: 
         {error ? <p className="form-error">{error}</p> : null}
         <Button variant="primary" disabled={!ready || busy} onClick={send}>
           {busy ? copy.upload.sending : copy.menuSheet.send}
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
+type Listed = Extract<SuggestPlaceResponse, { status: 'listed' }>['place'];
+
+/**
+ * A place the site does not list yet: its name and where it is, perhaps a link and a note. It goes
+ * to collectors as a lead and shows only once an agent has found it and a maintainer has checked
+ * it. Places already listed that look like it are shown as the visitor types, so they find theirs
+ * rather than send it again; `name` starts the form from what they searched for.
+ */
+export function PlaceSheet({ open, onClose, name: searched = '' }: { open: boolean; onClose: () => void; name?: string }) {
+  const copy = useCopy();
+  const locale = useLocale();
+  const toast = useToast();
+  const [name, setName] = useState(searched);
+  const [where, setWhere] = useState('');
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [answer, setAnswer] = useState<string | null>(null);
+  // A Turnstile answer counts once: after a failed send the check runs again.
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [listed, setListed] = useState<Listed | null>(null);
+  const index = useIndex(open);
+  const typedName = useDeferredValue(name);
+  const typedWhere = useDeferredValue(where);
+  const alike = useMemo(() => listedLike(index.data?.places ?? [], typedName, typedWhere), [index.data, typedName, typedWhere]);
+
+  useEffect(() => {
+    if (open && searched) setName(searched);
+  }, [open, searched]);
+
+  const edit = (set: (value: string) => void) => (value: string) => {
+    set(value);
+    setListed(null);
+  };
+  const linked = url.trim() === '' || /^https?:\/\/[^\s/]+\.[^\s]+$/.test(url.trim());
+  const ready = Boolean(answer) && name.trim().length >= 2 && where.trim().length >= 2 && linked;
+
+  const send = async () => {
+    if (!answer) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const outcome = await postJson<SuggestPlaceResponse>('/api/leads', {
+        name: name.trim(),
+        where: where.trim(),
+        ...(url.trim() ? { url: url.trim() } : {}),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        'cf-turnstile-response': answer,
+      });
+      if (outcome.status === 'listed') {
+        setListed(outcome.place);
+        return;
+      }
+      toast(copy.suggest.sent);
+      setName('');
+      setWhere('');
+      setUrl('');
+      setNote('');
+      onClose();
+    } catch (failure) {
+      const known = failure instanceof ApiError && Object.hasOwn(copy.suggest.errors, failure.code) ? copy.suggest.errors[failure.code as keyof typeof copy.suggest.errors] : null;
+      setError(known ?? (failure instanceof ApiError ? failure.message : copy.upload.failed));
+      setAnswer(null);
+      setAttempt((previous) => previous + 1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} title={copy.suggest.title} onClose={onClose} closeLabel={copy.close}>
+      <div className="form">
+        <p className="form-note">{copy.suggest.lead}</p>
+        <label className="field">
+          <span>{copy.suggest.name}</span>
+          <TextField value={name} maxLength={120} autoComplete="off" data-autofocus onChange={(event) => edit(setName)(event.target.value)} />
+          <small className="field-help">{copy.suggest.nameHelp}</small>
+        </label>
+        <label className="field">
+          <span>{copy.suggest.where}</span>
+          <TextField value={where} maxLength={200} onChange={(event) => edit(setWhere)(event.target.value)} />
+          <small className="field-help">{copy.suggest.whereHelp}</small>
+        </label>
+        {listed ? (
+          <p className="notice" role="status">
+            {copy.suggest.listed}{' '}
+            <Link href={paths.place(locale, listed.id)} onClick={onClose}>
+              {placeNames({ en: listed.name_en, zh: listed.name_zh }, locale).main}
+            </Link>
+          </p>
+        ) : alike.length > 0 ? (
+          <div className="listed-like">
+            <p className="field-help">{copy.suggest.maybeListed}</p>
+            <ul>
+              {alike.map((entry) => {
+                const names = placeNames({ en: entry.n, zh: entry.z }, locale);
+                return (
+                  <li key={entry.id}>
+                    <Link href={paths.place(locale, entry.id, entry.s)} onClick={onClose}>
+                      {names.main}
+                    </Link>
+                    <span className="muted">{[names.other, entry.pc, boroughLabel(entry.b, locale)].filter(Boolean).join(' · ')}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+        <label className="field">
+          <span>{copy.suggest.link}</span>
+          <TextField type="url" inputMode="url" placeholder="https://" value={url} maxLength={500} onChange={(event) => setUrl(event.target.value)} />
+          <small className="field-help">{copy.suggest.linkHelp}</small>
+        </label>
+        <label className="field">
+          <span>{copy.suggest.note}</span>
+          <Textarea rows={3} maxLength={300} placeholder={copy.suggest.notePlaceholder} value={note} onChange={(event) => setNote(event.target.value)} />
+        </label>
+        {open ? <Turnstile key={attempt} onAnswer={setAnswer} /> : null}
+        {error ? <p className="form-error">{error}</p> : null}
+        <Button variant="primary" disabled={!ready || busy} onClick={send}>
+          {busy ? copy.upload.sending : copy.suggest.send}
         </Button>
       </div>
     </Sheet>

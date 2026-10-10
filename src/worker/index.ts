@@ -17,7 +17,8 @@
  *   GET  /api/tasks?limit=&kind=      maintainers: lease tasks (and list the ones held)
  *   POST /api/verdicts                maintainers: up to 20 verdicts on leased tasks
  *
- * Readers: POST /api/records/:id/report (a problem, or a takedown request), limited per IP.
+ * Readers: POST /api/records/:id/report (a problem, or a takedown request), limited per IP, and
+ * POST /api/leads (a place the site is missing, a lead for collectors; Turnstile).
  *
  * Open data (CC BY 4.0, src/worker/exports.ts): /export/places.csv, /export/places.json and
  * /export/menus.jsonl.gz, never review excerpts.
@@ -70,7 +71,7 @@ import { mountOf, publicUrl, withMount } from './mount';
 import { replaceIllustration, syncIllustrateWork, updateIllustrationSettings } from './illustrations';
 import { asJpeg, deleteImage, imageResponse, type MediaKind } from './media';
 import { enforce, RULES, sweep } from './ratelimit';
-import { suggestMenuLink, uploadIllustration, uploadPhoto } from './uploads';
+import { suggestMenuLink, suggestPlace, uploadIllustration, uploadPhoto } from './uploads';
 import { pathMeta, placeMeta, preferredLocale, sitemap, withMeta } from './seo';
 import { blockedHosts, illustrationSettings, putSetting } from './settings';
 import { collectorSkill, FOCUSES, maintainerSkill, publicSkill, schemaDocument, skillVersion, type Focus } from './skill';
@@ -331,6 +332,14 @@ app.post('/api/places/:id/menu-links', async (c) => {
   const origin = c.req.header('origin');
   if (origin !== undefined && origin !== new URL(c.req.url).origin) throw new HttpError(403, 'cross_origin', 'Send menu links from this site’s own form.');
   return c.json(await suggestMenuLink(c.env, c.req.param('id'), await body(c), { ip: ipOf(c), hosts: formHosts(c), now: new Date() }), 201);
+});
+
+/** A place a visitor says the site is missing: a lead for collectors (uploads.ts, suggestPlace), or the place it already lists. */
+app.post('/api/leads', async (c) => {
+  const origin = c.req.header('origin');
+  if (origin !== undefined && origin !== new URL(c.req.url).origin) throw new HttpError(403, 'cross_origin', 'Suggest places from this site’s own form.');
+  const outcome = await suggestPlace(c.env, await body(c), { ip: ipOf(c), hosts: formHosts(c), now: new Date() });
+  return c.json(outcome, outcome.status === 'received' ? 201 : 200);
 });
 
 /* ───────── agents ───────── */

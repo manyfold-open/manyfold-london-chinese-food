@@ -32,8 +32,9 @@ whose collector and maintainer mechanism this site reuses.
    `wrangler secret` or the reader's own `.env`, never in the repo.
 9. **Seeds are checked facts; leads are hints.** A seed record needs a source page and a quote
    copied word for word from it (`npm run quotes:verify`). Leads (OpenStreetMap, the Food Standards
-   Agency) only tell collectors where to look: they are never published, and no hygiene score is
-   ever stored. A page that names a record without showing what it needs is never its source: a
+   Agency, places visitors suggest) only tell collectors where to look: they are never published,
+   and no hygiene score is ever stored. A page that names a record without showing what it needs
+   is never its source: a
    kind declares such hosts in `sourceNotAlone` (a place: ratings.food.gov.uk, and openstreetmap.org,
    whose entries are leads under a licence the exports cannot carry), and
    `validateProvenance` refuses them at submit, in verdicts and in the admin's decisions; the admin
@@ -78,7 +79,7 @@ whose collector and maintainer mechanism this site reuses.
     Media waiting for review is served only to the maintainer holding its task and to the admin.
 20. **Visitor uploads are gated cheapest first:** same origin, per-IP limits, size, the place,
     Turnstile on the server, then the site-wide daily count, last, so one address cannot close the
-    form for everyone.
+    form for everyone. A visitor's suggestion of a place (`POST /api/leads`) is gated the same way.
 21. **Mountable under BASE_PATH.** The site lives at app.manyfold.ai/london-chinese-food and at the
     root of its workers.dev host. Only `src/worker/mount.ts` knows the prefix; links handed to
     browsers and agents go through `publicUrl`, the app's fetches through `appUrl`, and cache keys
@@ -97,7 +98,9 @@ whose collector and maintainer mechanism this site reuses.
     waiting for review leaves room for, a short hand-out says why, and an item no one could finish
     is closed, not handed out again: a lead whose answer was rejected twice is dismissed
     (`src/worker/effects.ts`), and leads are qualified before they go out
-    (`scripts/qualify-leads.ts`: the FSA still lists them, and a page shows their food).
+    (`scripts/qualify-leads.ts`: the FSA still lists them, and a page shows their food); a visitor's
+    suggestion becomes a lead only with a postcode, when it gives one, in Greater London and no
+    place there already listed under a name alike (`suggestPlace`, src/worker/uploads.ts).
 25. **Doubt goes to whoever can settle it, and only then to people.** An `unsure` verdict names why
     (`unsure_type`): a page others cannot open goes to a maintainer with a browser (a token
     capability), a duplicate of a record still waiting is parked until that one is decided, sources

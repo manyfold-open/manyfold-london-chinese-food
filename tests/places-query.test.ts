@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IndexEntry } from '../src/shared/place-doc';
-import { facetCounts, queryPlaces } from '../src/shared/places-query';
+import { facetCounts, listedLike, queryPlaces } from '../src/shared/places-query';
 
 const entry = (id: string, fields: Partial<IndexEntry>): IndexEntry => ({
   id,
@@ -66,5 +66,38 @@ describe('finding places', () => {
     const counts = facetCounts(places, { q: 'tea' });
     expect(counts.categories).toEqual({ 'tea-drinks': 1 });
     expect(counts.withPhotos).toBe(1);
+  });
+});
+
+describe('places a suggestion may already be', () => {
+  const listed = [
+    entry('a', { n: 'Golden Dragon', pc: 'W1D 6JW' }),
+    entry('b', { n: 'Golden Dragon Express', pc: 'N7 8AB' }),
+    entry('c', { n: 'Lotus Garden', z: '莲花园', pc: 'W1D 6JW' }),
+    entry('d', { n: 'Noodle Bar', pc: 'E14 5AB' }),
+    entry('e', { n: 'Noodle Express', pc: 'SE1 7PB' }),
+  ];
+  const ids = (name: string, where: string) => listedLike(listed, name, where).map((place) => place.id);
+
+  it('shows the places named alike, the one at the postcode written first', () => {
+    expect(ids('golden dragon', '')).toEqual(['a', 'b']);
+    expect(ids('Golden Dragon', 'N7 8AB')).toEqual(['b', 'a']);
+    expect(ids('莲花园', '')).toEqual(['c']);
+  });
+
+  it('shows the other places at that postcode after them, and nothing for a word or two of nothing', () => {
+    expect(ids('Golden Dragon', '28 Gerrard St, w1d 6jw')).toEqual(['a', 'b', 'c']);
+    expect(ids('Sichuan House', 'E14 5AB')).toEqual(['d']);
+    expect(ids('Sichuan House', 'Canary Wharf')).toEqual([]);
+    expect(ids('x', '')).toEqual([]);
+  });
+
+  it('takes a name typed in part, but not a short name inside a longer one typed', () => {
+    expect(ids('Golden Dr', '')).toEqual(['a', 'b']);
+    expect(ids('Noodle', '')).toEqual(['d', 'e']);
+    expect(ids('Palace Test Noodles', '')).toEqual([]);
+    // At the postcode written, the same test the server makes: a name inside the other is alike.
+    expect(ids('Noodle', 'E14 5AB')).toEqual(['d', 'e']);
+    expect(ids('Lotus', 'W1D 6JW')).toEqual(['c', 'a']);
   });
 });

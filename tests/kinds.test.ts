@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_KINDS, KIND_CONFIGS } from '../kinds/index';
 import {
   canonicalPostcode,
+  findPostcode,
   checkAccept,
   identityKey,
   isMostlyCjk,
@@ -194,6 +195,13 @@ describe('identity', () => {
     expect(canonicalPostcode('sw1a1aa')).toBe('SW1A 1AA');
     expect(canonicalPostcode('EC1V 9BD')).toBe('EC1V 9BD');
     expect(canonicalPostcode('NOT A CODE')).toBeNull();
+  });
+
+  it('finds a postcode written anywhere in an address', () => {
+    expect(findPostcode('28 Gerrard Street, London w1d6jw')).toBe('W1D 6JW');
+    expect(findPostcode('Unit 3, 1 Example Road, EC1V 9BD (by the station)')).toBe('EC1V 9BD');
+    expect(findPostcode('Queensway, Bayswater W2')).toBeNull();
+    expect(findPostcode('Floor 2A, Soho')).toBeNull();
   });
 });
 

@@ -13,6 +13,7 @@ import { useIllustrations, usePlace } from '../data';
 import { day, displayUrl, partialDate, price, safeHref } from '../format';
 import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, categoryLabel, cuisineLabel, dietaryLabel, languageLabel, menuLabel, placeNames, sourceTypeLabel, subjectLabel } from '../labels';
+import { mapLinks } from '../model/maps';
 import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
 import { Button, CheckRow, Icon, Segmented, Skeleton } from '../ui';
@@ -57,8 +58,13 @@ export function PlacePage({ id }: { id: string }) {
   const website = safeHref(text(doc.place.website));
   const menuUrl = safeHref(text(doc.place.menu_url));
   const phone = text(doc.place.phone);
-  const lat = typeof doc.place.lat === 'number' ? doc.place.lat : null;
-  const lng = typeof doc.place.lng === 'number' ? doc.place.lng : null;
+  const maps = mapLinks({
+    name: text(doc.place.name_en) ?? text(doc.place.name_zh),
+    address: text(doc.place.address),
+    postcode: text(doc.place.postcode),
+    lat: typeof doc.place.lat === 'number' ? doc.place.lat : null,
+    lng: typeof doc.place.lng === 'number' ? doc.place.lng : null,
+  });
   const dishNames = doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.map((item) => item.name_zh ?? item.name_en ?? ''))).filter(Boolean);
 
   return (
@@ -84,15 +90,20 @@ export function PlacePage({ id }: { id: string }) {
         </p>
         {doc.status === 'stale' ? <p className="notice warn">{copy.place.staleNotice}</p> : null}
         <dl className="place-facts">
-          <div>
+          <div className="place-address">
             <dt>{copy.place.address}</dt>
             <dd>
               {text(doc.place.address)}, {text(doc.place.postcode)}
               {doc.place.borough_code ? <span className="muted"> · {boroughLabel(String(doc.place.borough_code), locale)}</span> : null}
-              {lat !== null && lng !== null ? (
-                <a className="map-link" href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`} target="_blank" rel="noopener noreferrer">
-                  <Icon name="map" size={14} /> {copy.home.map}
-                </a>
+              {maps.length > 0 ? (
+                <span className="map-links" role="group" aria-label={copy.home.map}>
+                  <Icon name="map" size={14} />
+                  {maps.map(({ app, href }) => (
+                    <a key={app} href={href} target="_blank" rel="noopener noreferrer">
+                      {copy.place.mapApps[app]}
+                    </a>
+                  ))}
+                </span>
               ) : null}
             </dd>
           </div>

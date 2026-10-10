@@ -1,23 +1,28 @@
 /**
- * The two ways an image arrives (AGENTS.md, invariants 18–20):
+ * The two ways an image arrives (AGENTS.md, invariants 18–20), and the hints visitors send:
  *
  *   uploadPhoto          a visitor's photo of a public place (or up to ten pages of its menu),
  *                        from the site's form: checked cheapest first, Turnstile on the server,
  *                        the site's daily count last
  *   suggestMenuLink      a visitor's link to a place's menu online: a hint for collectors, never
  *                        published itself
+ *   suggestPlace         a place a visitor says the site is missing: a lead for collectors, never
+ *                        published itself
  *   uploadIllustration   an agent's generated picture of a standard dish, answering an
  *                        `illustrate` work item handed to it
  *
- * Both re-encode the image (src/worker/media.ts), store only the re-encoded sizes, and create a
- * pending record with a verify task in one batch. If the batch fails, the stored images go.
+ * Both uploads re-encode the image (src/worker/media.ts), store only the re-encoded sizes, and
+ * create a pending record with a verify task in one batch. If the batch fails, the stored images go.
  */
 
 import { KIND_CONFIGS } from '../../kinds/index';
 import { normDish } from '../shared/dish';
-import { cleanText, validateRecordData, type RecordData } from '../shared/kinds';
+import { cleanText, findPostcode, normName, validateRecordData, type RecordData } from '../shared/kinds';
+import { coreName, namesAlike } from '../shared/names';
+import type { SuggestPlaceResponse } from '../shared/types';
 import { newId, sha256Hex } from './ids';
 import { deleteImage, encodeImage, ILLUSTRATION_RULES, PHOTO_RULES, storeImage, type Encoded, type MediaKind } from './media';
+import { lookupPostcodes } from './postcodes';
 import { blockedBy, blockedHosts } from './settings';
 import { enforce, RULES } from './ratelimit';
 import { standing, type Token } from './tokens';
@@ -31,6 +36,21 @@ export const MENU_PAGES_MAX = 10;
 const UPLOAD_BYTES_MAX = 60 * 1024 * 1024;
 /** Links to one place's menu kept for collectors. */
 export const MENU_LINKS_MAX = 5;
+/** Links kept on the lead visitors suggest for one place. */
+export const LEAD_LINKS_MAX = 5;
+/** Where visitors' leads wait among the others: a person said the place is there, so before the unqualified ones. */
+export const VISITOR_LEAD_PRIORITY = 5;
+
+/** A link a visitor sent, as a URL, or null when it is not the address of a page on the web. */
+function webLink(raw: string): URL | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  return (url.protocol === 'https:' || url.protocol === 'http:') && raw.length <= 500 && url.hostname.includes('.') ? url : null;
+}
 
 const field = (form: FormData, name: string): string | undefined => {
   const value = form.get(name);
@@ -185,16 +205,8 @@ export async function suggestMenuLink(
     { scope: 'menu-link-hour', subject, rule: RULES.menuLinkPerHour },
     { scope: 'menu-link-day', subject, rule: RULES.menuLinkPerDay },
   ]);
-  const raw = typeof input.url === 'string' ? input.url.trim() : '';
-  let url: URL | null = null;
-  try {
-    url = new URL(raw);
-  } catch {
-    url = null;
-  }
-  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:') || raw.length > 500 || !url.hostname.includes('.')) {
-    throw new HttpError(422, 'invalid_url', 'Send the address of the menu online: a link starting with https://.');
-  }
+  const url = webLink(typeof input.url === 'string' ? input.url.trim() : '');
+  if (!url) throw new HttpError(422, 'invalid_url', 'Send the address of the menu online: a link starting with https://.');
   if (blockedBy(url.toString(), await blockedHosts(env.DB))) throw new HttpError(422, 'blocked_host', 'That site asked us not to quote it.');
   const place = await env.DB
     .prepare(`SELECT status, data_json FROM records WHERE id = ? AND kind = 'place'`)
@@ -239,6 +251,110 @@ export async function suggestMenuLink(
     .bind(newId('wrk', context.now.getTime()), placeId, JSON.stringify(payload), at, at)
     .run();
   return { status: 'received', links: links.length };
+}
+
+/**
+ * A place a visitor says the site is missing: its name and where it is, perhaps a page about it and
+ * a note. It becomes a `lead` for collectors, as OpenStreetMap's and the FSA's do, and is never
+ * shown itself: the place appears once a collector has found a page that shows its food and a
+ * maintainer has checked it. A postcode in the address must be in Greater London. A public place at
+ * that postcode with a name alike is answered with that place instead; one still waiting for review
+ * needs no lead. The same suggestion twice is one lead, gathering its links, and a lead dismissed
+ * before opens again only for a link it did not have.
+ */
+export async function suggestPlace(
+  env: Env,
+  input: Record<string, unknown>,
+  context: { ip: string; hosts: readonly string[]; now: Date },
+): Promise<SuggestPlaceResponse> {
+  const visitor = await ipBucket(context.ip);
+  await enforce(env.DB, [
+    { scope: 'lead-hour', subject: visitor, rule: RULES.leadPerHour },
+    { scope: 'lead-day', subject: visitor, rule: RULES.leadPerDay },
+  ]);
+  const text = (name: string) => (typeof input[name] === 'string' ? cleanText(input[name]) : '');
+  const name = text('name');
+  const where = text('where');
+  const note = text('note');
+  if (name.length < 2 || name.length > 120) throw new HttpError(422, 'invalid_body', "Send the place's name, in English or Chinese, as name: 2 to 120 characters.");
+  if (where.length < 2 || where.length > 200) {
+    throw new HttpError(422, 'invalid_body', 'Send where the place is as where: its address or postcode, or at least the street and area, in 2 to 200 characters.');
+  }
+  if (note.length > 300) throw new HttpError(422, 'invalid_body', 'Keep the note to 300 characters.');
+  const raw = typeof input.url === 'string' ? input.url.trim() : '';
+  const url = raw ? webLink(raw) : null;
+  if (raw && !url) throw new HttpError(422, 'invalid_url', 'The link must be the address of a page about the place, starting with https://; or leave it out.');
+  if (url && blockedBy(url.toString(), await blockedHosts(env.DB))) throw new HttpError(422, 'blocked_host', 'That site asked us not to quote it: send another link, or none.');
+
+  const postcode = findPostcode(where);
+  if (postcode) {
+    const answer = (await lookupPostcodes(env.DB, [postcode], context.now)).get(postcode);
+    if (answer === 'unknown') throw new HttpError(422, 'unknown_postcode', `No postcode ${postcode} is known: check it, or leave it out and give the street and area.`);
+    if (answer && answer !== 'unavailable' && !answer.london) {
+      throw new HttpError(422, 'outside_london', `${postcode} is not in Greater London, and the site lists places in Greater London only.`);
+    }
+    // Live places at that postcode, by the identity every place has (postcode|name): a range of
+    // the identity index, whose conditions the query repeats so it can be used, not a scan.
+    const { results } = await env.DB
+      .prepare(
+        `SELECT id, status, data_json FROM records INDEXED BY records_identity
+         WHERE kind = 'place' AND identity_key >= ? AND identity_key < ? AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL`,
+      )
+      .bind(`${postcode}|`, `${postcode}}`)
+      .all<{ id: string; status: string; data_json: string }>();
+    const alike = (other: unknown) => typeof other === 'string' && namesAlike({ name_en: name }, { name_en: other });
+    const same = results
+      .map((row) => ({ ...row, data: JSON.parse(row.data_json) as RecordData }))
+      .sort((a, b) => Number(b.status !== 'pending') - Number(a.status !== 'pending'))
+      .find((row) => alike(row.data.name_en) || alike(row.data.name_zh));
+    if (same?.status === 'pending') return { status: 'received' };
+    if (same) {
+      const named = (value: unknown) => (typeof value === 'string' ? value : null);
+      return { status: 'listed', place: { id: same.id, name_en: named(same.data.name_en), name_zh: named(same.data.name_zh) } };
+    }
+  }
+
+  const answer = typeof input['cf-turnstile-response'] === 'string' ? input['cf-turnstile-response'] : '';
+  const verdict = await verifyTurnstile(env.TURNSTILE_SECRET, answer, { ip: context.ip, hosts: context.hosts, idempotencyKey: crypto.randomUUID() });
+  if (!verdict.ok) throw new HttpError(403, 'turnstile_failed', verdict.reason);
+  // The site's daily bound comes last: a suggestion refused for any other reason never uses it up.
+  await enforce(env.DB, [{ scope: 'leads-day', subject: 'site', rule: RULES.leadsPerDay }]);
+
+  const subject = `visitor:${(await sha256Hex(`${postcode ?? normName(where)}|${coreName({ name_en: name }) || normName(name)}`)).slice(0, 24)}`;
+  const link = url?.toString() ?? null;
+  const hint = `A visitor suggested it on the site${note ? `, writing: "${note}"` : '.'}`;
+  const at = context.now.toISOString();
+  const existing = await env.DB
+    .prepare(`SELECT status, payload_json FROM work_items WHERE type = 'lead' AND subject = ?`)
+    .bind(subject)
+    .first<{ status: string; payload_json: string | null }>();
+  if (!existing) {
+    const payload = { name, address: where, ...(postcode ? { postcode } : {}), hint, ...(link ? { sources: [link] } : {}) };
+    await env.DB
+      .prepare(
+        `INSERT OR IGNORE INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
+         VALUES (?, 'lead', ?, ?, ?, 'open', ?, ?)`,
+      )
+      .bind(newId('wrk', context.now.getTime()), subject, VISITOR_LEAD_PRIORITY, JSON.stringify(payload), at, at)
+      .run();
+    return { status: 'received' };
+  }
+  const before = (existing.payload_json ? JSON.parse(existing.payload_json) : {}) as Record<string, unknown>;
+  const known = Array.isArray(before.sources) ? before.sources.filter((source): source is string => typeof source === 'string') : [];
+  const fresh = link !== null && !known.includes(link);
+  // Answered already (the place was listed from it), or dismissed and told nothing new: left as it is.
+  if (existing.status === 'done' || (existing.status === 'dismissed' && !fresh)) return { status: 'received' };
+  const payload = { ...before, ...(note ? { hint } : {}), ...(fresh ? { sources: [...known, link].slice(-LEAD_LINKS_MAX) } : {}) };
+  await env.DB
+    .prepare(
+      existing.status === 'dismissed'
+        ? `UPDATE work_items SET payload_json = ?, status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL, note = NULL, updated_at = ?
+           WHERE type = 'lead' AND subject = ?`
+        : `UPDATE work_items SET payload_json = ?, updated_at = ? WHERE type = 'lead' AND subject = ?`,
+    )
+    .bind(JSON.stringify(payload), at, subject)
+    .run();
+  return { status: 'received' };
 }
 
 /** An agent's illustration of a standard dish, answering a work item it holds. */

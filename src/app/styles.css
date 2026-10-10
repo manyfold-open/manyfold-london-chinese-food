@@ -2473,6 +2473,22 @@ h1 .other-name {
   background: var(--chip);
 }
 
+/* The reader's dot and its accuracy circle (MapLibre's own look) let clicks through to the places under them. */
+.you-dot,
+.you-circle {
+  pointer-events: none;
+}
+
+.suggest-line {
+  margin: 4px 0 0;
+  padding: 14px 0;
+  font-size: 14px;
+}
+
+.empty + .suggest-line {
+  margin-top: -24px;
+}
+
 /* From here the filters stand beside the places, and stay in view while the list scrolls. */
 @media (min-width: 900px) {
   .home {
@@ -2534,12 +2550,26 @@ h1 .other-name {
   margin: 2px 0 0;
 }
 
-.map-link {
-  display: inline-flex;
+/* The address and its map links take two columns where there are two. */
+@media (min-width: 640px) {
+  .place-address {
+    grid-column: span 2;
+  }
+}
+
+/* Google Maps, Apple Maps and OpenStreetMap, on a line of their own under the address. */
+.map-links {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
-  margin-left: 10px;
+  gap: 4px 14px;
+  margin-top: 6px;
   font-size: 13px;
+}
+
+.map-links svg {
+  margin-right: -8px;
+  color: var(--muted);
 }
 
 .place-tabs {
@@ -2813,6 +2843,24 @@ a.dish-name:hover {
   font-weight: 600;
 }
 
+.dish-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.dish-tools .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 /* words, forms */
 
 .text-page {
@@ -2861,6 +2909,41 @@ a.dish-name:hover {
   flex: 1;
   font: 13px/1.5 var(--mono);
   word-break: break-word;
+}
+
+.suggest-place .btn {
+  margin-top: 4px;
+}
+
+/* Places already listed that look like the one being suggested. */
+.listed-like {
+  margin-top: -4px;
+  font-size: 13px;
+}
+
+.listed-like ul {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--chip);
+  list-style: none;
+}
+
+.listed-like li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.listed-like a {
+  font-weight: 500;
+}
+
+.listed-like .muted {
+  font-size: 12px;
 }
 
 .form {

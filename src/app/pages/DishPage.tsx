@@ -1,17 +1,37 @@
-/** Where a dish can be eaten: every place whose menu lists it or whose reviews mention it. */
+/**
+ * Where a dish can be eaten: every place whose menu lists it or whose reviews mention it, as a
+ * list or on the map. The view, where the reader is and where the map was left are kept in the
+ * page's history entry, so Back from a place finds the page as it was (src/app/router.tsx).
+ */
 
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { standardDish } from '../../shared/dish';
 import type { IndexEntry } from '../../shared/place-doc';
 import { distanceKm } from '../../shared/places-query';
 import { DishImage } from '../components/DishImage';
 import { useDish, useIllustrations, useIndex } from '../data';
 import { distance, price } from '../format';
+import { readCamera, readNear, useLocate, type Camera, type Near } from '../geo';
 import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, placeNames } from '../labels';
-import { Link } from '../router';
+import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
-import { Icon, Pill, Skeleton } from '../ui';
+import { Icon, Pill, Segmented, Skeleton } from '../ui';
+
+const MapView = lazy(() => import('../components/MapView'));
+
+type Layout = 'list' | 'map';
+
+interface DishState {
+  layout: Layout;
+  near: Near | null;
+  camera: Camera | null;
+}
+
+function readDish(stored: unknown): DishState {
+  const value = (stored && typeof stored === 'object' ? stored : {}) as Partial<Record<keyof DishState, unknown>>;
+  return { layout: value.layout === 'map' ? 'map' : 'list', near: readNear(value.near), camera: readCamera(value.camera) };
+}
 
 export function DishPage({ dishKey }: { dishKey: string }) {
   const copy = useCopy();
@@ -19,7 +39,9 @@ export function DishPage({ dishKey }: { dishKey: string }) {
   const dish = useDish(dishKey);
   const index = useIndex();
   const illustrations = useIllustrations();
-  const [near, setNear] = useState<{ lat: number; lng: number } | null>(null);
+  const [state, setState] = useEntryState('dish', readDish);
+  const { layout, near } = state;
+  const { locating, locate } = useLocate((found) => setState((previous) => ({ ...previous, near: found })));
   const entry = standardDish(dishKey);
   const name = (locale === 'zh' ? entry?.zh : entry?.en) ?? dish.data?.places[0]?.entry[locale === 'zh' ? 'name_zh' : 'name_en'] ?? dishKey;
 
@@ -37,6 +59,8 @@ export function DishPage({ dishKey }: { dishKey: string }) {
       .map((row) => ({ ...row, km: km(row.place) }))
       .sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity) || (a.via === b.via ? 0 : a.via === 'menu' ? -1 : 1) || (a.place.n ?? a.place.z ?? '').localeCompare(b.place.n ?? b.place.z ?? ''));
   }, [dish.data, index.data, near]);
+  const places = useMemo(() => rows.map((row) => row.place), [rows]);
+  const ready = dish.data !== null && index.data !== null;
 
   return (
     <div className="dish-page screen">
@@ -52,17 +76,53 @@ export function DishPage({ dishKey }: { dishKey: string }) {
           {entry ? <p className="other-name">{locale === 'zh' ? entry.en : entry.zh}</p> : null}
           {entry ? <p className="lead">{entry.description}</p> : null}
           {dish.data ? <p className="meta">{rows.length ? copy.dish.lead(rows.length) : copy.dish.none}</p> : null}
+        </div>
+      </header>
+      {ready && rows.length > 0 ? (
+        <div className="dish-tools">
           <Pill
             icon="locate"
             active={near !== null}
-            onClick={() => navigator.geolocation?.getCurrentPosition((position) => setNear({ lat: position.coords.latitude, lng: position.coords.longitude }))}
+            aria-pressed={near !== null}
+            disabled={locating}
+            onClick={() => (near ? setState((previous) => ({ ...previous, near: null })) : locate())}
           >
             {copy.home.near}
           </Pill>
+          <Segmented
+            label={copy.home.layout}
+            choices={[
+              { value: 'list' as const, icon: 'list' as const, label: copy.home.list },
+              { value: 'map' as const, icon: 'map' as const, label: copy.home.map },
+            ].map(({ value, icon, label }) => ({
+              value,
+              label: (
+                <>
+                  <Icon name={icon} size={15} />
+                  <span className="layout-label">{label}</span>
+                </>
+              ),
+            }))}
+            value={layout}
+            onChange={(value) => setState((previous) => ({ ...previous, layout: value }))}
+          />
         </div>
-      </header>
-      {!dish.data || !index.data ? (
+      ) : null}
+      {!ready ? (
         <Skeleton height={200} />
+      ) : layout === 'map' && rows.length > 0 ? (
+        <Suspense fallback={<div className="map" />}>
+          <MapView
+            entries={places}
+            locale={locale}
+            near={near}
+            camera={state.camera}
+            onCamera={(camera) => setState((previous) => ({ ...previous, camera }))}
+            onLocate={locate}
+            locating={locating}
+            fit
+          />
+        </Suspense>
       ) : (
         <div className="place-list">
           {rows.map(({ place, via, price: pence, photo, km }) => {
