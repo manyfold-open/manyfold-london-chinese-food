@@ -8,10 +8,11 @@
  * Also here: "/" sent to a language, the sitemap, and the pages' content security policy.
  */
 
-import { CATEGORY_LABELS, CUISINE_LABELS, BOROUGHS } from '../../kinds/vocab';
+import { CUISINE_LABELS } from '../../kinds/vocab';
 import { COPY, localeFrom, localeFromAcceptLanguage, type Locale } from '../shared/i18n';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import { standardDish } from '../shared/dish';
+import { decodeSegment, notFoundTitle, pathTitle, placeTitle } from '../shared/titles';
 
 /** The content security policy of every page: our own code, Turnstile's form, OpenFreeMap's map. */
 export const PAGE_CSP = [
@@ -58,22 +59,14 @@ const SCHEMA_TYPE: Record<string, string> = {
 /** The meta of a place page, from its document; null for a place that is not public. */
 export function placeMeta(doc: PlaceDoc | null, locale: Locale, rest: string, canonical: string): PageMeta {
   const copy = COPY[locale];
-  if (!doc) return { status: 404, locale, title: `${copy.notFound.title} · ${copy.siteShort}`, description: copy.notFound.text, rest, jsonLd: null };
+  if (!doc) return { status: 404, locale, title: notFoundTitle(locale), description: copy.notFound.text, rest, jsonLd: null };
   const place = doc.place;
   const en = text(place.name_en);
   const zh = text(place.name_zh);
-  const name = locale === 'zh' ? (zh ?? en ?? '') : (en ?? zh ?? '');
-  // The other language's name, when there is one: a place with only an English name is not named twice.
-  const other = locale === 'zh' ? (zh ? en : null) : en ? zh : null;
-  const category = CATEGORY_LABELS[String(place.category)]?.[locale] ?? '';
-  const borough = BOROUGHS[String(place.borough_code)]?.[locale] ?? '';
   const cuisines = (Array.isArray(place.cuisines) ? (place.cuisines as string[]) : []).map((value) => CUISINE_LABELS[value]?.[locale] ?? value);
   const items = doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items)).slice(0, 4);
   const dishes = items.map((item) => (locale === 'zh' ? (item.name_zh ?? item.name_en) : (item.name_en ?? item.name_zh))).filter(Boolean);
-  const title =
-    locale === 'zh'
-      ? `${name}${other ? ` ${other}` : ''} · ${[category, borough].filter(Boolean).join(' · ')} · ${copy.siteShort}`
-      : `${name}${other ? ` (${other})` : ''} — ${category}${borough ? ` in ${borough}` : ''} · ${copy.siteShort}`;
+  const title = placeTitle(place, locale);
   const counts =
     locale === 'zh'
       ? `${doc.reviews.length} 条评价摘录${doc.menus.length ? '、菜单' : ''}${doc.photos.length ? '和照片' : ''}，没有评分。`
@@ -108,26 +101,15 @@ export function placeMeta(doc: PlaceDoc | null, locale: Locale, rest: string, ca
   return { status: 200, locale, title, description, rest, jsonLd };
 }
 
-/** The meta of every other page, from its path. */
+/** The meta of every other page, from its path: its title (src/shared/titles.ts) and description. */
 export function pathMeta(locale: Locale, rest: string): PageMeta {
   const copy = COPY[locale];
+  const { found, title } = pathTitle(locale, rest);
+  if (!found) return { status: 404, locale, title, description: copy.notFound.text, rest, jsonLd: null };
   const [, page, value] = rest.split('/');
-  const decoded = value ? decodeURIComponent(value) : '';
-  const site = copy.siteShort;
-  if (!page) return { status: 200, locale, title: `${copy.siteName} — ${copy.tagline}`, description: copy.description, rest, jsonLd: null };
-  if (page === 'dish' && decoded) {
-    const entry = standardDish(decoded);
-    const name = (locale === 'zh' ? entry?.zh : entry?.en) ?? decoded;
-    return { status: 200, locale, title: `${copy.dish.title(name)} · ${site}`, description: entry?.description ?? copy.description, rest, jsonLd: null };
-  }
-  if ((page === 'source' || page === 'critic') && decoded) {
-    return { status: 200, locale, title: `${page === 'source' ? copy.source.title(decoded) : copy.source.criticTitle(decoded)} · ${site}`, description: copy.description, rest, jsonLd: null };
-  }
-  if (page === 'contribute' || page === 'about' || page === 'privacy') {
-    const title = page === 'contribute' ? copy.contribute.title : copy[page].title;
-    return { status: 200, locale, title: `${title} · ${site}`, description: page === 'contribute' ? copy.contribute.lead : copy.description, rest, jsonLd: null };
-  }
-  return { status: 404, locale, title: `${copy.notFound.title} · ${site}`, description: copy.notFound.text, rest, jsonLd: null };
+  const dish = page === 'dish' && value ? standardDish(decodeSegment(value)) : null;
+  const description = page === 'contribute' ? copy.contribute.lead : (dish?.description ?? copy.description);
+  return { status: 200, locale, title, description, rest, jsonLd: null };
 }
 
 const escapeAttribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

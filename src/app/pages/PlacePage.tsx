@@ -5,12 +5,14 @@
 
 import { useMemo, useState } from 'react';
 import type { DocItem, DocMenu, DocReview, PlaceDoc } from '../../shared/place-doc';
+import { notFoundTitle, placeTitle } from '../../shared/titles';
 import { useAiPreference } from '../ai';
 import { appUrl } from '../base';
 import { DishImage } from '../components/DishImage';
 import { MenuSheet, ReportSheet, UploadSheet } from '../components/Sheets';
 import { useIllustrations, usePlace } from '../data';
 import { day, displayUrl, partialDate, price, safeHref } from '../format';
+import { useTitle } from '../hooks';
 import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, categoryLabel, cuisineLabel, dietaryLabel, languageLabel, menuLabel, placeNames, sourceTypeLabel, subjectLabel } from '../labels';
 import { mapLinks } from '../model/maps';
@@ -40,6 +42,7 @@ export function PlacePage({ id }: { id: string }) {
   const [uploading, setUploading] = useState(false);
   const [addingMenu, setAddingMenu] = useState(false);
   const [reporting, setReporting] = useState<string | null>(null);
+  useTitle(doc ? placeTitle(doc.place, locale) : error?.status === 404 ? notFoundTitle(locale) : null);
 
   if (error?.status === 404) return <NotFoundPage />;
   if (!doc) {

@@ -5,7 +5,9 @@
 
 import { lazy, Suspense, useEffect } from 'react';
 import { COPY, type Locale } from '../shared/i18n';
+import { pathTitle } from '../shared/titles';
 import { Shell } from './components/Shell';
+import { useTitle } from './hooks';
 import { LocaleContext, rememberLocale, storedLocale } from './i18n';
 import { HomePage } from './pages/HomePage';
 import { DishPage } from './pages/DishPage';
@@ -25,6 +27,8 @@ export default function App() {
   const route = matchRoute(pathname, browserLocale());
   const locale: Locale = route.page === 'settings' ? 'en' : route.locale;
   useScrollRestoration(key);
+  // A place's page names itself once its record is in (PlacePage); the console names its own sections.
+  useTitle(route.page === 'settings' || route.page === 'place' ? null : pathTitle(locale, pathname.replace(/^\/(zh|en)(?=\/|$)/, '') || '/').title);
 
   useEffect(() => {
     if (route.page === 'home' && pathname === '/') navigate(paths.home(locale), { replace: true });

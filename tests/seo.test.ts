@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlaceDoc } from '../src/shared/place-doc';
+import { pathTitle, placeTitle } from '../src/shared/titles';
 import { pathMeta, placeMeta, preferredLocale, sitemap } from '../src/worker/seo';
 import { world } from './harness';
 
@@ -55,6 +56,26 @@ describe('page meta', () => {
     const xml = sitemap('https://site', [{ id: 'rec_x', s: 'slug', u: '2026-10-01T00:00:00Z' } as never], [['油泼面', '油泼面', null, 3]]);
     expect(xml).toContain('<loc>https://site/zh/place/rec_x/slug</loc><lastmod>2026-10-01</lastmod>');
     expect(xml).toContain('<loc>https://site/en/dish/%E6%B2%B9%E6%B3%BC%E9%9D%A2</loc>');
+  });
+});
+
+describe('titles', () => {
+  // The app sets these when the reader moves to a page in place: the same the Worker serves with it.
+  it('are the ones a page is served with, however it is reached', () => {
+    for (const locale of ['zh', 'en'] as const) {
+      for (const rest of ['/', '/about', '/contribute', '/privacy', `/dish/${encodeURIComponent('叉烧肠粉')}`, '/source/the-guardian', '/critic/jay-rayner', '/nowhere']) {
+        expect(pathTitle(locale, rest).title).toBe(pathMeta(locale, rest).title);
+      }
+      expect(placeTitle(doc.place, locale)).toBe(placeMeta(doc, locale, '/place/x', '').title);
+    }
+    expect(pathTitle('zh', '/').title).toBe('伦敦中餐 · London Chinese Food — 伦敦哪里吃得到中国菜');
+    expect(pathTitle('en', `/dish/${encodeURIComponent('叉烧肠粉')}`).title).toBe('Where to eat Char siu cheung fun in London · London Chinese Food');
+    expect(pathTitle('en', '/nowhere')).toEqual({ found: false, title: 'Page not found · London Chinese Food' });
+  });
+
+  it('take a path that is not valid percent-encoding as it is written', () => {
+    expect(pathTitle('en', '/dish/%E0')).toEqual({ found: true, title: 'Where to eat %E0 in London · London Chinese Food' });
+    expect(pathMeta('en', '/dish/%E0').status).toBe(200);
   });
 });
 
