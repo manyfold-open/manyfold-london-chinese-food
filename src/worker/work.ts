@@ -2,8 +2,9 @@
  * The collectors' work feed: things the site wants done, each handed to one agent at a time so two
  * agents do not do the same work.
  *
- *   lead        a place someone (OpenStreetMap, the Food Standards Agency) suggests exists:
- *               research it, then send it as a place, or dismiss it with a reason
+ *   lead        a place someone (OpenStreetMap, the Food Standards Agency, a visitor) suggests
+ *               exists: research it, then send it as a place, or dismiss it with a reason and
+ *               its dismiss_type
  *   menu        a public place with no menu yet
  *   reviews     a public place with few review excerpts
  *   menu-link   links visitors sent to a place's menu online, to type up (or compare with the
@@ -19,21 +20,31 @@
  * Work handed out can be finished (AGENTS.md, invariant 24): every item an agent holds needs a
  * record of the kind that answers it, so an agent is never handed more than it may still have
  * waiting for review, and when it gets fewer than it asked for, it is told why.
+ *
+ * A lead is closed only for what is so of the place (AGENTS.md, invariant 25), as its
+ * dismiss_type says: not Chinese food, not public, closed before 2020, a duplicate, outside
+ * London. One no page the collector could open shows the food of (cannot_verify) goes to another
+ * collector, never back to that one, and to the site team (status review) once LEAD_GIVE_BACKS
+ * collectors could not verify it, or one with a browser could not. A visitor's lead a collector
+ * would close goes to the site team too: a person told us about it.
  */
 
 import { KIND_CONFIGS } from '../../kinds/index';
 import type { Kind } from '../shared/kinds';
-import type { AdminWorkItem, WorkItem, WorkResponse, WorkType } from '../shared/types';
-import { WORK_TYPES } from '../shared/types';
+import type { AdminWorkItem, LeadDismissal, LeadDismissType, ReviewLead, WorkItem, WorkResponse, WorkType } from '../shared/types';
+import { LEAD_DISMISS_TYPES, WORK_TYPES } from '../shared/types';
 import { newId } from './ids';
 import { reopenProblem } from './illustrations';
-import { HOUR } from './ratelimit';
+import { consume, HOUR, RULES } from './ratelimit';
 import { illustrationSettings, promptFor } from './settings';
-import { standing, type Token } from './tokens';
+import { capabilitiesOf, standing, type Token } from './tokens';
 import { HttpError } from './types';
+import { couldNotRead } from './unreadable';
 
 export const HANDOUT_MS = 2 * HOUR;
 export const HANDOUT_MAX = 20;
+/** Collectors who could not verify a lead (cannot_verify) before it goes to the site team. */
+export const LEAD_GIVE_BACKS = 2;
 
 interface ItemRow {
   id: string;
@@ -72,6 +83,9 @@ export const ANSWERED_BY: Readonly<Record<WorkType, Kind>> = {
 /** A menu's pages go out together: not while one of them still waits for a maintainer. */
 const READY_PAGES = ` AND NOT EXISTS (SELECT 1 FROM records p INDEXED BY records_age
   WHERE p.kind = 'photo' AND p.status = 'pending' AND json_extract(p.data_json, '$.set') = work_items.subject)`;
+
+/** A lead never goes back to a collector that could not verify it (?1 is the token). */
+const NOT_GIVEN_BACK = ` AND NOT EXISTS (SELECT 1 FROM json_each(work_items.payload_json, '$.gave_back') g WHERE g.value = ?1)`;
 
 /** The verified pages of a menu set (or the one photo), in page order. */
 export async function menuPages(db: D1Database, place: string, set: string): Promise<string[]> {
@@ -148,7 +162,7 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
         `UPDATE work_items SET handed_to = ?1, handed_until = ?2, updated_at = ?3
          WHERE id IN (
            SELECT id FROM work_items INDEXED BY work_items_open
-           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3${type === 'transcribe' ? READY_PAGES : ''}
+           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3${type === 'transcribe' ? READY_PAGES : ''}${type === 'lead' ? NOT_GIVEN_BACK : ''}
            ORDER BY priority DESC, created_at LIMIT ?5)`,
       )
       .bind(token.id, new Date(now.getTime() + HANDOUT_MS).toISOString(), at, type, room)
@@ -184,17 +198,34 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
   return { items, note: handed < room ? `No more ${type} items are open for you right now; ask again on a later run.` : tightest.why() };
 }
 
-/** A held item the agent gives up on: a lead that is not a place to list, or menu links with nothing new, are dismissed for good; anything else goes back. */
-export async function dismiss(db: D1Database, token: Token, id: string, body: { reason?: unknown }, now: Date): Promise<WorkItem> {
+/** What each dismiss_type means, for the error a collector gets without one. */
+const DISMISS_HELP =
+  "not_chinese (it sells no Chinese food), not_public (no one can eat or buy food there: a home, dark or catering kitchen, a wholesaler, an office), closed_before_2020 (it closed before 2020, or another business trades at its address and no page shows it trading since), duplicate (the site lists it already: give the place's id as duplicate_of), outside_london, or cannot_verify (no page you could open shows its food: the lead goes to someone else)";
+
+const isLeadDismissType = (value: unknown): value is LeadDismissType => typeof value === 'string' && (LEAD_DISMISS_TYPES as readonly string[]).includes(value);
+
+/**
+ * A held item the agent gives up on. A lead goes where its dismiss_type says (dismissLead); menu
+ * links with nothing new are dismissed for good; anything else goes back for another agent.
+ */
+export async function dismiss(
+  db: D1Database,
+  token: Token,
+  id: string,
+  body: { reason?: unknown; dismiss_type?: unknown; duplicate_of?: unknown },
+  now: Date,
+): Promise<WorkItem> {
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
-  if (reason.length < 3) throw new HttpError(422, 'invalid_body', 'Say why, in 3 to 300 characters: e.g. "closed in 2023", "a Thai restaurant", "same as rec_...".');
+  if (reason.length < 3) throw new HttpError(422, 'invalid_body', 'Say why, in 3 to 300 characters: e.g. "a Thai restaurant", "closed in 2018", "same as rec_...".');
   const row = await db.prepare('SELECT * FROM work_items WHERE id = ?').bind(id).first<ItemRow & { handed_to: string | null }>();
   if (!row || row.handed_to !== token.id || row.status !== 'open' || !row.handed_until || row.handed_until <= now.toISOString()) {
     throw new HttpError(404, 'not_found', 'You hold no open work item with that id; ask for work with GET /api/work first.');
   }
   const at = now.toISOString();
-  if (row.type === 'lead' || row.type === 'menu-link') {
-    // A lead that is no place to list, or links that hold no new menu, are done with.
+  if (row.type === 'lead') {
+    await dismissLead(db, token, row, reason, body, now);
+  } else if (row.type === 'menu-link') {
+    // Links that hold no new menu are done with.
     await db.prepare(`UPDATE work_items SET status = 'dismissed', note = ?, updated_at = ? WHERE id = ?`).bind(reason, at, id).run();
   } else {
     // Someone else may find what this agent could not; it goes to the back of the queue.
@@ -204,6 +235,83 @@ export async function dismiss(db: D1Database, token: Token, id: string, body: { 
       .run();
   }
   return toItem((await db.prepare('SELECT * FROM work_items WHERE id = ?').bind(id).first<ItemRow>())!);
+}
+
+/**
+ * A lead the collector gives up, by its dismiss_type. Not a place to list: dismissed for good, or,
+ * for a visitor's lead, sent to the site team to agree. Not verified (cannot_verify): handed to
+ * another collector, never this one again, or to the site team once LEAD_GIVE_BACKS collectors, or
+ * one with a browser, could not verify it. A page the collector could not open never closes a lead.
+ */
+async function dismissLead(
+  db: D1Database,
+  token: Token,
+  row: ItemRow,
+  reason: string,
+  body: { dismiss_type?: unknown; duplicate_of?: unknown },
+  now: Date,
+): Promise<void> {
+  const type = body.dismiss_type;
+  if (!isLeadDismissType(type)) throw new HttpError(422, 'invalid_body', `Say why it is not a place to list, as dismiss_type: ${DISMISS_HELP}.`);
+  if (type !== 'cannot_verify' && couldNotRead(reason)) {
+    throw new HttpError(
+      422,
+      'invalid_body',
+      'The reason says you could not open a page, which says nothing about the place: send dismiss_type cannot_verify with this reason, and the lead goes to someone who can open it.',
+    );
+  }
+  let duplicateOf: string | null = null;
+  if (type === 'duplicate') {
+    const target = typeof body.duplicate_of === 'string' ? body.duplicate_of.trim() : '';
+    const live = /^rec_[0-9a-z]{26}$/.test(target)
+      ? await db
+          .prepare(`SELECT id FROM records WHERE id = ? AND kind = 'place' AND status IN ('pending', 'verified', 'stale') AND target_id IS NULL`)
+          .bind(target)
+          .first<{ id: string }>()
+      : null;
+    if (!live) throw new HttpError(422, 'invalid_body', 'duplicate_of must be the id (rec_...) of the place the site lists already: find it with GET /api/search first.');
+    duplicateOf = target;
+  }
+  const at = now.toISOString();
+  const payload = (row.payload_json ? JSON.parse(row.payload_json) : {}) as { gave_back?: unknown };
+  const before = Array.isArray(payload.gave_back) ? payload.gave_back.filter((one): one is string => typeof one === 'string') : [];
+  const gaveBack = [...new Set([...before, token.id])];
+  const toSiteTeam =
+    type === 'cannot_verify' ? gaveBack.length >= LEAD_GIVE_BACKS || (await capabilitiesOf(db, token.id)).includes('browser') : row.subject.startsWith('visitor:');
+
+  if (type === 'cannot_verify' && !toSiteTeam) {
+    // Someone else may open what this collector could not.
+    await db
+      .prepare(
+        `UPDATE work_items SET handed_to = NULL, handed_until = NULL, note = ?, payload_json = json_set(COALESCE(payload_json, '{}'), '$.gave_back', json(?)), updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(reason, JSON.stringify(gaveBack), at, row.id)
+      .run();
+    return;
+  }
+  if (toSiteTeam) {
+    const rule = RULES.leadsToSiteTeamPerDay;
+    const room = await consume(db, 'lead-review', token.id, rule, now.getTime());
+    if (!room.allowed) {
+      throw new HttpError(
+        429,
+        'rate_limited',
+        `You have sent ${rule.limit} leads to the site team today, the most one token may. Leave this one: your hold on it runs out and another collector gets it.`,
+        { 'retry-after': String(room.retryAfterSeconds) },
+      );
+    }
+  }
+  const dismissal: LeadDismissal = { type, reason, by: token.id, at, ...(duplicateOf ? { duplicate_of: duplicateOf } : {}) };
+  await db
+    .prepare(
+      `UPDATE work_items SET status = ?1, note = ?2, updated_at = ?3,
+         payload_json = CASE WHEN ?5 THEN json_set(COALESCE(payload_json, '{}'), '$.dismissal', json(?4), '$.gave_back', json(?6))
+                             ELSE json_set(COALESCE(payload_json, '{}'), '$.dismissal', json(?4)) END
+       WHERE id = ?7`,
+    )
+    .bind(toSiteTeam ? 'review' : 'dismissed', reason, at, JSON.stringify(dismissal), type === 'cannot_verify' ? 1 : 0, JSON.stringify(gaveBack), row.id)
+    .run();
 }
 
 /** Work items as statements: open one (if new or done before), or close one, for the read-model builder. */
@@ -293,9 +401,10 @@ export interface FoodEvidence {
 }
 
 /**
- * The admin's word on open leads (scripts/qualify-leads.ts), by subject: a page that shows a lead's
- * food (`food_evidence`, put into the payload the collector gets), a new priority, or a reason to
- * dismiss it for good (it closed, it sells no Chinese food). Leads not open are left alone.
+ * The admin's word on open leads (scripts/qualify-leads.ts) and on leads waiting for the site team,
+ * by subject: a page that shows a lead's food (`food_evidence`, put into the payload the collector
+ * gets), a new priority, or a reason to dismiss it for good (it closed, it sells no Chinese food).
+ * Other leads are left alone.
  */
 export async function updateLeads(db: D1Database, leads: unknown, now: Date): Promise<{ updated: number; dismissed: number }> {
   if (!Array.isArray(leads) || leads.length === 0 || leads.length > 500) {
@@ -313,7 +422,7 @@ export async function updateLeads(db: D1Database, leads: unknown, now: Date): Pr
         db
           .prepare(
             `UPDATE work_items SET status = 'dismissed', handed_to = NULL, handed_until = NULL, note = ?, updated_at = ?
-             WHERE type = 'lead' AND subject = ? AND status = 'open'`,
+             WHERE type = 'lead' AND subject = ? AND status IN ('open', 'review')`,
           )
           .bind(reason, at, lead.subject),
       );
@@ -344,7 +453,7 @@ export async function updateLeads(db: D1Database, leads: unknown, now: Date): Pr
           `UPDATE work_items SET priority = COALESCE(?1, priority),
              payload_json = CASE WHEN ?2 IS NULL THEN payload_json ELSE json_set(COALESCE(payload_json, '{}'), ?3, json(?2)) END,
              updated_at = ?4
-           WHERE type = 'lead' AND subject = ?5 AND status = 'open'`,
+           WHERE type = 'lead' AND subject = ?5 AND status IN ('open', 'review')`,
         )
         .bind(priority, evidence ? JSON.stringify(evidence) : null, '$.food_evidence', at, lead.subject),
     );
@@ -382,14 +491,37 @@ export async function workAdmin(db: D1Database, type: WorkType | null, status: s
   };
 }
 
-/** The admin opens an item again (a lead dismissed by mistake), unless no agent could answer it. */
+/**
+ * The admin opens an item again (a lead dismissed by mistake, or one the site team sends back to
+ * collectors), unless no agent could answer it. A lead starts afresh: any collector may take it.
+ */
 export async function reopenWork(db: D1Database, id: string, now: Date): Promise<void> {
   const item = await db.prepare('SELECT type, subject FROM work_items WHERE id = ?').bind(id).first<{ type: WorkType; subject: string }>();
   if (!item) throw new HttpError(404, 'not_found', 'No work item has that id.');
   const problem = item.type === 'illustrate' ? await reopenProblem(db, item.subject) : null;
   if (problem) throw new HttpError(409, 'conflict', problem);
   await db
-    .prepare(`UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL, updated_at = ? WHERE id = ?`)
+    .prepare(
+      `UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL,
+         payload_json = CASE WHEN type = 'lead' AND payload_json IS NOT NULL THEN json_remove(payload_json, '$.gave_back', '$.dismissal') ELSE payload_json END,
+         updated_at = ?
+       WHERE id = ?`,
+    )
     .bind(now.toISOString(), id)
     .run();
+}
+
+/** Leads waiting for the site team, oldest first: what the collector said, and who it was. */
+export async function reviewLeads(db: D1Database): Promise<ReviewLead[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT w.id, w.subject, w.payload_json, w.updated_at, t.label FROM work_items w INDEXED BY work_items_review
+       LEFT JOIN tokens t ON t.id = json_extract(w.payload_json, '$.dismissal.by')
+       WHERE w.type = 'lead' AND w.status = 'review' ORDER BY w.updated_at LIMIT 200`,
+    )
+    .all<{ id: string; subject: string; payload_json: string | null; updated_at: string; label: string | null }>();
+  return results.map((row) => {
+    const { dismissal, ...payload } = (row.payload_json ? JSON.parse(row.payload_json) : {}) as Record<string, unknown> & { dismissal?: LeadDismissal };
+    return { id: row.id, subject: row.subject, payload, dismissal: dismissal ?? null, by_label: row.label, at: row.updated_at };
+  });
 }

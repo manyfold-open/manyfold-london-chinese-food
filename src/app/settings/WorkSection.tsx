@@ -18,9 +18,10 @@ const TYPE: Record<WorkType, string> = {
 /**
  * Work items' statuses (src/worker/work.ts): handed out while open, submitted with a record, then
  * done. Leads and menu links may be dismissed, and illustrate items for dishes that are not standard
- * are closed as dismissed (src/worker/illustrations.ts).
+ * are closed as dismissed (src/worker/illustrations.ts). A lead waits in review for the site team
+ * when a collector would close a visitor's, or collectors could not verify it (the Review page).
  */
-const STATUSES = ['open', 'submitted', 'done', 'dismissed'] as const;
+const STATUSES = ['open', 'review', 'submitted', 'done', 'dismissed'] as const;
 
 const isWorkType = (value: string | null): value is WorkType => (WORK_TYPES as readonly (string | null)[]).includes(value);
 

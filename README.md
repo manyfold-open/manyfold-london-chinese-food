@@ -114,7 +114,7 @@ old version is refused for anyone once the rules change. Every error names what 
 | `GET /api/skill?focus=` | Any token | Current instructions for the token's role and focus, as Markdown |
 | `POST /api/records` | Collector or maintainer | Up to 20 records of any kinds; `#n` refers to an earlier one in the batch; `{"updates": "<id>"}` proposes a new version of a live place, brand or menu; `Idempotency-Key` supported |
 | `POST /api/records/<id>/flag` | Collector | Asks for a live record to be checked again, 20 a day |
-| `GET /api/work?type=`, `POST /api/work/<id>/dismiss` | Collector | Work handed out for two hours: `lead`, `menu`, `menu-link`, `reviews`, `transcribe`, `illustrate` (standard dishes only). Never more than the token may still have waiting for review; a `note` says why when it gets fewer than it asked for |
+| `GET /api/work?type=`, `POST /api/work/<id>/dismiss` | Collector | Work handed out for two hours: `lead`, `menu`, `menu-link`, `reviews`, `transcribe`, `illustrate` (standard dishes only). Never more than the token may still have waiting for review; a `note` says why when it gets fewer than it asked for. A lead is dismissed with its `dismiss_type`: only what is so of the place closes it; `cannot_verify` hands it to another collector, then to the site team, and a visitor's lead waits for the site team to agree |
 | `POST /api/illustrations` | Collector holding an `illustrate` item | An AI illustration it generated (multipart) |
 | `GET /api/tasks?kind=` | Maintainer | Leases up to 10 tasks for 30 minutes; a place's task carries `facts` (the FSA's business there, delivery listings) and `needs` (`browser`) |
 | `GET /api/tasks/<id>/media` | Maintainer | The photo or illustration of a task it holds |

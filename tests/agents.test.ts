@@ -303,7 +303,7 @@ describe('the work feed', () => {
     expect(first.body.note).toBe(
       '0 of your places are waiting for review, of the 10 you may have at once, and the 10 work items you hold need one each. You get more as maintainers review yours and as you answer (or dismiss) what you hold.',
     );
-    await w.call(`/api/work/${first.body.items[0]!.id}/dismiss`, { method: 'POST', token, json: { reason: 'a Thai restaurant' } });
+    await w.call(`/api/work/${first.body.items[0]!.id}/dismiss`, { method: 'POST', token, json: { reason: 'a Thai restaurant', dismiss_type: 'not_chinese' } });
     const answered = first.body.items[1]!;
     expect((await submit(w, token, [{ ...place({ name_en: answered.payload.name }), work_item: answered.id }])).results[0]).toMatchObject({ status: 'accepted' });
     // One dismissed frees its room; one answered waits for review in its place.
@@ -347,12 +347,38 @@ describe('the work feed', () => {
     );
   });
 
-  it('lets an agent dismiss a lead with a reason', async () => {
+  it('lets an agent dismiss a lead for what is so of the place, named by its dismiss_type', async () => {
     const w = world();
     await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'fsa:42', name: 'Golden Thai' }] } });
     const token = await join(w);
     const { body } = await w.json<{ items: { id: string }[] }>('/api/work?type=lead', { token });
-    const dismissed = await w.json<{ status: string; note: string }>(`/api/work/${body.items[0]!.id}/dismiss`, { method: 'POST', token, json: { reason: 'a Thai restaurant' } });
+    const give = (json: Record<string, unknown>) =>
+      w.json<{ status: string; note: string; payload: Record<string, unknown>; error?: { message: string } }>(`/api/work/${body.items[0]!.id}/dismiss`, { method: 'POST', token, json });
+    expect((await give({ reason: 'a Thai restaurant' })).body.error!.message).toContain('dismiss_type: not_chinese (it sells no Chinese food)');
+    // A page it could not open says nothing about the place, whatever type it names.
+    expect((await give({ reason: 'Just Eat returned 403, so no menu shows Chinese food', dismiss_type: 'not_chinese' })).body.error!.message).toContain(
+      'send dismiss_type cannot_verify',
+    );
+    expect((await give({ reason: 'Listed already', dismiss_type: 'duplicate', duplicate_of: 'rec_00000000000000000000000000' })).body.error!.message).toContain(
+      'duplicate_of must be the id (rec_...) of the place the site lists already',
+    );
+    const dismissed = await give({ reason: 'a Thai restaurant', dismiss_type: 'not_chinese' });
     expect(dismissed.body).toMatchObject({ status: 'dismissed', note: 'a Thai restaurant' });
+    expect(dismissed.body.payload.dismissal).toEqual({ type: 'not_chinese', reason: 'a Thai restaurant', by: expect.stringMatching(/^tok_/), at: expect.any(String) });
+  });
+
+  it('closes a lead as a duplicate only of a place the site lists', async () => {
+    const w = world();
+    const token = await join(w);
+    const listed = (await submit(w, token, [place()])).results[0]!.id!;
+    await w.call('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'osm:node/7', name: 'Example Noodles', postcode: 'W1D 6JW' }] } });
+    const { body } = await w.json<{ items: { id: string }[] }>('/api/work?type=lead', { token });
+    const dismissed = await w.json<{ status: string; payload: { dismissal: { duplicate_of: string } } }>(`/api/work/${body.items[0]!.id}/dismiss`, {
+      method: 'POST',
+      token,
+      json: { reason: `Already sent as ${listed}`, dismiss_type: 'duplicate', duplicate_of: listed },
+    });
+    expect(dismissed.body.status).toBe('dismissed');
+    expect(dismissed.body.payload.dismissal.duplicate_of).toBe(listed);
   });
 });

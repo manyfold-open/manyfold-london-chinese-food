@@ -195,6 +195,40 @@ export type SuggestPlaceResponse =
 export type WorkType = 'lead' | 'menu' | 'menu-link' | 'reviews' | 'transcribe' | 'illustrate';
 export const WORK_TYPES: readonly WorkType[] = ['lead', 'menu', 'menu-link', 'reviews', 'transcribe', 'illustrate'];
 
+/**
+ * Why a collector gives a lead up, which says what becomes of it (src/worker/work.ts):
+ *   not_chinese         it sells no Chinese food
+ *   not_public          no one can eat or buy food there: a home, dark or catering kitchen, a wholesaler, an office
+ *   closed_before_2020  it closed before 2020, or another business trades at its address and no page shows it since
+ *   duplicate           the site lists it already (duplicate_of)
+ *   outside_london      it is not in Greater London
+ *   cannot_verify       no page the collector could open shows its food: it goes on, never closed for that
+ * A visitor's lead is closed only when the site team agrees.
+ */
+export type LeadDismissType = 'not_chinese' | 'not_public' | 'closed_before_2020' | 'duplicate' | 'outside_london' | 'cannot_verify';
+export const LEAD_DISMISS_TYPES: readonly LeadDismissType[] = ['not_chinese', 'not_public', 'closed_before_2020', 'duplicate', 'outside_london', 'cannot_verify'];
+
+/** A collector's word on a lead it gave up, kept in the lead's payload as `dismissal`. */
+export interface LeadDismissal {
+  type: LeadDismissType;
+  reason: string;
+  /** The token that gave it up. */
+  by: string;
+  at: string;
+  duplicate_of?: string;
+}
+
+/** A lead waiting for the site team: a visitor's lead a collector would close, or one no collector could verify. */
+export interface ReviewLead {
+  id: string;
+  subject: string;
+  payload: Record<string, unknown>;
+  dismissal: LeadDismissal | null;
+  /** The label of the token that gave it up. */
+  by_label: string | null;
+  at: string;
+}
+
 /* ───────── admin ───────── */
 
 export interface ActorRef {

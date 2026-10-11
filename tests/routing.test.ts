@@ -300,6 +300,38 @@ describe('leads that cannot be finished', () => {
   });
 });
 
+describe('leads no collector could verify', () => {
+  it('go to another collector, never back to the one that gave them back, then to the site team', async () => {
+    const w = world();
+    await w.json('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'fsa:9', name: 'Golden Wok', postcode: 'W1D 6JW' }] } });
+    const tokens = [await join(w, 'one', '198.51.100.11'), await join(w, 'two', '198.51.100.12'), await join(w, 'three', '198.51.100.13')];
+    const held = async (token: string) => (await w.json<{ items: { id: string }[] }>('/api/work?type=lead&limit=5', { token })).body.items;
+    const giveBack = async (token: string, id: string) =>
+      (await w.json<{ status: string }>(`/api/work/${id}/dismiss`, { method: 'POST', token, json: { reason: 'Only its Just Eat page shows food, and it refuses me.', dismiss_type: 'cannot_verify' } })).body.status;
+    const [item] = await held(tokens[0]!);
+    expect(await giveBack(tokens[0]!, item!.id)).toBe('open');
+    expect(await held(tokens[0]!)).toEqual([]);
+    expect(await giveBack(tokens[1]!, (await held(tokens[1]!))[0]!.id)).toBe('review');
+    expect(await held(tokens[2]!)).toEqual([]);
+    // The site team agrees: closed, with its reason.
+    await w.call('/api/admin/leads', { method: 'PATCH', admin: true, json: { leads: [{ subject: 'fsa:9', dismiss: 'No page anywhere shows Golden Wok trading since 2019.' }] } });
+    expect(await w.env.DB.prepare(`SELECT status, note FROM work_items WHERE subject = 'fsa:9'`).first()).toEqual({ status: 'dismissed', note: 'No page anywhere shows Golden Wok trading since 2019.' });
+  });
+
+  it('go to the site team at once when an agent with a browser could not verify one', async () => {
+    const w = world();
+    await w.json('/api/admin/leads', { method: 'POST', admin: true, json: { leads: [{ subject: 'osm:node/9', name: 'Lucky Star', postcode: 'W1D 6JW' }] } });
+    const browser = await maintainer(w, 'browser maintainer', { capabilities: ['browser'] });
+    const { body } = await w.json<{ items: { id: string }[] }>('/api/work?type=lead', { token: browser });
+    const given = await w.json<{ status: string }>(`/api/work/${body.items[0]!.id}/dismiss`, {
+      method: 'POST',
+      token: browser,
+      json: { reason: 'Nothing trades under that name at the postcode on Google Maps or the delivery apps.', dismiss_type: 'cannot_verify' },
+    });
+    expect(given.body.status).toBe('review');
+  });
+});
+
 describe('the site team', () => {
   it('verifies with a passage of its own, which becomes the source, and keeps a precedent until it is adopted', async () => {
     const w = world();

@@ -108,7 +108,13 @@ whose collector and maintainer mechanism this site reuses.
     answer, and a day's wait for a browser reach the site team, at most `HUMAN_DAILY_MAX` a day per
     token. Handing on is a `defer` revision, sending to people an `unsure` one. A token never gets a
     task again for a record it could not decide, and records waiting for the site team do not
-    count against their collector's cap.
+    count against their collector's cap. Leads follow the same rule (`dismissLead`,
+    src/worker/work.ts): a collector closes one only for what is so of the place, named by its
+    `dismiss_type` (not Chinese food, not public, closed before 2020, a duplicate, outside London).
+    A lead no page it could open verifies (`cannot_verify`, and any reason `couldNotRead` catches)
+    goes to another collector, never back to that one, and to the site team once
+    `LEAD_GIVE_BACKS` collectors or one with a browser could not verify it. A visitor's lead a
+    collector would close waits for the site team to agree (status `review`).
 26. **Agents work from the rules as they are.** Every lease and verdict carries `X-Skill-Version`,
     a hash of the instructions the agent read (`skillVersion` in `src/worker/skill.ts`), which
     changes whenever the rules do. A missing one is refused for maintainers, an old one for anyone.

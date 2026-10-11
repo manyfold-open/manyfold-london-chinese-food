@@ -46,6 +46,8 @@ export const RULES = {
    * Counted only for suggestions that passed every other check.
    */
   leadsPerDay: { limit: 100, windowMs: DAY },
+  /** Leads one collector sends to the site team in a day (UTC), as many as a maintainer's tasks (HUMAN_DAILY_MAX). */
+  leadsToSiteTeamPerDay: { limit: 25, windowMs: DAY },
 } as const satisfies Record<string, RateRule>;
 
 const windowIndex = (nowMs: number, windowMs: number) => Math.floor(nowMs / windowMs);

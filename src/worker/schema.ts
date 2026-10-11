@@ -234,6 +234,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS work_items_subject ON work_items (type, subjec
 CREATE INDEX IF NOT EXISTS work_items_open ON work_items (type, priority DESC, created_at) WHERE status = 'open';
 CREATE INDEX IF NOT EXISTS work_items_handed ON work_items (handed_to) WHERE handed_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS work_items_record ON work_items (record_id) WHERE record_id IS NOT NULL;
+-- Leads waiting for the site team (status review), oldest first: a few rows, never a scan.
+CREATE INDEX IF NOT EXISTS work_items_review ON work_items (type, updated_at) WHERE status = 'review';
 
 -- Postcodes looked up at postcodes.io, so each is asked once.
 CREATE TABLE IF NOT EXISTS postcodes (

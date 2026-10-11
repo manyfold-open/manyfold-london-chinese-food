@@ -129,13 +129,46 @@ describe('a visitor suggests a place the site is missing', () => {
 
     const scout = await join(w, 'place-scout', '198.51.100.44');
     const [item] = await leads(w, scout);
-    expect((await w.json<{ status: string }>(`/api/work/${item!.id}/dismiss`, { method: 'POST', token: scout, json: { reason: 'A Thai restaurant.' } })).body.status).toBe('dismissed');
+    // A collector would close it; the site team agrees.
+    const given = await w.json<{ status: string }>(`/api/work/${item!.id}/dismiss`, { method: 'POST', token: scout, json: { reason: 'A Thai restaurant.', dismiss_type: 'not_chinese' } });
+    expect(given.body.status).toBe('review');
+    await w.call('/api/admin/leads', { method: 'PATCH', admin: true, json: { leads: [{ subject: item!.subject, dismiss: 'A Thai restaurant: its menu has pad thai and green curry.' }] } });
+    expect((await leadRows(w))[0]!.status).toBe('dismissed');
     await suggest(w, { name: 'Golden Dragon', where: 'W1D 5PG', url: 'https://example.com/b' });
     expect((await leadRows(w))[0]!.status).toBe('dismissed');
     await suggest(w, { name: 'Golden Dragon', where: 'W1D 5PG', url: 'https://example.com/c' });
     const [again] = await leadRows(w);
     expect(again!.status).toBe('open');
     expect(again!.payload.sources).toEqual(['https://example.com/a', 'https://example.com/b', 'https://example.com/c']);
+    // Opened again for its new link, it is news to every collector.
+    expect(again!.payload).not.toHaveProperty('dismissal');
+    expect((await leads(w, scout)).map((lead) => lead.subject)).toEqual([item!.subject]);
+  });
+
+  it('is closed only when the site team agrees, and goes on to another collector when one could not open its link', async () => {
+    const w = world();
+    await suggest(w, { name: 'Chilli Point', where: '161-163 Example Street, W1D 5PG', url: 'https://maps.app.goo.gl/p5AsJFwknfy2rgX17' });
+    const one = await join(w, 'scout-one', '198.51.100.45');
+    const two = await join(w, 'scout-two', '198.51.100.46');
+    const [item] = await leads(w, one);
+    const give = (token: string, json: Record<string, unknown>) => w.json<{ status: string }>(`/api/work/${item!.id}/dismiss`, { method: 'POST', token, json });
+    // What a collector without a browser said of the owner's suggestions on 2026-10-11, now typed.
+    expect((await give(one, { reason: 'No accessible public page shows current trading without client-side JavaScript.', dismiss_type: 'cannot_verify' })).body.status).toBe('open');
+    expect(await leads(w, one)).toEqual([]);
+    expect((await leads(w, two)).map((lead) => lead.id)).toEqual([item!.id]);
+    expect((await give(two, { reason: 'Its Google Maps link needs a browser; Fantuan answers 429.', dismiss_type: 'cannot_verify' })).body.status).toBe('review');
+
+    const review = await w.json<{ leads: { subject: string; by_label: string | null; dismissal: { type: string } | null; payload: Record<string, unknown> }[] }>('/api/admin/review', { admin: true });
+    expect(review.body.leads).toEqual([expect.objectContaining({ subject: item!.subject, by_label: 'scout-two', dismissal: expect.objectContaining({ type: 'cannot_verify' }) })]);
+    expect(review.body.leads[0]!.payload).toMatchObject({ name: 'Chilli Point', sources: ['https://maps.app.goo.gl/p5AsJFwknfy2rgX17'] });
+    expect((await w.json<{ leads: unknown[] }>('/api/admin/review?kind=menu', { admin: true })).body.leads).toEqual([]);
+    const overview = await w.json<{ kinds: { kind: string; review: number; oldest_review_at: string | null }[] }>('/api/admin/overview', { admin: true });
+    expect(overview.body.kinds.find((row) => row.kind === 'place')).toMatchObject({ review: 1, oldest_review_at: expect.any(String) });
+
+    // Sent back by the site team, it starts afresh: any collector may take it.
+    await w.call(`/api/admin/work/${item!.id}/reopen`, { method: 'POST', admin: true });
+    expect((await leads(w, one)).map((lead) => lead.id)).toEqual([item!.id]);
+    expect((await leadRows(w))[0]!.payload).not.toHaveProperty('gave_back');
   });
 
   it('takes five suggestions an hour from one address', async () => {

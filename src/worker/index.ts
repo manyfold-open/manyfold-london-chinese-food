@@ -13,7 +13,7 @@
  *   POST /api/records                 up to 20 records of any kinds (Idempotency-Key supported)
  *   POST /api/records/:id/flag        ask for a live place, brand or menu to be checked again
  *   GET  /api/work?type=&limit=       work items handed to this token
- *   POST /api/work/:id/dismiss        give a work item up, with the reason
+ *   POST /api/work/:id/dismiss        give a work item up, with the reason (a lead: and its dismiss_type)
  *   GET  /api/tasks?limit=&kind=      maintainers: lease tasks (and list the ones held)
  *   POST /api/verdicts                maintainers: up to 20 verdicts on leased tasks
  *
@@ -91,7 +91,7 @@ import {
   type Token,
 } from './tokens';
 import { HttpError, type Env } from './types';
-import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, updateLeads, workAdmin } from './work';
+import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, reviewLeads, updateLeads, workAdmin } from './work';
 
 const SERVICE = 'manyfold-london-chinese-food';
 const BODY_MAX = 1_000_000;
@@ -443,6 +443,8 @@ app.get('/api/work', async (c) => {
 
 app.post('/api/work/:id/dismiss', async (c) => {
   const token = await agentToken(c);
+  // Giving up work follows the rules as they are: a collector that read older ones is sent back to them.
+  await requireSkillVersion(c, token, false);
   return c.json(await dismiss(c.env.DB, token, c.req.param('id'), await body(c), new Date()));
 });
 
@@ -582,7 +584,11 @@ app.post('/api/admin/tokens/:id/recheck', async (c) => c.json(await recheckToken
 
 app.get('/api/admin/overview', async (c) => c.json({ kinds: await overview(c.env.DB) }));
 app.get('/api/admin/activity', async (c) => c.json({ items: await activity(c.env.DB, { kind: parseKind(c.req.query('kind')), actor: c.req.query('actor') }) }));
-app.get('/api/admin/review', async (c) => c.json({ items: await reviewQueue(c.env.DB, parseKind(c.req.query('kind'))) }));
+app.get('/api/admin/review', async (c) => {
+  const kind = parseKind(c.req.query('kind'));
+  // Leads are about places: they wait with the places.
+  return c.json({ items: await reviewQueue(c.env.DB, kind), leads: kind === undefined || kind === 'place' ? await reviewLeads(c.env.DB) : [] });
+});
 app.post('/api/admin/reports/:id/resolve', async (c) => {
   await resolveReport(c.env.DB, Number(c.req.param('id')));
   return c.json({ ok: true });

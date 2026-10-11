@@ -160,7 +160,7 @@ export async function recordDetail(db: D1Database, id: string): Promise<AdminRec
 /* ───────── overview and review queue ───────── */
 
 export async function overview(db: D1Database): Promise<KindOverview[]> {
-  const [counts, tasks, review, browser, oldest] = await db.batch([
+  const [counts, tasks, review, browser, oldest, leads] = await db.batch([
     db.prepare('SELECT kind, status, COUNT(*) AS n FROM records GROUP BY kind, status'),
     db.prepare(`SELECT record_kind AS kind, status, COUNT(*) AS n FROM tasks WHERE status IN ('open', 'leased', 'blocked', 'review') GROUP BY record_kind, status`),
     db.prepare(
@@ -174,21 +174,26 @@ export async function overview(db: D1Database): Promise<KindOverview[]> {
        WHERE n.need = 'browser' AND t.status IN ('open', 'leased') GROUP BY t.record_kind`,
     ),
     db.prepare(`SELECT record_kind AS kind, MIN(done_at) AS at FROM tasks INDEXED BY tasks_review WHERE status = 'review' GROUP BY record_kind`),
+    // Leads waiting for the site team count with places (src/worker/work.ts, reviewLeads).
+    db.prepare(`SELECT COUNT(*) AS n, MIN(updated_at) AS at FROM work_items INDEXED BY work_items_review WHERE type = 'lead' AND status = 'review'`),
   ]);
+  const waitingLeads = ((leads?.results ?? []) as { n: number; at: string | null }[])[0] ?? { n: 0, at: null };
   return KINDS.map((kind) => {
     const byStatus = Object.fromEntries(RECORD_STATUSES.map((status) => [status, 0])) as Record<RecordStatus, number>;
     for (const row of (counts?.results ?? []) as { kind: Kind; status: RecordStatus; n: number }[]) if (row.kind === kind) byStatus[row.status] = row.n;
     const taskRows = ((tasks?.results ?? []) as { kind: Kind; status: string; n: number }[]).filter((row) => row.kind === kind);
     const taskCount = (statuses: string[]) => taskRows.filter((row) => statuses.includes(row.status)).reduce((sum, row) => sum + row.n, 0);
     const extra = ((review?.results ?? []) as { kind: Kind; n: number }[]).find((row) => row.kind === kind)?.n ?? 0;
+    const lead = kind === 'place' ? waitingLeads : { n: 0, at: null };
+    const oldestTask = ((oldest?.results ?? []) as { kind: Kind; at: string | null }[]).find((row) => row.kind === kind)?.at ?? null;
     return {
       kind,
       counts: byStatus,
       open_tasks: taskCount(['open', 'leased']),
       blocked_tasks: taskCount(['blocked']),
-      review: taskCount(['review']) + extra,
+      review: taskCount(['review']) + extra + Number(lead.n),
       needs_browser: ((browser?.results ?? []) as { kind: Kind; n: number }[]).find((row) => row.kind === kind)?.n ?? 0,
-      oldest_review_at: ((oldest?.results ?? []) as { kind: Kind; at: string | null }[]).find((row) => row.kind === kind)?.at ?? null,
+      oldest_review_at: [oldestTask, lead.at].filter((at): at is string => Boolean(at)).sort()[0] ?? null,
     };
   });
 }

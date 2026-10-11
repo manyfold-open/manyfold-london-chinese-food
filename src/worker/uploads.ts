@@ -344,7 +344,11 @@ export async function suggestPlace(
   const fresh = link !== null && !known.includes(link);
   // Answered already (the place was listed from it), or dismissed and told nothing new: left as it is.
   if (existing.status === 'done' || (existing.status === 'dismissed' && !fresh)) return { status: 'received' };
-  const payload = { ...before, ...(note ? { hint } : {}), ...(fresh ? { sources: [...known, link].slice(-LEAD_LINKS_MAX) } : {}) };
+  // A new link is news to the collectors that could not verify it: any of them may take it again.
+  // One waiting for the site team keeps what its collector said, for the site team to read.
+  const { dismissal, gave_back: gaveBack, ...rest } = before;
+  const base = fresh && existing.status !== 'review' ? rest : before;
+  const payload = { ...base, ...(note ? { hint } : {}), ...(fresh ? { sources: [...known, link].slice(-LEAD_LINKS_MAX) } : {}) };
   await env.DB
     .prepare(
       existing.status === 'dismissed'

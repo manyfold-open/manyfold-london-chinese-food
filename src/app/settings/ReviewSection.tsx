@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { Kind } from '../../shared/kinds';
-import type { PlaceFacts, Precedent, ReviewItem, UnsureType } from '../../shared/types';
+import type { LeadDismissType, PlaceFacts, Precedent, ReviewItem, ReviewLead, UnsureType } from '../../shared/types';
 import { Link } from '../router';
 import { CheckRow, TextField, useToast } from '../ui';
 import { send, useAdmin } from './adminApi';
 import { SourceLink } from './fields';
-import { Action, activityHref, Badge, hostOf, kindLabel, Loading, Notice, plural, RecordImage, recordHref, When } from './ui';
+import { Action, activityHref, Badge, hostOf, kindLabel, Loading, Notice, plural, RecordImage, recordHref, RecordLink, When } from './ui';
 
 const TYPE: Record<ReviewItem['type'], string> = {
   unsure: 'Maintainer unsure',
@@ -19,6 +19,16 @@ const UNSURE: Record<UnsureType, string> = {
   duplicate_pending: 'Duplicate of a waiting record',
   conflict: 'Sources disagree',
   policy: 'Rules do not say',
+};
+
+/** Why a collector gave a lead up, as the site team reads it. */
+const DISMISS: Record<LeadDismissType, string> = {
+  not_chinese: 'Not Chinese food',
+  not_public: 'Not open to the public',
+  closed_before_2020: 'Closed before 2020',
+  duplicate: 'Listed already',
+  outside_london: 'Outside London',
+  cannot_verify: 'Could not verify',
 };
 
 /** What the server looked up about a place: the FSA's business and delivery listings, as leads to open. */
@@ -167,6 +177,82 @@ function Item({ item, showKind, onChange }: { item: ReviewItem; showKind: boolea
   );
 }
 
+/**
+ * A lead waiting for a person: a visitor's that a collector would close, or one collectors could
+ * not verify. Dismiss it for good, or send it back to collectors (answering it yourself is sending
+ * the place as the site team).
+ */
+function LeadItem({ lead, onChange }: { lead: ReviewLead; onChange: () => void }) {
+  const toast = useToast();
+  const [note, setNote] = useState('');
+  const text = (key: string) => (typeof lead.payload[key] === 'string' ? (lead.payload[key] as string) : '');
+  const name = text('name') || lead.subject;
+  const where = [text('address'), text('postcode')].filter(Boolean).join(', ');
+  const sources = Array.isArray(lead.payload.sources) ? lead.payload.sources.filter((source): source is string => typeof source === 'string') : [];
+  const evidence = lead.payload.food_evidence as { url?: unknown } | undefined;
+  const reason = note.trim() || lead.dismissal?.reason || '';
+  const done = (message: string) => () => {
+    toast(message);
+    onChange();
+  };
+  return (
+    <li className="review-item">
+      <div className="review-head">
+        <span className="badge badge-kind">{lead.subject.startsWith('visitor:') ? "A visitor's lead" : 'Lead'}</span>
+        {lead.dismissal ? <span className="badge">{DISMISS[lead.dismissal.type]}</span> : null}
+        <strong>{name}</strong>
+        <span className="muted small">
+          <When at={lead.at} />
+        </span>
+      </div>
+      <div className="review-body">
+        <div>
+          <p className="review-reason">
+            {lead.dismissal?.reason || <span className="empty">No reason given.</span>}
+            {lead.dismissal ? (
+              <span className="muted small">
+                {' '}
+                — <Link href={activityHref(lead.dismissal.by)}>{lead.by_label ?? lead.dismissal.by}</Link>
+              </span>
+            ) : null}
+          </p>
+          {lead.dismissal?.duplicate_of ? (
+            <p className="small">
+              Listed as <RecordLink id={lead.dismissal.duplicate_of} kind="place" />
+            </p>
+          ) : null}
+          {where ? <p className="small">{where}</p> : null}
+          {text('hint') ? <p className="small muted">{text('hint')}</p> : null}
+          {sources.map((source) => (
+            <p key={source} className="small">
+              <SourceLink url={source} />
+            </p>
+          ))}
+          {typeof evidence?.url === 'string' ? (
+            <p className="small">
+              Shows its food: <SourceLink url={evidence.url} />
+            </p>
+          ) : null}
+          <p className="small muted">
+            <code>{lead.subject}</code>
+          </p>
+        </div>
+      </div>
+      <div className="review-actions">
+        <TextField placeholder="Reason to dismiss (the collector's, if left empty)" aria-label={`Reason for ${name}`} value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
+        <Action
+          label="Dismiss"
+          tone="danger"
+          check={() => (reason.length >= 3 ? null : 'Write the reason first.')}
+          run={() => send('PATCH', '/leads', { leads: [{ subject: lead.subject, dismiss: reason }] })}
+          onDone={done(`Dismissed ${name}.`)}
+        />
+        <Action label="Back to collectors" run={() => send('POST', `/work/${lead.id}/reopen`)} onDone={done(`${name} is open for collectors again.`)} />
+      </div>
+    </li>
+  );
+}
+
 /** Decisions that state a rule, until the rule is written into a kind's checks; then they are marked adopted. */
 function Precedents() {
   const toast = useToast();
@@ -221,27 +307,42 @@ function JustEatSwitch() {
   );
 }
 
-/** Everything that waits for a person: unsure verdicts, flagged records, reader reports. */
+/** Everything that waits for a person: unsure verdicts, flagged records, reader reports, leads collectors would close or could not verify. */
 export default function ReviewSection({ kind }: { kind: Kind | null }) {
-  const { data, error, loading, reload } = useAdmin<{ items: ReviewItem[] }>(`/review${kind ? `?kind=${kind}` : ''}`);
+  const { data, error, loading, reload } = useAdmin<{ items: ReviewItem[]; leads?: ReviewLead[] }>(`/review${kind ? `?kind=${kind}` : ''}`);
+  const leads = data?.leads ?? [];
   return (
     <>
       <div className="section-head">
         <h2>Review queue{kind ? ` · ${kindLabel(kind)}` : ''}</h2>
-        <span className="muted">{data ? `${plural(data.items.length, 'item')} waiting` : ''}</span>
+        <span className="muted">{data ? `${plural(data.items.length + leads.length, 'item')} waiting` : ''}</span>
       </div>
       <p className="muted small">
         Only what maintainers could not settle comes here: a page no maintainer with a browser could open, sources two maintainers found in conflict, or a
-        question the rules do not answer. When a decision states a rule, add it as a precedent, so the rules learn it.
+        question the rules do not answer. When a decision states a rule, add it as a precedent, so the rules learn it. Leads come here when a collector
+        would close one a visitor sent, or when collectors could not open a page that shows its food.
       </p>
       <Notice error={error} />
       {!data && loading ? <Loading rows={3} height={120} /> : null}
-      {data && data.items.length === 0 ? <p className="muted">Nothing waits for review.</p> : null}
+      {data && data.items.length === 0 && leads.length === 0 ? <p className="muted">Nothing waits for review.</p> : null}
       <ul className="review-list">
         {(data?.items ?? []).map((item) => (
           <Item key={`${item.type}-${item.task_id ?? item.report_id ?? item.record.id}`} item={item} showKind={kind === null} onChange={reload} />
         ))}
       </ul>
+      {leads.length > 0 ? (
+        <>
+          <div className="section-head">
+            <h3>Leads</h3>
+            <span className="muted">{plural(leads.length, 'lead')}</span>
+          </div>
+          <ul className="review-list">
+            {leads.map((lead) => (
+              <LeadItem key={lead.id} lead={lead} onChange={reload} />
+            ))}
+          </ul>
+        </>
+      ) : null}
       {kind === null ? (
         <>
           <Precedents />
