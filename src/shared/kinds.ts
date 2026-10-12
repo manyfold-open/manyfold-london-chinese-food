@@ -324,7 +324,13 @@ const show = (value: unknown): string => {
   return text.length > 60 ? `${text.slice(0, 57)}...` : text;
 };
 
-/** An https URL with a dotted host and no credentials, or null. */
+/**
+ * http-only pages the owner has allowed as sources, exactly as written (their https is broken).
+ * Sichuan Greenwich's 2026 menu: allowed 2026-10-12.
+ */
+export const HTTP_SOURCES: ReadonlySet<string> = new Set(['http://sichuangreenwich.co.uk/SichuanGreenwich2026_FullMenu.pdf']);
+
+/** An https URL with a dotted host and no credentials (or an allowed http source), or null. */
 export function parseHttpsUrl(raw: string): string | null {
   let url: URL;
   try {
@@ -332,6 +338,7 @@ export function parseHttpsUrl(raw: string): string | null {
   } catch {
     return null;
   }
+  if (url.protocol === 'http:' && HTTP_SOURCES.has(url.toString())) return url.toString();
   if (url.protocol !== 'https:' || url.username || url.password || !url.hostname.includes('.')) return null;
   return url.toString();
 }
