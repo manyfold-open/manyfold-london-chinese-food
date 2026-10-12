@@ -209,7 +209,8 @@ function runSteps(focus: Focus, api: string): string {
 2. For each, find reviews written in ${language}: ${where}. Read only what you can open without logging in.
 3. Send one excerpt per review: the passage that says most about the food or the visit, copied word for word, never a rating. Prefer different sources and different years over many from one source: readers judge a place by its history. A place takes at most 10 excerpts from one source.
 4. Name the dishes the excerpt mentions in \`dishes\`, and add a faithful translation into the other language in \`translation\`.
-5. You may also review places you find yourself: get their id with \`GET ${api}/search?q=<name>\`.`;
+5. You may also review places you find yourself: get their id with \`GET ${api}/search?q=<name>\`.
+6. A place you searched for and found no review of in ${language} that you could quote: dismiss the item with \`POST ${api}/work/<id>/dismiss\` and \`{"reason": "<where you looked>", "dismiss_type": "no_source"}\`. It goes to another collector, never back to you, and is closed once two found nothing. A page you could not open is not that: give the item back with the reason alone.`;
     }
     case 'menus':
       return `1. First, links visitors sent to a place's menu online: \`GET ${api}/work?type=menu-link&limit=3\`. Each gives the place, its \`links\` and \`menus\` (the ids of the menus we already have). If a link opens this place's menu and we have none, type it up and send it with \`"work_item"\`. If we have one, compare: when prices or dishes changed, send the whole new version with \`"updates": "<the menu's id>"\` and \`"work_item"\`. Nothing new, or not this place's menu: dismiss the item with the reason.
@@ -217,7 +218,8 @@ function runSteps(focus: Focus, api: string): string {
 3. Then places with no menu: \`GET ${api}/work?type=menu&limit=3\`. Start from \`menu_url\` when the item gives one (the place's own menu); otherwise find the menu on the place's website (pages, PDFs, images) or, failing that, a delivery app (mark it \`delivery-app\`).
 4. A PDF: read its text (pdftotext); if its pages are only images, render them and read them. Skip a page you cannot read clearly, and say so in your notes.
 5. Transcribe every item as printed: section, names, price in pence, notes, printed dietary marks and chilli counts. Set \`canonical\` to the standard dish name when an item is a standard dish (\`GET ${api}/schema\` lists them).
-6. A menu we have but whose prices or dishes changed: send the whole new version with \`"updates": "<the menu's id>"\`.`;
+6. A menu we have but whose prices or dishes changed: send the whole new version with \`"updates": "<the menu's id>"\`.
+7. A place whose menu no source you can open has (no website menu, no ordering page, no delivery app listing it): dismiss the item with \`POST ${api}/work/<id>/dismiss\` and \`{"reason": "<where you looked>", "dismiss_type": "no_source"}\`. It goes to another collector, never back to you, and is closed once two found nothing. A page you could not open (a bot check, a login) is not that: give the item back with the reason alone.`;
     case 'illustrations':
       return `1. Ask for dishes to illustrate: \`GET ${api}/work?type=illustrate&limit=5\`. Every item is a standard dish: \`dish\` (its name, to send back), \`name_en\`, what it looks like (\`description\`) and the \`prompt\` to use. You are handed no more than you may have waiting for review; when you get fewer than you asked for, \`note\` says why. If \`items\` is empty, report the note and stop.
 2. Generate one image per dish with your image model from that prompt (you may add your tool's own settings, never change the dish). Square, at least 1024 pixels.

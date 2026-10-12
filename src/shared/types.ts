@@ -218,6 +218,19 @@ export interface LeadDismissal {
   duplicate_of?: string;
 }
 
+/**
+ * Why a menu or reviews item was closed unanswered, kept in its payload as `dismissal`: no source
+ * anyone could open has what it asks for (no_source), as LEAD_GIVE_BACKS collectors or the site
+ * team said, with where they looked. It opens again when the place's menu or excerpts change.
+ */
+export interface WorkDismissal {
+  type: 'no_source';
+  reason: string;
+  /** The token that closed it, or "admin". */
+  by: string;
+  at: string;
+}
+
 /** A lead waiting for the site team: a visitor's lead a collector would close, or one no collector could verify. */
 export interface ReviewLead {
   id: string;

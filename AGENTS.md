@@ -97,7 +97,9 @@ whose collector and maintainer mechanism this site reuses.
     (drinks, set meals, add-ons, headings). No agent is handed more items than its limit of records
     waiting for review leaves room for, a short hand-out says why, and an item no one could finish
     is closed, not handed out again: a lead whose answer was rejected twice is dismissed
-    (`src/worker/effects.ts`), and leads are qualified before they go out
+    (`src/worker/effects.ts`), a menu or reviews item `LEAD_GIVE_BACKS` collectors found no source
+    for (`no_source`, never for a page they could not open), or the site team did, is closed and
+    opens again when the place's excerpts change (`noSource`, `closeWork`, src/worker/work.ts), and leads are qualified before they go out
     (`scripts/qualify-leads.ts`: the FSA still lists them, and a page shows their food); a visitor's
     suggestion becomes a lead only with a postcode, when it gives one, in Greater London and no
     place there already listed under a name alike (`suggestPlace`, src/worker/uploads.ts).

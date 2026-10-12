@@ -91,7 +91,7 @@ import {
   type Token,
 } from './tokens';
 import { HttpError, type Env } from './types';
-import { dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, reviewLeads, updateLeads, workAdmin } from './work';
+import { closeWork, dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, reviewLeads, updateLeads, workAdmin } from './work';
 
 const SERVICE = 'manyfold-london-chinese-food';
 const BODY_MAX = 1_000_000;
@@ -665,6 +665,10 @@ app.post('/api/admin/spot-check/:kind/:recordId', async (c) =>
 app.get('/api/admin/work', async (c) => {
   const type = c.req.query('type');
   return c.json(await workAdmin(c.env.DB, isWorkType(type) ? type : null, c.req.query('status') ?? null));
+});
+app.post('/api/admin/work/:id/close', async (c) => {
+  await closeWork(c.env.DB, c.req.param('id'), await body(c), new Date());
+  return c.json({ ok: true });
 });
 app.post('/api/admin/work/:id/reopen', async (c) => {
   await reopenWork(c.env.DB, c.req.param('id'), new Date());

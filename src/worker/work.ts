@@ -31,7 +31,7 @@
 
 import { KIND_CONFIGS } from '../../kinds/index';
 import type { Kind } from '../shared/kinds';
-import type { AdminWorkItem, LeadDismissal, LeadDismissType, ReviewLead, WorkItem, WorkResponse, WorkType } from '../shared/types';
+import type { AdminWorkItem, LeadDismissal, LeadDismissType, ReviewLead, WorkDismissal, WorkItem, WorkResponse, WorkType } from '../shared/types';
 import { LEAD_DISMISS_TYPES, WORK_TYPES } from '../shared/types';
 import { newId } from './ids';
 import { reopenProblem } from './illustrations';
@@ -84,7 +84,7 @@ export const ANSWERED_BY: Readonly<Record<WorkType, Kind>> = {
 const READY_PAGES = ` AND NOT EXISTS (SELECT 1 FROM records p INDEXED BY records_age
   WHERE p.kind = 'photo' AND p.status = 'pending' AND json_extract(p.data_json, '$.set') = work_items.subject)`;
 
-/** A lead never goes back to a collector that could not verify it (?1 is the token). */
+/** A lead, menu or reviews item never goes back to a collector that gave it up for its reason (?1 is the token). */
 const NOT_GIVEN_BACK = ` AND NOT EXISTS (SELECT 1 FROM json_each(work_items.payload_json, '$.gave_back') g WHERE g.value = ?1)`;
 
 /** The verified pages of a menu set (or the one photo), in page order. */
@@ -162,7 +162,7 @@ export async function handOut(db: D1Database, token: Token, type: WorkType, limi
         `UPDATE work_items SET handed_to = ?1, handed_until = ?2, updated_at = ?3
          WHERE id IN (
            SELECT id FROM work_items INDEXED BY work_items_open
-           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3${type === 'transcribe' ? READY_PAGES : ''}${type === 'lead' ? NOT_GIVEN_BACK : ''}
+           WHERE type = ?4 AND status = 'open' AND (handed_to IS NULL OR handed_until <= ?3) AND created_at <= ?3${type === 'transcribe' ? READY_PAGES : ''}${type === 'lead' || type === 'menu' || type === 'reviews' ? NOT_GIVEN_BACK : ''}
            ORDER BY priority DESC, created_at LIMIT ?5)`,
       )
       .bind(token.id, new Date(now.getTime() + HANDOUT_MS).toISOString(), at, type, room)
@@ -205,8 +205,9 @@ const DISMISS_HELP =
 const isLeadDismissType = (value: unknown): value is LeadDismissType => typeof value === 'string' && (LEAD_DISMISS_TYPES as readonly string[]).includes(value);
 
 /**
- * A held item the agent gives up on. A lead goes where its dismiss_type says (dismissLead); menu
- * links with nothing new are dismissed for good; anything else goes back for another agent.
+ * A held item the agent gives up on. A lead goes where its dismiss_type says (dismissLead); a menu
+ * or reviews item no source has the answer for goes as no_source says (noSource); menu links with
+ * nothing new are dismissed for good; anything else goes back for another agent.
  */
 export async function dismiss(
   db: D1Database,
@@ -224,6 +225,8 @@ export async function dismiss(
   const at = now.toISOString();
   if (row.type === 'lead') {
     await dismissLead(db, token, row, reason, body, now);
+  } else if ((row.type === 'menu' || row.type === 'reviews') && body.dismiss_type !== undefined) {
+    await noSource(db, token, row, reason, body.dismiss_type, now);
   } else if (row.type === 'menu-link') {
     // Links that hold no new menu are done with.
     await db.prepare(`UPDATE work_items SET status = 'dismissed', note = ?, updated_at = ? WHERE id = ?`).bind(reason, at, id).run();
@@ -314,6 +317,73 @@ async function dismissLead(
     .run();
 }
 
+/**
+ * A menu or reviews item the collector searched for and found no source for (dismiss_type
+ * no_source, with where it looked). It goes to another collector, never back to this one, and is
+ * closed once LEAD_GIVE_BACKS collectors found nothing (AGENTS.md, invariant 24). A page the
+ * collector could not open is not that: the item goes back for someone who can.
+ */
+async function noSource(db: D1Database, token: Token, row: ItemRow, reason: string, type: unknown, now: Date): Promise<void> {
+  if (type !== 'no_source') {
+    throw new HttpError(422, 'invalid_body', 'A menu or reviews item takes one dismiss_type: no_source (you searched and no source has it: say where you looked). To give it back for another reason, send only the reason.');
+  }
+  if (reason.length < 20) throw new HttpError(422, 'invalid_body', 'Say where you looked, in 20 to 300 characters: e.g. "its website (no menu), Google, Just Eat and Deliveroo (none list it)".');
+  if (couldNotRead(reason)) {
+    throw new HttpError(
+      422,
+      'invalid_body',
+      'The reason says you could not open a page, which does not show no source has it: give the item back with the reason alone, and it goes to someone who can open it.',
+    );
+  }
+  const payload = (row.payload_json ? JSON.parse(row.payload_json) : {}) as { gave_back?: unknown };
+  const before = Array.isArray(payload.gave_back) ? payload.gave_back.filter((one): one is string => typeof one === 'string') : [];
+  const gaveBack = [...new Set([...before, token.id])];
+  const at = now.toISOString();
+  if (gaveBack.length < LEAD_GIVE_BACKS) {
+    await db
+      .prepare(
+        `UPDATE work_items SET handed_to = NULL, handed_until = NULL, priority = priority - 1, note = ?, payload_json = json_set(COALESCE(payload_json, '{}'), '$.gave_back', json(?)), updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(reason, JSON.stringify(gaveBack), at, row.id)
+      .run();
+    return;
+  }
+  await closeNoSource(db, row.id, { type: 'no_source', reason, by: token.id, at }, gaveBack);
+}
+
+async function closeNoSource(db: D1Database, id: string, dismissal: WorkDismissal, gaveBack: string[] | null): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE work_items SET status = 'dismissed', handed_to = NULL, handed_until = NULL, note = ?1, updated_at = ?2,
+         payload_json = CASE WHEN ?4 IS NULL THEN json_set(COALESCE(payload_json, '{}'), '$.dismissal', json(?3))
+                             ELSE json_set(COALESCE(payload_json, '{}'), '$.dismissal', json(?3), '$.gave_back', json(?4)) END
+       WHERE id = ?5`,
+    )
+    .bind(dismissal.reason, dismissal.at, JSON.stringify(dismissal), gaveBack ? JSON.stringify(gaveBack) : null, id)
+    .run();
+}
+
+/** The site team closes an open menu or reviews item no source has the answer for, saying where it looked. */
+export async function closeWork(db: D1Database, id: string, body: { reason?: unknown }, now: Date): Promise<void> {
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
+  if (reason.length < 20) throw new HttpError(422, 'invalid_body', 'Say where the site team looked, in 20 to 300 characters.');
+  const item = await db.prepare('SELECT type, status FROM work_items WHERE id = ?').bind(id).first<{ type: WorkType; status: string }>();
+  if (!item) throw new HttpError(404, 'not_found', 'No work item has that id.');
+  if ((item.type !== 'menu' && item.type !== 'reviews') || item.status !== 'open') {
+    throw new HttpError(409, 'conflict', 'Only an open menu or reviews item is closed for no source.');
+  }
+  await closeNoSource(db, id, { type: 'no_source', reason, by: 'admin', at: now.toISOString() }, null);
+}
+
+/**
+ * A menu or reviews item closed for no source opens again once the excerpts it counts change:
+ * someone found a source after all. What collectors said of it (gave_back, dismissal) is kept
+ * across rebuilds otherwise.
+ */
+const REOPENS = `(work_items.status = 'dismissed' AND work_items.type = 'reviews'
+  AND (excluded.payload_json ->> '$.en' IS NOT work_items.payload_json ->> '$.en' OR excluded.payload_json ->> '$.zh' IS NOT work_items.payload_json ->> '$.zh'))`;
+
 /** Work items as statements: open one (if new or done before), or close one, for the read-model builder. */
 export function wantWork(db: D1Database, type: WorkType, subject: string, priority: number, payload: Record<string, unknown>, now: Date): D1PreparedStatement {
   const at = now.toISOString();
@@ -321,15 +391,17 @@ export function wantWork(db: D1Database, type: WorkType, subject: string, priori
     .prepare(
       `INSERT INTO work_items (id, type, subject, priority, payload_json, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
-       ON CONFLICT (type, subject) DO UPDATE SET priority = excluded.priority, payload_json = excluded.payload_json,
-         status = CASE WHEN work_items.status = 'done' THEN 'open' ELSE work_items.status END, updated_at = excluded.updated_at`,
+       ON CONFLICT (type, subject) DO UPDATE SET priority = excluded.priority,
+         payload_json = CASE WHEN ${REOPENS} THEN excluded.payload_json
+           ELSE json_patch(excluded.payload_json, json_object('gave_back', json(work_items.payload_json ->> '$.gave_back'), 'dismissal', json(work_items.payload_json ->> '$.dismissal'))) END,
+         status = CASE WHEN work_items.status = 'done' OR ${REOPENS} THEN 'open' ELSE work_items.status END, updated_at = excluded.updated_at`,
     )
     .bind(newId('wrk', now.getTime()), type, subject, priority, JSON.stringify(payload), at, at);
 }
 
 export function doneWork(db: D1Database, type: WorkType, subject: string, now: Date): D1PreparedStatement {
   return db
-    .prepare(`UPDATE work_items SET status = 'done', handed_to = NULL, handed_until = NULL, updated_at = ? WHERE type = ? AND subject = ? AND status = 'open'`)
+    .prepare(`UPDATE work_items SET status = 'done', handed_to = NULL, handed_until = NULL, updated_at = ? WHERE type = ? AND subject = ? AND status IN ('open', 'dismissed')`)
     .bind(now.toISOString(), type, subject);
 }
 
@@ -492,8 +564,9 @@ export async function workAdmin(db: D1Database, type: WorkType | null, status: s
 }
 
 /**
- * The admin opens an item again (a lead dismissed by mistake, or one the site team sends back to
- * collectors), unless no agent could answer it. A lead starts afresh: any collector may take it.
+ * The admin opens an item again (a lead dismissed by mistake, one the site team sends back to
+ * collectors, a menu or reviews item closed for no source), unless no agent could answer it. It
+ * starts afresh: any collector may take it.
  */
 export async function reopenWork(db: D1Database, id: string, now: Date): Promise<void> {
   const item = await db.prepare('SELECT type, subject FROM work_items WHERE id = ?').bind(id).first<{ type: WorkType; subject: string }>();
@@ -503,7 +576,7 @@ export async function reopenWork(db: D1Database, id: string, now: Date): Promise
   await db
     .prepare(
       `UPDATE work_items SET status = 'open', handed_to = NULL, handed_until = NULL, record_id = NULL,
-         payload_json = CASE WHEN type = 'lead' AND payload_json IS NOT NULL THEN json_remove(payload_json, '$.gave_back', '$.dismissal') ELSE payload_json END,
+         payload_json = CASE WHEN payload_json IS NOT NULL THEN json_remove(payload_json, '$.gave_back', '$.dismissal') ELSE payload_json END,
          updated_at = ?
        WHERE id = ?`,
     )

@@ -134,6 +134,66 @@ describe('the work feed from pages', () => {
     expect(menuItem!.status).toBe('done');
   });
 
+  it('closes a reviews item two collectors found no source for, and opens it again when an excerpt arrives', async () => {
+    const w = world();
+    const token = await join(w);
+    const { results } = await submit(w, token, [place(), menu('#0')]);
+    const placeId = results[0]!.id!;
+    await decide(w, placeId, 'verified');
+    await cron(w);
+    const one = await join(w, 'scout-one', '198.51.100.45');
+    const two = await join(w, 'scout-two', '198.51.100.46');
+    type Item = { id: string; status: string; payload: Record<string, unknown>; error?: { message: string } };
+    const reviews = async (who: string) => (await w.json<{ items: Item[] }>('/api/work?type=reviews&limit=5', { token: who })).body.items;
+    const give = (who: string, id: string, json: Record<string, unknown>) => w.json<Item>(`/api/work/${id}/dismiss`, { method: 'POST', token: who, json });
+    const row = () => w.env.DB.prepare(`SELECT status, payload_json FROM work_items WHERE type = 'reviews' AND subject = ?`).bind(placeId).first<{ status: string; payload_json: string }>();
+
+    const [item] = await reviews(one);
+    expect((await give(one, item!.id, { reason: 'Nothing found', dismiss_type: 'no_source' })).body.error!.message).toContain('Say where you looked');
+    expect((await give(one, item!.id, { reason: 'Tripadvisor sits behind a bot check, the rest found nothing.', dismiss_type: 'no_source' })).body.error!.message).toContain(
+      'give the item back with the reason alone',
+    );
+    const searched = { reason: 'Google, The Infatuation, Time Out and 红领巾: no review of it.', dismiss_type: 'no_source' };
+    expect((await give(one, item!.id, searched)).body.status).toBe('open');
+    expect(await reviews(one)).toEqual([]);
+    expect((await reviews(two)).map((other) => other.id)).toEqual([item!.id]);
+    expect((await give(two, item!.id, searched)).body.status).toBe('dismissed');
+    expect(JSON.parse((await row())!.payload_json).dismissal).toMatchObject({ type: 'no_source', by: expect.any(String) });
+
+    // A rebuild with nothing new keeps it closed, and what was said of it.
+    await decide(w, results[1]!.id!, 'verified');
+    await cron(w);
+    expect((await row())!.status).toBe('dismissed');
+    expect(JSON.parse((await row())!.payload_json)).toMatchObject({ en: 0, dismissal: expect.anything(), gave_back: expect.any(Array) });
+
+    // Someone found a review after all: it is news to every collector.
+    const added = await submit(w, token, [review(placeId)]);
+    await decide(w, added.results[0]!.id!, 'verified');
+    await cron(w);
+    expect((await row())!.status).toBe('open');
+    expect(JSON.parse((await row())!.payload_json)).not.toHaveProperty('dismissal');
+    expect((await reviews(one)).map((other) => other.id)).toEqual([item!.id]);
+  });
+
+  it('lets the site team close a menu item no source has, until a menu arrives', async () => {
+    const w = world();
+    const token = await join(w);
+    const { results } = await submit(w, token, [place()]);
+    await decide(w, results[0]!.id!, 'verified');
+    await cron(w);
+    const item = await w.env.DB.prepare(`SELECT id FROM work_items WHERE type = 'menu' AND subject = ?`).bind(results[0]!.id).first<{ id: string }>();
+    const close = (json: Record<string, unknown>) => w.call(`/api/admin/work/${item!.id}/close`, { method: 'POST', admin: true, json });
+    expect((await close({ reason: 'none' })).status).toBe(422);
+    expect((await close({ reason: 'No website; Just Eat, Deliveroo and Uber Eats do not list it.' })).status).toBe(200);
+    const status = async () => (await w.env.DB.prepare('SELECT status FROM work_items WHERE id = ?').bind(item!.id).first<{ status: string }>())!.status;
+    expect(await status()).toBe('dismissed');
+    expect((await close({ reason: 'No website; Just Eat, Deliveroo and Uber Eats do not list it.' })).status).toBe(409);
+    const added = await submit(w, token, [menu(results[0]!.id!)]);
+    await decide(w, added.results[0]!.id!, 'verified');
+    await cron(w);
+    expect(await status()).toBe('done');
+  });
+
   it('asks for reviews of restaurants before other places, and of the least reviewed first', async () => {
     const w = world();
     const token = await join(w);
