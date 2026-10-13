@@ -68,7 +68,7 @@ export function PlacePage({ id }: { id: string }) {
     lat: typeof doc.place.lat === 'number' ? doc.place.lat : null,
     lng: typeof doc.place.lng === 'number' ? doc.place.lng : null,
   });
-  const dishNames = doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.map((item) => item.name_zh ?? item.name_en ?? ''))).filter(Boolean);
+  const dishNames = doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.flatMap((item) => [item.name_zh ?? '', item.name_en ?? '']))).filter(Boolean);
 
   return (
     <article className="place screen">

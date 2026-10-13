@@ -96,6 +96,28 @@ describe('a photo on its way to the page', () => {
     expect(doc.menus[0]!.sections[0]!.items[0]!.photo).toMatchObject({ id });
   });
 
+  it('hangs on the menu item it names in either language, or by the standard dish', async () => {
+    const w = world();
+    const token = await join(w);
+    const { results } = await submit(w, token, [
+      place(),
+      menu('#0', [
+        { name_zh: '油泼面', name_en: 'Biang biang noodles', price_pence: 1280 },
+        { name_en: 'ZaJiang & Peas Noodles', price_pence: 1380 },
+        { name_en: 'Peas Noodles', price_pence: 1180 },
+      ]),
+    ]);
+    for (const result of results) await w.call(`/api/admin/records/${result.id}/decide`, { method: 'POST', admin: true, json: { status: 'verified' } });
+    const placeId = results[0]!.id!;
+    const english = (await upload(w, placeId, good({ dish_name: 'Biang Biang Noodles' }))).body.id!;
+    const standard = (await upload(w, placeId, good({ dish_name: '豌杂面' }))).body.id!;
+    for (const id of [english, standard]) await w.call(`/api/admin/records/${id}/decide`, { method: 'POST', admin: true, json: { status: 'verified' } });
+
+    await w.json('/api/admin/maintenance', { method: 'POST', admin: true });
+    const items = (await w.json<PlaceDoc>(`/api/places/${placeId}`)).body.menus[0]!.sections[0]!.items;
+    expect(items.map((item) => item.photo?.id ?? null)).toEqual([english, standard, null]);
+  });
+
   it('turns a photo of a menu into work: a menu to transcribe', async () => {
     const w = world();
     const placeId = await publicPlace(w);

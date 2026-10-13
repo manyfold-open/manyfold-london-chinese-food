@@ -187,6 +187,18 @@ const isPublic = (record: DocRecord) => PUBLIC.includes(record.status);
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 const number = (value: unknown): number | null => (typeof value === 'number' ? value : null);
 
+/**
+ * Whether a visitor's dish photo shows this menu item: its name is either of the item's names, or
+ * names the same standard dish. Visitors type the name they know, "豌杂面" for a menu's "ZaJiang &
+ * Peas Noodles", and a menu may gain its Chinese names after the photo came.
+ */
+function showsItem(photo: DocPhoto, item: ListItem, dish: string | null): boolean {
+  if (!photo.item_key || !photo.dish_name) return false;
+  const named = normDish(photo.dish_name);
+  if ([item.name_zh, item.name_en, item.name].some((name) => typeof name === 'string' && normDish(name) === named)) return true;
+  return dish !== null && dishKeyOf({ name: photo.dish_name }) === dish;
+}
+
 /** A URL-friendly form of a name: Latin letters and digits, joined by hyphens. Empty for a name in Chinese only. */
 export function slugify(name: string | null): string {
   return (name ?? '')
@@ -292,7 +304,7 @@ export function buildPlace(input: {
       }
       const dish = dishKeyOf(item);
       const key = itemKeyOf(owner === 'place' ? place.id : String(menu.parent_id), item);
-      const photo = (key && photoByItem.get(key)) || (dish ? photos.find((candidate) => candidate.item_key && candidate.dish_name && normDish(candidate.dish_name) === dish) : undefined);
+      const photo = (key && photoByItem.get(key)) || photos.find((candidate) => showsItem(candidate, item, dish));
       if (dish) {
         onMenus.add(dish);
         if (!dishRows.has(dish)) {
