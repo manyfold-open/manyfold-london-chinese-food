@@ -369,7 +369,7 @@ const zh: Copy = {
     title: '隐私',
     paragraphs: [
       '你选的语言、主题、筛选条件和对访问统计的回答只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序、在地图上标出你在哪，不会发送给我们。',
-      '我们用 Google Analytics 统计有多少人来、看了哪些页面、从哪里来，用来改进网站。在英国、欧洲经济区和瑞士，只有你选了“接受”它才会加载；在其他地方它直接加载，你可以在下面关掉。它会在这个网站下存两个以 lcf__ga 开头的 cookie；Google 会收到你的浏览器信息，并用你的 IP 地址估计你所在的城市。这里没有广告：Google 的广告功能是关着的，这些数据也不用于广告。',
+      '我们用 Google Analytics 统计有多少人来、看了哪些页面、从哪里来，用来改进网站。在英国、欧洲经济区和瑞士，只有你选了“接受”它才会加载；在其他地方它直接加载，你可以在下面关掉。它会在这个网站下存两个以 lcf_ga 开头的 cookie；Google 会收到你的浏览器信息，并用你的 IP 地址估计你所在的城市。这里没有广告：Google 的广告功能是关着的，这些数据也不用于广告。',
       '上传照片时，我们会删除照片里的全部元数据（包括位置），只保存重新编码后的图片。为了防止滥用，我们按 IP 地址的哈希计算你上传和提交的次数（照片、菜单、推荐的店），不保存 IP 本身。这些表单使用 Cloudflare Turnstile 验证你是人。',
       '地图由 OpenFreeMap 提供，查看地图时你的浏览器会向它请求地图图块。',
       '想删除你上传的照片或其他内容，请写信到 hi@manyfold.ai。',
@@ -572,7 +572,7 @@ const en: Copy = {
     title: 'Privacy',
     paragraphs: [
       'Your choice of language, theme and filters, and your answer about analytics, are kept in your browser only. When you use “Near me”, your location sorts places by distance and marks where you are on the map, in your browser, and is never sent to us.',
-      'We use Google Analytics to count how many people visit, which pages they read and where they came from, so we can improve the site. In the UK, the EEA and Switzerland it loads only after you choose “Accept”; elsewhere it loads at once, and you can turn it off below. It keeps two cookies on this site, named lcf__ga…; Google receives your browser’s details and uses your IP address to estimate your city. There are no ads here: Google’s advertising features are off, and none of this is used for advertising.',
+      'We use Google Analytics to count how many people visit, which pages they read and where they came from, so we can improve the site. In the UK, the EEA and Switzerland it loads only after you choose “Accept”; elsewhere it loads at once, and you can turn it off below. It keeps two cookies on this site, named lcf_ga…; Google receives your browser’s details and uses your IP address to estimate your city. There are no ads here: Google’s advertising features are off, and none of this is used for advertising.',
       'When you upload a photo, all its metadata (location included) is removed and only the re-encoded image is kept. To prevent abuse we count what you send (photos, menus, places you suggest) by a hash of your IP address and never store the address. These forms use Cloudflare Turnstile to check you are a person.',
       'Maps come from OpenFreeMap: viewing a map, your browser asks it for map tiles.',
       'To remove a photo you uploaded, or anything else, write to hi@manyfold.ai.',

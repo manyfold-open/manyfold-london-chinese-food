@@ -6,7 +6,7 @@
  * Google's tag is loaded only once it may: at once where no one has to be asked, else after the
  * reader accepts, and never while they decline (the privacy page changes the answer). Nothing goes
  * to ads: ad storage is denied and Google signals are off. Its cookies stay with this site: named
- * lcf__ga…, on this host and under the site's path (AGENTS.md, invariant 22).
+ * lcf_ga…, on this host and under the site's path (AGENTS.md, invariant 22).
  *
  * Page views are sent from here, not by the tag: the app moves between pages in place, and a
  * page's title is known only once it is drawn (a place's, once its record is in). useTitle
@@ -102,7 +102,7 @@ function stop(): void {
   gtag('consent', 'update', { analytics_storage: 'denied' });
   (window as unknown as Record<string, unknown>)[`ga-disable-${ID}`] = true;
   for (const name of document.cookie.split(';').map((pair) => pair.split('=')[0]!.trim())) {
-    if (name.startsWith('lcf__ga')) document.cookie = `${name}=; max-age=0; path=${BASE || '/'}; domain=${location.hostname}`;
+    if (name.startsWith('lcf_ga')) document.cookie = `${name}=; max-age=0; path=${BASE || '/'}; domain=${location.hostname}`;
   }
 }
 
