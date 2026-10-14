@@ -126,6 +126,14 @@ whose collector and maintainer mechanism this site reuses.
     they overturn (`maintainerQuality`, `src/worker/tokens.ts`); a maintainer with more than half
     of 10 or more overturned is suspended. A site-team decision that states a rule is kept as a
     precedent until the rule is written into a kind's checks or scope.
+28. **Analytics waits for leave and stays out of ads.** Google Analytics runs only on reader pages
+    of the public host (never workers.dev, a dev server or the console), from the app's own bundle
+    (`src/app/analytics.ts`), so the pages' policy still allows no inline script. Readers in the UK,
+    the EEA and Switzerland, or whose country is unknown, are asked first and nothing of Google's
+    loads until they accept (`src/worker/analytics.ts`); everyone measured can turn it off on the
+    privacy page, which says what is collected. Ad storage stays denied and Google signals off; its
+    cookies are prefixed `lcf` and kept to the site's host and path. Page views are sent when a page
+    names itself (`useTitle`), never with a record's content beyond the page title.
 
 ## Tests
 

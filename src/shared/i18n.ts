@@ -180,6 +180,8 @@ export interface Copy {
   };
   about: { title: string; paragraphs: string[]; dataTitle: string; dataText: string; downloads: { csv: string; json: string; menus: string } };
   privacy: { title: string; paragraphs: string[] };
+  /** The analytics question (src/app/analytics.ts): the bar that asks it, and the privacy page's switch. */
+  consent: { question: string; more: string; accept: string; decline: string; title: string; on: string; off: string; turnOn: string; turnOff: string };
   notFound: { title: string; text: string; home: string };
   attribution: string;
   theme: { light: string; dark: string };
@@ -366,11 +368,23 @@ const zh: Copy = {
   privacy: {
     title: '隐私',
     paragraphs: [
-      '这个网站不用分析或广告 cookie。你选的语言、主题和筛选条件只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序、在地图上标出你在哪，不会发送给我们。',
+      '你选的语言、主题、筛选条件和对访问统计的回答只保存在你的浏览器里。用“附近”时，你的位置只在你的浏览器里用来按距离排序、在地图上标出你在哪，不会发送给我们。',
+      '我们用 Google Analytics 统计有多少人来、看了哪些页面、从哪里来，用来改进网站。在英国、欧洲经济区和瑞士，只有你选了“接受”它才会加载；在其他地方它直接加载，你可以在下面关掉。它会在这个网站下存两个以 lcf__ga 开头的 cookie；Google 会收到你的浏览器信息，并用你的 IP 地址估计你所在的城市。这里没有广告：Google 的广告功能是关着的，这些数据也不用于广告。',
       '上传照片时，我们会删除照片里的全部元数据（包括位置），只保存重新编码后的图片。为了防止滥用，我们按 IP 地址的哈希计算你上传和提交的次数（照片、菜单、推荐的店），不保存 IP 本身。这些表单使用 Cloudflare Turnstile 验证你是人。',
       '地图由 OpenFreeMap 提供，查看地图时你的浏览器会向它请求地图图块。',
       '想删除你上传的照片或其他内容，请写信到 hi@manyfold.ai。',
     ],
+  },
+  consent: {
+    question: '我们想用 Google Analytics 统计访问量，用来改进网站，可以吗？',
+    more: '隐私说明',
+    accept: '接受',
+    decline: '不接受',
+    title: '访问统计',
+    on: '已开启：Google Analytics 会统计你的访问。',
+    off: '已关闭：你的访问不会发给 Google Analytics。',
+    turnOn: '开启统计',
+    turnOff: '关闭统计',
   },
   notFound: { title: '找不到这个页面', text: '这个地址没有内容，或这家店已不再收录。', home: '回到首页' },
   attribution: '数据：店铺与菜单 CC BY 4.0；评价摘录版权归原作者；邮编数据 © ONS / Royal Mail，OGL。',
@@ -557,11 +571,23 @@ const en: Copy = {
   privacy: {
     title: 'Privacy',
     paragraphs: [
-      'This site uses no analytics or advertising cookies. Your choice of language, theme and filters is kept in your browser only. When you use “Near me”, your location sorts places by distance and marks where you are on the map, in your browser, and is never sent to us.',
+      'Your choice of language, theme and filters, and your answer about analytics, are kept in your browser only. When you use “Near me”, your location sorts places by distance and marks where you are on the map, in your browser, and is never sent to us.',
+      'We use Google Analytics to count how many people visit, which pages they read and where they came from, so we can improve the site. In the UK, the EEA and Switzerland it loads only after you choose “Accept”; elsewhere it loads at once, and you can turn it off below. It keeps two cookies on this site, named lcf__ga…; Google receives your browser’s details and uses your IP address to estimate your city. There are no ads here: Google’s advertising features are off, and none of this is used for advertising.',
       'When you upload a photo, all its metadata (location included) is removed and only the re-encoded image is kept. To prevent abuse we count what you send (photos, menus, places you suggest) by a hash of your IP address and never store the address. These forms use Cloudflare Turnstile to check you are a person.',
       'Maps come from OpenFreeMap: viewing a map, your browser asks it for map tiles.',
       'To remove a photo you uploaded, or anything else, write to hi@manyfold.ai.',
     ],
+  },
+  consent: {
+    question: 'May we count your visit with Google Analytics, to improve the site?',
+    more: 'Privacy',
+    accept: 'Accept',
+    decline: 'Decline',
+    title: 'Analytics',
+    on: 'On: Google Analytics counts your visits.',
+    off: 'Off: your visits are not sent to Google Analytics.',
+    turnOn: 'Turn on',
+    turnOff: 'Turn off',
   },
   notFound: { title: 'Page not found', text: 'Nothing is here, or the place is no longer listed.', home: 'Back to the start' },
   attribution: 'Data: places and menus CC BY 4.0; review excerpts remain their authors’; postcode data © ONS / Royal Mail, OGL.',

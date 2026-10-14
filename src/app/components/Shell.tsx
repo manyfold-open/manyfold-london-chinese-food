@@ -6,6 +6,7 @@ import { Link, useLocation } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
 import { Icon, IconButton, Logo, ManyfoldMark, Menu } from '../ui';
+import { ConsentBar } from './Consent';
 
 export function Shell({ children }: { children: ReactNode }) {
   const locale = useLocale();
@@ -68,6 +69,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </p>
         </div>
       </footer>
+      <ConsentBar />
     </div>
   );
 }

@@ -14,13 +14,16 @@ import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import { standardDish } from '../shared/dish';
 import { decodeSegment, notFoundTitle, pathTitle, placeTitle } from '../shared/titles';
 
-/** The content security policy of every page: our own code, Turnstile's form, OpenFreeMap's map. */
+/**
+ * The content security policy of every page: our own code, Turnstile's form, OpenFreeMap's map,
+ * and Google Analytics' tag (src/worker/analytics.ts), with the hosts Google lists for it.
+ */
 export const PAGE_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://challenges.cloudflare.com",
+  "script-src 'self' https://challenges.cloudflare.com https://*.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://tiles.openfreemap.org",
-  "connect-src 'self' https://tiles.openfreemap.org",
+  "img-src 'self' data: blob: https://tiles.openfreemap.org https://*.google-analytics.com https://*.googletagmanager.com",
+  "connect-src 'self' https://tiles.openfreemap.org https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
   "font-src 'self' https://tiles.openfreemap.org",
   'frame-src https://challenges.cloudflare.com',
   "worker-src 'self' blob:",

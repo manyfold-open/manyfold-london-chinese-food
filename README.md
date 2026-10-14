@@ -172,7 +172,10 @@ LCF_SEED_TOKEN=lcf_… ADMIN_PASSWORD=… node scripts/seed.ts --post https://ap
 Every push to `main` deploys after checks and tests pass (`.github/workflows/ci.yml`). The Worker
 needs the secrets `ADMIN_PASSWORD` and `TURNSTILE_SECRET`, and `TURNSTILE_SITE_KEY` in
 `wrangler.jsonc`; until both Turnstile values are set, photo uploads answer that they are not open
-yet.
+yet. `GA_MEASUREMENT_ID` in `wrangler.jsonc` is the Google Analytics 4 property reader pages report
+to (AGENTS.md, invariant 28); remove it and no Google code reaches any page. The app sends page
+views itself, so the stream's enhanced measurement should leave "Page changes based on browser
+history events" off.
 
 Rules for changing the code are in [AGENTS.md](./AGENTS.md).
 

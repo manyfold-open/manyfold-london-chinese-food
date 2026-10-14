@@ -36,6 +36,7 @@ import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import type { Locale } from '../shared/i18n';
 import { queryPlaces } from '../shared/places-query';
 import { WORK_TYPES, type IssuedToken, type JoinResponse, type MeResponse, type Role, type WorkResponse, type WorkType } from '../shared/types';
+import { consentRequiredFor, measurementIdFor, withAnalytics } from './analytics';
 import { requireAdmin, SESSION_COOKIE, SESSION_DAYS, sessionToken, validSession } from './admin';
 import { cachedFor, cachedJson, cacheKeyOf, forget, isDailyLimit } from './cache';
 import {
@@ -838,7 +839,12 @@ async function page(c: AppContext): Promise<Response> {
     if (doc) rest = `/place/${doc.id}${doc.slug ? `/${doc.slug}` : ''}`;
     meta = placeMeta(doc, locale, rest, `${site}/${locale}${rest}`);
   } else meta = pathMeta(locale, rest);
-  return withMeta(html, meta, site, onPublicHost(c.env, url), !/^(localhost|127\.0\.0\.1)$/.test(url.hostname));
+  const local = /^(localhost|127\.0\.0\.1)$/.test(url.hostname);
+  const onPublic = onPublicHost(c.env, url);
+  const described = withMeta(html, meta, site, onPublic, !local);
+  // Measured only where readers are: not on workers.dev, and not on a dev server, even one whose
+  // PUBLIC_URL names it (.dev.vars.example).
+  return withAnalytics(described, onPublic && !local ? measurementIdFor(c.env) : null, consentRequiredFor(c.req.raw.cf?.country));
 }
 
 app.get('/zh', page);

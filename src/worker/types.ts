@@ -21,6 +21,8 @@ export interface Env {
   TURNSTILE_SITE_KEY?: string;
   /** Turnstile's secret, for checking an upload form's answer. A secret. */
   TURNSTILE_SECRET?: string;
+  /** The GA4 measurement id reader pages on the public host report to (src/worker/analytics.ts). Unset: none. */
+  GA_MEASUREMENT_ID?: string;
   /**
    * Where the daily digest of items waiting long for the site team goes: a URL that takes a POST
    * of {"text": "..."} (Slack, Lark and most chat webhooks do). A secret. Unset: no digest.

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { appUrl } from '../base';
+import { AnalyticsSwitch } from '../components/Consent';
 import { PlaceSheet } from '../components/Sheets';
 import { useCopy, useLocale } from '../i18n';
 import { Link } from '../router';
@@ -105,6 +106,7 @@ export function WordsPage({ which }: { which: 'about' | 'privacy' }) {
           </ul>
         </section>
       ) : null}
+      {which === 'privacy' ? <AnalyticsSwitch /> : null}
     </div>
   );
 }

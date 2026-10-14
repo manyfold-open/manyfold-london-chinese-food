@@ -56,7 +56,11 @@
     "PUBLIC_URL": "https://app.manyfold.ai/london-chinese-food",
     "BASE_PATH": "/london-chinese-food",
     // Turnstile's public site key for the photo upload form. The secret is TURNSTILE_SECRET.
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAFRpujY99MHLYiP4"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFRpujY99MHLYiP4",
+    // Google Analytics 4 (stream "London Chinese Food"), on reader pages of the public host only.
+    // Readers in the UK, the EEA and Switzerland are asked first (src/worker/analytics.ts).
+    // Remove it and no Google code reaches any page.
+    "GA_MEASUREMENT_ID": "G-K4MY5B6BRX"
   },
   // Secrets, set with `npx wrangler secret put <NAME>`:
   //   ADMIN_PASSWORD     opens /api/admin/* and /settings

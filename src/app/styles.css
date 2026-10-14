@@ -1376,6 +1376,36 @@ textarea {
   }
 }
 
+/* The analytics question (components/Consent.tsx): a card at the foot of the window. Sheets cover it. */
+.consent {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  max-width: 520px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--pop);
+  font-size: 13px;
+}
+
+.consent p {
+  flex: 1 1 260px;
+  margin: 0;
+  color: var(--ink2);
+  line-height: 1.5;
+}
+
+.consent-answers {
+  display: flex;
+  gap: 8px;
+}
+
 /* Initials avatar. The hue comes from the name, so it stays the same everywhere. */
 .avatar {
   display: grid;
@@ -1992,9 +2022,17 @@ th[aria-sort='ascending'] .sort-button svg {
 
   .consent {
     right: 8px;
-    bottom: calc(72px + env(safe-area-inset-bottom));
+    bottom: calc(8px + env(safe-area-inset-bottom));
     left: 8px;
     max-width: none;
+  }
+
+  .consent-answers {
+    flex: 1;
+  }
+
+  .consent-answers .btn {
+    flex: 1;
   }
 }
 
@@ -2921,7 +2959,8 @@ a.dish-name:hover {
   word-break: break-word;
 }
 
-.suggest-place .btn {
+.suggest-place .btn,
+.analytics-switch .btn {
   margin-top: 4px;
 }
 
