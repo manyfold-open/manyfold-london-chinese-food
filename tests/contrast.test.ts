@@ -3,6 +3,7 @@
 // 1.4.11). The test reads the stylesheet itself, so a token change cannot skip it.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { LINES } from '../kinds/vocab';
 
 const css = readFileSync(new URL('../src/app/styles.css', import.meta.url), 'utf8');
 
@@ -55,6 +56,14 @@ describe('color tokens', () => {
 
       it('selected pills (page color on ink) read at 4.5:1', () => {
         expect(ratio(t.bg!, t.ink!)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('text on a line colour (a line, campus or guide head, a guide cover) reads at 4.5:1', () => {
+        for (const line of LINES) {
+          const color = line.color.slice(2);
+          expect(t[color], color).toBeDefined();
+          expect(ratio(t[`on-${color}`]!, t[color]!), `on-${color}`).toBeGreaterThanOrEqual(4.5);
+        }
       });
     });
   }

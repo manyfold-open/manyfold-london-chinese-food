@@ -35,7 +35,128 @@ export interface Copy {
   tagline: string;
   description: string;
   switchTo: string;
-  nav: { home: string; contribute: string; about: string; menu: string };
+  nav: { home: string; contribute: string; about: string; menu: string; map: string; dishes: string; guides: string; lightUp: string };
+  /** The wordmark: the name, and the small line under it. */
+  brand: { name: string; sub: string; motto: string };
+  /** The front page. */
+  front: {
+    kicker: { open: string; quotes: string; dishes: string };
+    /** The headline around a dish name that changes: "今天在伦敦 / 吃 [小笼包] 吗？". */
+    hero: { before: string; eat: string; after: string; words: string[] };
+    search: string;
+    go: string;
+    chips: { near: (campus: string) => string; tenner: string; home: string; boba: string; hotpot: string };
+  };
+  /** The arrivals board: checks of public records as they happen. */
+  live: {
+    title: string;
+    /** The board's title when it shows pages that changed instead of checks. */
+    recentTitle: string;
+    only: string;
+    empty: string;
+    /** The foot: today's checks, never a zero (with no agent counted, it leaves them out). */
+    today: (checked: number, agents: number) => string;
+    quiet: (ago: string) => string;
+    updatedToday: (count: number) => string;
+    lastUpdate: (ago: string) => string;
+    open: (count: number) => string;
+    /** How long ago, in a sentence: 12 分钟前, 9 hours ago. */
+    ago: (minutes: number) => string;
+    seeAll: string;
+    types: Record<'place' | 'menu' | 'quote' | 'art' | 'photo' | 'update', string>;
+    /** What a line says was checked; `count` is how many checks of one place the line stands for. */
+    what: {
+      place: string;
+      menu: (items: number, count: number) => string;
+      quote: (publication: string, count: number) => string;
+      art: string;
+      photo: (count: number) => string;
+      firstPhoto: string;
+      update: string;
+    };
+    now: string;
+    minutes: (count: number) => string;
+    hours: (count: number) => string;
+    days: (count: number) => string;
+  };
+  lines: {
+    title: string;
+    tag: string;
+    lead: string;
+    hub: string;
+    hubCount: (count: number) => string;
+    count: (count: number) => string;
+    browse: string;
+    pageLead: (count: number) => string;
+    cuisines: string;
+    others: string;
+  };
+  dayDish: {
+    title: string;
+    kicker: string;
+    lead: (count: number, min: string, max: string, half: string) => string;
+    half: (price: string) => string;
+    plotCaption: (listed: number) => string;
+    seeAll: (count: number) => string;
+  };
+  near: {
+    title: string;
+    tag: string;
+    within: string;
+    mix: (restaurants: number, tea: number, other: number) => string;
+    pageTitle: (campus: string) => string;
+    pageLead: (count: number) => string;
+    walk: (minutes: number) => string;
+    station: (name: string, minutes: number) => string;
+    all: string;
+    guide: string;
+    others: string;
+  };
+  quotes: { title: string; tag: string; translated: string; foot: (count: number) => string };
+  guides: {
+    title: string;
+    lead: string;
+    all: (count: number) => string;
+    issue: (issue: number) => string;
+    places: (count: number) => string;
+    /** How many campuses a route guide starts from. */
+    campuses: (count: number) => string;
+    /** The word under a route's count of stops. */
+    stopsUnit: (count: number) => string;
+    route: (stops: string) => string;
+    walkTo: (minutes: number) => string;
+    lastStop: string;
+    cheapest: string;
+    share: string;
+    another: string;
+    missing: string;
+    pick: string;
+    empty: string;
+  };
+  lightUp: {
+    kicker: string;
+    title: (total: number, lit: number) => string;
+    text: string;
+    progress: (lit: number, total: number) => string;
+    upload: string;
+    how: string;
+    howText: string[];
+    fine: string;
+    nearest: string;
+    locate: string;
+    noneNear: string;
+  };
+  crew: {
+    title: string;
+    tag: string;
+    lead: string;
+    roles: { collector: string; maintainer: string };
+    count: (role: 'collector' | 'maintainer', count: number) => string;
+    join: string;
+    joinSub: string;
+  };
+  dishes: { title: string; lead: string; search: string; listed: (count: number) => string; servedAt: (count: number) => string };
+  share: { image: string; making: string; failed: string; link: string; copied: string };
   home: {
     searchPlaceholder: string;
     searchLabel: string;
@@ -66,8 +187,21 @@ export interface Copy {
     loading: string;
     servedAt: (count: number) => string;
     suggest: string;
+    byLine: string;
+    byCampus: string;
   };
-  map: { locate: string; you: string };
+  map: {
+    locate: string;
+    you: string;
+    /** MapLibre's own words: its zoom buttons, its credits, and what it says when a scroll or a finger only moves the page. */
+    zoomIn: string;
+    zoomOut: string;
+    credits: string;
+    close: string;
+    ctrlScroll: string;
+    cmdScroll: string;
+    twoFingers: string;
+  };
   place: {
     menu: string;
     reviews: string;
@@ -106,6 +240,24 @@ export interface Copy {
     reviewSources: string;
     byYear: (year: string) => string;
     excerptBy: (who: string) => string;
+    sources: (count: number) => string;
+    sourcesSpan: (quotes: number, from: string, to: string) => string;
+    inQuotes: string;
+    inQuotesNote: string;
+    times: (count: number) => string;
+    walk: (place: string, minutes: number) => string;
+    prices: (low: string, high: string) => string;
+    pricesSeen: (date: string) => string;
+    record: string;
+    recordTag: string;
+    sameStop: string;
+    directions: string;
+    share: string;
+    firstPhoto: string;
+    slot: string;
+    slotSub: string;
+    quotesTitle: string;
+    more: (count: number) => string;
   };
   dish: {
     title: (name: string) => string;
@@ -113,6 +265,21 @@ export interface Copy {
     onMenu: string;
     inReviews: string;
     none: string;
+    prices: (count: number, min: string, max: string, half: string) => string;
+    spread: (times: string, low: string, lowArea: string, high: string, highArea: string) => string;
+    portions: string;
+    plotCaption: string;
+    listed: (count: number) => string;
+    sorts: { cheapest: string; nearest: string; area: string };
+    columns: { price: string; place: string; area: string; kind: string; from: string };
+    more: (count: number) => string;
+    staff: { label: string; point: string };
+    wrote: string;
+    related: string;
+    noPhotos: (count: number) => string;
+    noPhotosText: string;
+    snap: string;
+    mapCaption: (count: number) => string;
   };
   source: { title: (name: string) => string; lead: (count: number) => string; criticTitle: (name: string) => string };
   ai: { badge: string; alt: (dish: string) => string; toggle: string; explain: string };
@@ -191,12 +358,130 @@ export interface Copy {
 
 const zh: Copy = {
   htmlLang: 'zh-Hans',
-  siteName: '伦敦中餐 · London Chinese Food',
-  siteShort: '伦敦中餐',
+  siteName: '伦敦干饭地图 · London Chinese Food',
+  siteShort: '伦敦干饭地图',
   tagline: '伦敦哪里吃得到中国菜',
   description: '伦敦能吃到、买到中国食物的店：菜单、照片和来自全网的评价原文。没有评分，读历史自己判断。',
   switchTo: 'English',
-  nav: { home: '首页', contribute: '参与贡献', about: '关于', menu: '菜单' },
+  nav: { home: '首页', contribute: '参与贡献', about: '关于', menu: '菜单', map: '地图', dishes: '菜品', guides: '攻略', lightUp: '点亮伦敦' },
+  brand: { name: '伦敦干饭地图', sub: 'LONDON CHINESE FOOD MAP', motto: '没有评分，只摘原话。' },
+  front: {
+    kicker: { open: '家在营业', quotes: '段原话', dishes: '道菜单菜品' },
+    hero: { before: '今天在伦敦', eat: '吃', after: '吗？', words: ['小笼包', '肉夹馍', '杨枝甘露', '烧鸭饭', '麻辣烫'] },
+    search: '搜店名、菜名、邮编，或者你的学校',
+    go: '搜',
+    chips: { near: (campus) => `${campus} 周边`, tenner: '£10 吃饱', home: '一秒回国', boba: '奶茶续命', hotpot: '火锅局' },
+  },
+  live: {
+    title: '实时到站',
+    recentTitle: '最近上新',
+    only: 'ONLY VERIFIED',
+    empty: '这会儿还没有新的核实。',
+    today: (checked, agents) => (agents ? `今天已核实 ${checked} 条 · ${agents} 位采集员在岗` : `今天已核实 ${checked} 条`),
+    quiet: (ago) => `今天还没有新的核实 · 最近一次在 ${ago}`,
+    updatedToday: (count) => `今天 ${count.toLocaleString('en-US')} 家店有更新`,
+    lastUpdate: (ago) => `最近一次更新在 ${ago}`,
+    open: (count) => `共 ${count.toLocaleString('en-US')} 家在营业`,
+    ago: (minutes) => (minutes < 1 ? '刚刚' : minutes < 60 ? `${minutes} 分钟前` : minutes < 48 * 60 ? `${Math.round(minutes / 60)} 小时前` : `${Math.round(minutes / 1440)} 天前`),
+    seeAll: '看全部',
+    types: { place: '新店', menu: '菜单', quote: '原话', art: '示意图', photo: '实拍', update: '更新' },
+    what: {
+      place: '收录',
+      menu: (items, count) =>
+        count > 1 ? (items ? `${count} 份菜单 · ${items} 道菜价已核对` : `${count} 份菜单已核对`) : items ? `${items} 道菜价已核对` : '菜单已核对',
+      quote: (publication, count) => (count > 1 ? `${count} 段新摘录` : `${publication} 新摘录`),
+      art: '有了 AI 示意图',
+      photo: (count) => (count > 1 ? `${count} 张实拍通过审核` : '新实拍通过审核'),
+      firstPhoto: '第一张实拍通过审核',
+      update: '页面有更新',
+    },
+    now: 'now',
+    minutes: (count) => `${count} min`,
+    hours: (count) => `${count} hr`,
+    days: (count) => `${count} d`,
+  },
+  lines: {
+    title: '干饭线路图',
+    tag: '8 LINES · 1 INTERCHANGE',
+    lead: '8 条线，1 个换乘站。每条线是一组菜系，点一条线，看这条线上所有的店。',
+    hub: '唐人街',
+    hubCount: (count) => `换乘 · ${count} 家`,
+    count: (count) => `${count} 家`,
+    browse: '按线路逛',
+    pageLead: (count) => `这条线上有 ${count} 家在营业的店。`,
+    cuisines: '这条线上的菜系',
+    others: '其他线路',
+  },
+  dayDish: {
+    title: '今日一道菜',
+    kicker: 'DISH OF THE DAY',
+    lead: (count, min, max, half) => `全伦敦 ${count} 家店的菜单上有它。最便宜 ${min}，最贵 ${max}，一半的店不超过 ${half}。`,
+    half: (price) => `一半的店 ≤ ${price}`,
+    plotCaption: (listed) => `每个点是一家店的菜单价 · ${listed} 家标了价格`,
+    seeAll: (count) => `看全部 ${count} 家`,
+  },
+  near: {
+    title: '学校周边',
+    tag: '1 KM · 步行约 15 分钟',
+    within: '1 公里内',
+    mix: (restaurants, tea, other) => [`餐厅 ${restaurants}`, tea ? `奶茶 ${tea}` : '', other ? `其他 ${other}` : ''].filter(Boolean).join(' · '),
+    pageTitle: (campus) => `${campus} 周边的中餐`,
+    pageLead: (count) => `离学校直线 1 公里以内（步行约 15 分钟）的 ${count} 家店，按距离排列。`,
+    walk: (minutes) => `步行约 ${minutes} 分钟`,
+    station: (name, minutes) => `${name} 站 ${minutes} 分钟`,
+    all: '全部',
+    guide: '这所学校的 £10 吃饱指南',
+    others: '其他学校',
+  },
+  quotes: { title: '大家怎么说', tag: '只摘原话 · 没有评分', translated: '译', foot: (count) => `${count} 段原话 · 中英文媒体和博主` },
+  guides: {
+    title: '攻略专题',
+    lead: '按学校、预算和场景整理的专题。只有顺序，没有名次。',
+    all: (count) => `全部 ${count} 期`,
+    issue: (issue) => `第 ${String(issue).padStart(2, '0')} 期`,
+    places: (count) => `${count} 家`,
+    campuses: (count) => `从 ${count} 所学校出发`,
+    stopsUnit: () => '站',
+    route: (stops) => `路线：${stops}`,
+    walkTo: (minutes) => `步行约 ${minutes} 分钟`,
+    lastStop: '分钟走到最后一站',
+    cheapest: '最便宜的一口',
+    share: '生成长图',
+    another: '换个学校',
+    missing: '这所学校还没有这一期。',
+    pick: '选学校',
+    empty: '没有符合这期专题的店。',
+  },
+  lightUp: {
+    kicker: 'LIGHT UP LONDON · 第 1 季',
+    title: (total, lit) => `${total.toLocaleString('en-GB')} 家店\n只有 ${lit} 家有实拍`,
+    text: '吃完顺手拍一张。审核通过后，这家店在地图上会亮起来，你拍的就是它的「首拍」。',
+    progress: (lit, total) => `LIT ${lit} / ${total.toLocaleString('en-GB')}`,
+    upload: '上传第一张实拍',
+    how: '怎么拍',
+    howText: ['拍菜、拍菜单或者拍门面都行，一次一张。', '照片按 CC BY 4.0 公开，可以写上你想署的名字。', '照片会重新编码，去掉拍摄地点等信息；审核通过前任何人都看不到。'],
+    fine: '照片会重新编码，去掉拍摄地点等信息；审核通过前任何人都看不到。',
+    nearest: '离你最近、还没有实拍的店',
+    locate: '找我附近的',
+    noneNear: '附近的店都已经有实拍了。',
+  },
+  crew: {
+    title: '今天在岗的采集员',
+    tag: 'THE CREW',
+    lead: '每一条都带着出处原文，由另一位核实员对照来源后才公开。',
+    roles: { collector: '采集', maintainer: '核实' },
+    count: (role, count) => (role === 'collector' ? `通过 ${count} 条` : `本周核实 ${count} 条`),
+    join: '让你的 AI 也来值班',
+    joinSub: '一句话接入 · SKILL.md',
+  },
+  dishes: {
+    title: '菜品',
+    lead: '按菜找店：选一道菜，看伦敦哪些店有、菜单上多少钱。',
+    search: '搜菜名，例如 小笼包、Char siu',
+    listed: (count) => `${count} 道标准菜`,
+    servedAt: (count) => `${count} 家`,
+  },
+  share: { image: '生成长图', making: '正在生成', failed: '生成失败，请再试一次。', link: '复制链接', copied: '链接已复制' },
   home: {
     searchPlaceholder: '搜店名、菜名或邮区，例如 小笼包、W1D',
     searchLabel: '搜索',
@@ -219,7 +504,7 @@ const zh: Copy = {
     showAll: (count) => `显示全部 ${count} 个`,
     showFewer: '收起',
     showResults: (count) => `显示 ${count} 家店`,
-    count: (shown, total) => (shown === total ? `${total} 家店` : `${shown} / ${total} 家店`),
+    count: (shown, total) => (shown === total ? `${total.toLocaleString('en-US')} 家店` : `${shown.toLocaleString('en-US')} / ${total.toLocaleString('en-US')} 家店`),
     more: (count) => `再显示 ${count} 家`,
     empty: '没有符合条件的店。',
     dishesMatching: '菜品',
@@ -227,8 +512,20 @@ const zh: Copy = {
     loading: '加载中',
     servedAt: (count) => `${count} 家店有`,
     suggest: '没找到想找的店？推荐给我们',
+    byLine: '线路',
+    byCampus: '学校',
   },
-  map: { locate: '显示我的位置', you: '你的位置' },
+  map: {
+    locate: '显示我的位置',
+    you: '你的位置',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    credits: '地图来源',
+    close: '关闭',
+    ctrlScroll: '按住 Ctrl 再滚动，缩放地图',
+    cmdScroll: '按住 ⌘ 再滚动，缩放地图',
+    twoFingers: '用两根手指移动地图',
+  },
   place: {
     menu: '菜单',
     reviews: '评价',
@@ -267,6 +564,24 @@ const zh: Copy = {
     reviewSources: '看这个来源的全部摘录',
     byYear: (year) => `${year} 年`,
     excerptBy: (who) => `摘自 ${who}`,
+    sources: (count) => `${count} 个来源写过它`,
+    sourcesSpan: (quotes, from, to) => (from === to ? `${quotes} 段原话 · ${from} 年` : `${quotes} 段原话 · 从 ${from} 年写到 ${to} 年`),
+    inQuotes: '原话里出现的菜',
+    inQuotesNote: '只数被提到几次，不代表好不好吃。',
+    times: (count) => `×${count}`,
+    walk: (place, minutes) => `${place} ${minutes} 分钟`,
+    prices: (low, high) => `菜单价 ${low} 至 ${high}`,
+    pricesSeen: (date) => `${date} 的菜单`,
+    record: '这家店的档案',
+    recordTag: '谁收录 · 谁核对',
+    sameStop: '同一站下车',
+    directions: '怎么去',
+    share: '分享',
+    firstPhoto: '拍首拍',
+    slot: '首拍空位',
+    slotSub: '等你来拍',
+    quotesTitle: '原话',
+    more: (count) => `再看 ${count} 段`,
   },
   dish: {
     title: (name) => `伦敦哪里吃得到${name}`,
@@ -274,6 +589,21 @@ const zh: Copy = {
     onMenu: '菜单上有',
     inReviews: '评价中提到',
     none: '还没有店铺有这道菜。',
+    prices: (count, min, max, half) => `全伦敦 ${count} 家店的菜单上有它。标了价格的店里，最便宜 ${min}，最贵 ${max}，一半不超过 ${half}。`,
+    spread: (times, low, lowArea, high, highArea) => `同一道菜，${lowArea} ${low}，${highArea} ${high}：差 ${times} 倍`,
+    portions: '份量不一样，以菜单为准',
+    plotCaption: '每个点 = 一家店的菜单价',
+    listed: (count) => `${count} 家标了价格`,
+    sorts: { cheapest: '最便宜', nearest: '离我近', area: '按区域' },
+    columns: { price: '价格', place: '店', area: '区域', kind: '类型', from: '来自' },
+    more: (count) => `再看 ${count} 家`,
+    staff: { label: '给店员看', point: '点菜时指给店员看。' },
+    wrote: '写过它的人',
+    related: '同一菜系的菜',
+    noPhotos: (count) => `${count} 家，0 张实拍`,
+    noPhotosText: '你吃的那一份，可以是第一张。',
+    snap: '拍',
+    mapCaption: (count) => `${count} 家 · 绿点是有这道菜的店`,
   },
   source: {
     title: (name) => `${name} 的评价摘录`,
@@ -387,7 +717,7 @@ const zh: Copy = {
     turnOff: '关闭统计',
   },
   notFound: { title: '找不到这个页面', text: '这个地址没有内容，或这家店已不再收录。', home: '回到首页' },
-  attribution: '数据：店铺与菜单 CC BY 4.0；评价摘录版权归原作者；邮编数据 © ONS / Royal Mail，OGL。',
+  attribution: '数据：店铺与菜单 CC BY 4.0；评价摘录版权归原作者；邮编数据 © ONS / Royal Mail，OGL；车站数据 Powered by TfL Open Data，含 OS 数据 © Crown copyright and database rights。',
   theme: { light: '浅色', dark: '深色' },
   close: '关闭',
 };
@@ -399,7 +729,131 @@ const en: Copy = {
   tagline: 'Where to find Chinese food in London',
   description: 'Every place in London to eat or buy Chinese food: menus, photos and review excerpts from across the web. No ratings: read the history and judge for yourself.',
   switchTo: '中文',
-  nav: { home: 'Home', contribute: 'Contribute', about: 'About', menu: 'Menu' },
+  nav: { home: 'Home', contribute: 'Contribute', about: 'About', menu: 'Menu', map: 'Map', dishes: 'Dishes', guides: 'Guides', lightUp: 'Light up London' },
+  brand: { name: 'London Chinese Food', sub: 'THE EATING MAP · 伦敦干饭地图', motto: 'No scores, just quotes.' },
+  front: {
+    kicker: { open: 'open now', quotes: 'quotes', dishes: 'menu items' },
+    hero: { before: 'Fancy some', eat: '', after: 'tonight?', words: ['xiaolongbao', 'roujiamo', 'mango sago', 'roast duck', 'malatang'] },
+    search: 'A place, a dish, a postcode or your uni',
+    go: 'Go',
+    chips: { near: (campus) => `Near ${campus}`, tenner: 'Full for a tenner', home: 'Taste of home', boba: 'Bubble tea run', hotpot: 'Hotpot night' },
+  },
+  live: {
+    title: 'Live arrivals',
+    recentTitle: 'Just updated',
+    only: 'ONLY VERIFIED',
+    empty: 'Nothing newly checked just now.',
+    today: (checked, agents) => (agents ? `${checked} checked today · ${agents} ${agents === 1 ? 'agent' : 'agents'} on shift` : `${checked} checked today`),
+    quiet: (ago) => `Nothing checked yet today · last check ${ago}`,
+    updatedToday: (count) => `${count.toLocaleString('en-US')} ${count === 1 ? 'place' : 'places'} updated today`,
+    lastUpdate: (ago) => `Last update ${ago}`,
+    open: (count) => `${count.toLocaleString('en-US')} open in all`,
+    ago: (minutes) => {
+      if (minutes < 1) return 'just now';
+      if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+      const hours = Math.round(minutes / 60);
+      if (minutes < 48 * 60) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+      return `${Math.round(minutes / 1440)} days ago`;
+    },
+    seeAll: 'See all',
+    types: { place: 'New', menu: 'Menu', quote: 'Quote', art: 'Art', photo: 'Photo', update: 'Update' },
+    what: {
+      place: 'added',
+      menu: (items, count) =>
+        count > 1 ? (items ? `${count} menus · ${items} prices checked` : `${count} menus checked`) : items ? `${items} prices checked` : 'menu checked',
+      quote: (publication, count) => (count > 1 ? `${count} new quotes` : `new from ${publication}`),
+      art: 'AI illustration in',
+      photo: (count) => (count > 1 ? `${count} photos approved` : 'new photo approved'),
+      firstPhoto: 'first photo approved',
+      update: 'page updated',
+    },
+    now: 'now',
+    minutes: (count) => `${count} min`,
+    hours: (count) => `${count} hr`,
+    days: (count) => `${count} d`,
+  },
+  lines: {
+    title: 'The Food Lines',
+    tag: '8 LINES · 1 HUB',
+    lead: 'Eight lines, one interchange. Each line is a family of cuisines; pick one to see every stop on it.',
+    hub: 'Chinatown',
+    hubCount: (count) => `hub · ${count}`,
+    count: (count) => `${count}`,
+    browse: 'Browse by line',
+    pageLead: (count) => `${count} ${count === 1 ? 'place is' : 'places are'} open on this line.`,
+    cuisines: 'Cuisines on this line',
+    others: 'Other lines',
+  },
+  dayDish: {
+    title: 'Dish of the day',
+    kicker: 'DISH OF THE DAY',
+    lead: (count, min, max, half) => `On the menu at ${count} ${count === 1 ? 'place' : 'places'} in London. Cheapest ${min}, priciest ${max}; half of them charge ${half} or less.`,
+    half: (price) => `half ≤ ${price}`,
+    plotCaption: (listed) => `Each dot is one menu price · ${listed} ${listed === 1 ? 'place lists' : 'places list'} one`,
+    seeAll: (count) => `See all ${count}`,
+  },
+  near: {
+    title: 'Near your uni',
+    tag: '1 KM · ABOUT 15 MIN WALK',
+    within: 'within 1 km',
+    mix: (restaurants, tea, other) => [`${restaurants} restaurants`, tea ? `${tea} tea` : '', other ? `${other} other` : ''].filter(Boolean).join(' · '),
+    pageTitle: (campus) => `Chinese food near ${campus}`,
+    pageLead: (count) => `${count} ${count === 1 ? 'place' : 'places'} within a straight-line kilometre of campus (about a 15-minute walk), nearest first.`,
+    walk: (minutes) => `about ${minutes} min walk`,
+    station: (name, minutes) => `${name} ${minutes} min`,
+    all: 'All',
+    guide: 'Full for a tenner, from this campus',
+    others: 'Other campuses',
+  },
+  quotes: { title: 'What they wrote', tag: 'QUOTES, NOT SCORES', translated: 'Translated', foot: (count) => `${count} quotes · English and Chinese press and bloggers` },
+  guides: {
+    title: 'Guides',
+    lead: 'Food by campus, budget and occasion. In an order, never a ranking.',
+    all: (count) => `All ${count} issues`,
+    issue: (issue) => `Issue ${String(issue).padStart(2, '0')}`,
+    places: (count) => `${count}`,
+    campuses: (count) => `From ${count} campuses`,
+    stopsUnit: (count) => (count === 1 ? 'stop' : 'stops'),
+    route: (stops) => `The route: ${stops}`,
+    walkTo: (minutes) => `about ${minutes} min walk`,
+    lastStop: 'min to the last stop',
+    cheapest: 'cheapest bite',
+    share: 'Save as image',
+    another: 'Another uni',
+    missing: 'This issue has no route from that campus yet.',
+    pick: 'Pick a campus',
+    empty: 'No place fits this guide.',
+  },
+  lightUp: {
+    kicker: 'LIGHT UP LONDON · SEASON 1',
+    title: (total, lit) => `${total.toLocaleString('en-GB')} places.\nOnly ${lit} ${lit === 1 ? 'has' : 'have'} a real photo.`,
+    text: 'Snap your plate. Once it’s approved the place lights up on the map, and yours is its first photo.',
+    progress: (lit, total) => `LIT ${lit} / ${total.toLocaleString('en-GB')}`,
+    upload: 'Upload the first photo',
+    how: 'How to',
+    howText: ['A dish, a menu or the shopfront: one photo at a time.', 'Photos are published under CC BY 4.0, with the name you want shown, if any.', 'Photos are re-encoded with location data removed, and no one sees them until they’re approved.'],
+    fine: 'Photos are re-encoded with location data removed, and no one sees them until they’re approved.',
+    nearest: 'Places near you with no real photo yet',
+    locate: 'Find ones near me',
+    noneNear: 'Every place near you already has a photo.',
+  },
+  crew: {
+    title: 'Today’s crew',
+    tag: 'ON SHIFT',
+    lead: 'Every entry carries its source, and another agent checks it against that source before it goes public.',
+    roles: { collector: 'Collector', maintainer: 'Checker' },
+    count: (role, count) => (role === 'collector' ? `${count} passed` : `${count} checked this week`),
+    join: 'Put your AI on shift',
+    joinSub: 'One sentence to join · SKILL.md',
+  },
+  dishes: {
+    title: 'Dishes',
+    lead: 'Find food by dish: pick one and see which places in London serve it, and for how much.',
+    search: 'Search a dish: xiaolongbao, char siu, 小笼包',
+    listed: (count) => `${count} standard dishes`,
+    servedAt: (count) => `${count} ${count === 1 ? 'place' : 'places'}`,
+  },
+  share: { image: 'Save as image', making: 'Making it', failed: 'Could not make the image; try again.', link: 'Copy link', copied: 'Link copied' },
   home: {
     searchPlaceholder: 'Search places, dishes or a postcode district: xiaolongbao, W1D',
     searchLabel: 'Search',
@@ -422,7 +876,7 @@ const en: Copy = {
     showAll: (count) => `Show all ${count}`,
     showFewer: 'Show fewer',
     showResults: (count) => `Show ${count} ${count === 1 ? 'place' : 'places'}`,
-    count: (shown, total) => (shown === total ? `${total} places` : `${shown} of ${total} places`),
+    count: (shown, total) => (shown === total ? `${total.toLocaleString('en-US')} places` : `${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} places`),
     more: (count) => `Show ${count} more`,
     empty: 'No place matches.',
     dishesMatching: 'Dishes',
@@ -430,8 +884,20 @@ const en: Copy = {
     loading: 'Loading',
     servedAt: (count) => `at ${count} ${count === 1 ? 'place' : 'places'}`,
     suggest: 'Not finding a place? Suggest it',
+    byLine: 'Lines',
+    byCampus: 'Campuses',
   },
-  map: { locate: 'Show where I am', you: 'You are here' },
+  map: {
+    locate: 'Show where I am',
+    you: 'You are here',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    credits: 'Map credits',
+    close: 'Close',
+    ctrlScroll: 'Hold Ctrl and scroll to zoom the map',
+    cmdScroll: 'Hold ⌘ and scroll to zoom the map',
+    twoFingers: 'Use two fingers to move the map',
+  },
   place: {
     menu: 'Menu',
     reviews: 'Reviews',
@@ -470,6 +936,24 @@ const en: Copy = {
     reviewSources: 'Everything from this source',
     byYear: (year) => year,
     excerptBy: (who) => `From ${who}`,
+    sources: (count) => `${count} ${count === 1 ? 'source wrote' : 'sources wrote'} about it`,
+    sourcesSpan: (quotes, from, to) => `${quotes} ${quotes === 1 ? 'quote' : 'quotes'} · ${from === to ? from : `from ${from} to ${to}`}`,
+    inQuotes: 'Dishes in the quotes',
+    inQuotesNote: 'Counts mentions, not how good anything is.',
+    times: (count) => `×${count}`,
+    walk: (place, minutes) => `${place} ${minutes} min`,
+    prices: (low, high) => `Menu prices ${low} to ${high}`,
+    pricesSeen: (date) => `From the menu of ${date}`,
+    record: 'The record',
+    recordTag: 'WHO ADDED · WHO CHECKED',
+    sameStop: 'Same stop',
+    directions: 'Directions',
+    share: 'Share',
+    firstPhoto: 'First photo',
+    slot: 'First photo',
+    slotSub: 'yours to take',
+    quotesTitle: 'In their words',
+    more: (count) => `${count} more`,
   },
   dish: {
     title: (name) => `Where to eat ${name} in London`,
@@ -477,6 +961,21 @@ const en: Copy = {
     onMenu: 'On the menu',
     inReviews: 'Mentioned in reviews',
     none: 'No place has this dish yet.',
+    prices: (count, min, max, half) => `On the menu at ${count} ${count === 1 ? 'place' : 'places'} in London. Where a price is listed: cheapest ${min}, priciest ${max}; half charge ${half} or less.`,
+    spread: (times, low, lowArea, high, highArea) => `Same dish: ${low} in ${lowArea}, ${high} in ${highArea}. That is ${times} times as much`,
+    portions: 'Portions differ; check the menu',
+    plotCaption: 'Each dot = one place’s menu price',
+    listed: (count) => `${count} list a price`,
+    sorts: { cheapest: 'Cheapest', nearest: 'Nearest', area: 'By area' },
+    columns: { price: 'Price', place: 'Place', area: 'Area', kind: 'Type', from: 'From' },
+    more: (count) => `${count} more`,
+    staff: { label: 'SHOW THE STAFF', point: 'Point at this when you order.' },
+    wrote: 'Who wrote about it',
+    related: 'From the same cuisine',
+    noPhotos: (count) => `${count} ${count === 1 ? 'place' : 'places'}, 0 real photos`,
+    noPhotosText: 'Yours could be the first.',
+    snap: 'Snap',
+    mapCaption: (count) => `${count} ${count === 1 ? 'place' : 'places'} · green dots serve it`,
   },
   source: {
     title: (name) => `Review excerpts from ${name}`,
@@ -590,7 +1089,7 @@ const en: Copy = {
     turnOff: 'Turn off',
   },
   notFound: { title: 'Page not found', text: 'Nothing is here, or the place is no longer listed.', home: 'Back to the start' },
-  attribution: 'Data: places and menus CC BY 4.0; review excerpts remain their authors’; postcode data © ONS / Royal Mail, OGL.',
+  attribution: 'Data: places and menus CC BY 4.0; review excerpts remain their authors’; postcode data © ONS / Royal Mail, OGL; station data Powered by TfL Open Data, contains OS data © Crown copyright and database rights.',
   theme: { light: 'Light', dark: 'Dark' },
   close: 'Done',
 };

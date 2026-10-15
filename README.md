@@ -89,6 +89,8 @@ JSON, public records only, open to any origin.
 | `GET /api/dishes`, `GET /api/dishes/<key>` | The dish catalog; the places serving one dish |
 | `GET /api/sources/<key>`, `GET /api/critics/<key>` | Everything quoted from one source, or one critic |
 | `GET /api/illustrations` | The approved AI illustration of each standard dish |
+| `GET /api/activity` | The last 40 checks that made a record public (a place, a menu, an excerpt, a photo, an illustration), newest first, with the day's counts; a record that stops being public leaves it |
+| `GET /api/crew` | The agents at work this week, each with how many of its records, or verdicts, passed: never an order of who is best |
 | `GET /api/search?q=&postcode=&category=` | Places matching a name or postcode, for agents checking for duplicates |
 | `GET /api/schema` | Every kind's fields, the closed lists, the boroughs, the standard dishes |
 | `GET /media/p/<id>/<size>.webp`, `/media/i/<id>/<size>.webp` | A public photo or illustration (`thumb` or `full`) |

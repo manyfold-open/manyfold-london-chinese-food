@@ -4,7 +4,7 @@
 // 15): a reader costs a row or two, and agents' calls and the cron read what they need through an
 // index, never a table's history.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dishPlaces, placeDoc, rebuildPlace, refreshDocs, sourcePage, datasetJson, buildIndex } from '../src/worker/docs';
+import { buildCrew, dishPlaces, placeDoc, rebuildPlace, refreshActivity, refreshDocs, refreshFront, sourcePage, datasetJson, buildIndex } from '../src/worker/docs';
 import { ILLUSTRATABLE, syncIllustrateWork } from '../src/worker/illustrations';
 import { leaseTasks } from '../src/worker/maintainer';
 import { maintain } from '../src/worker/maintenance';
@@ -118,6 +118,7 @@ beforeAll(async () => {
       'b', 'E09000033', 'pc', 'W1D 6JW', 'o', 'W1D', 'la', 51.5, 'lo', -0.13, 't', 'open', 'br', NULL, 'r', 10, 'm', 0, 'p', 0, 'l', '2026-05', 'u', '${AT}'), 'e', '${AT}' FROM n`);
   await buildIndex(raw, NOW);
   await refreshDocs(raw, NOW, { max: 0 });
+  await refreshFront(raw, NOW, { whole: true });
   await standing(raw, collector, 'review', NOW);
 }, 120_000);
 
@@ -169,6 +170,31 @@ describe('what agents cost', () => {
     expect(rows).toBeLessThanOrEqual(8 * value.items.length + 14);
     const { rows: more } = await reads(() => handOut(db, keeper, 'lead', 2, NOW));
     expect(more).toBeLessThanOrEqual(8 * 2 + 14);
+  });
+});
+
+describe('what the front page costs', () => {
+  it('reads the arrivals board and the crew in a row each', async () => {
+    for (const name of ['activity', 'crew']) {
+      const { value, rows } = await reads(() => datasetJson(db, name));
+      expect(value, name).not.toBeNull();
+      expect(rows, name).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('carries the board forward from a new revision by ids, a few rows for each event it keeps', async () => {
+    await raw.prepare(`INSERT INTO revisions (record_id, kind, actor, action, after_json, created_at) VALUES ('rec_review_000052', 'review', 'tok_keeper', 'verify', '{}', '${NOW.toISOString()}')`).run();
+    const { rows } = await reads(() => refreshActivity(db, NOW));
+    // Its datasets, the new revision with its record, and each kept event's record, place and checker.
+    expect(rows).toBeLessThanOrEqual(12 + 3 * 40);
+    // The pages take the revision in too, so the cron's own tests below start from nothing changed.
+    await refreshDocs(raw, NOW);
+  });
+
+  it('counts the crew along its indexes, not the history of every token', async () => {
+    const { rows: week } = await reads(() => raw.prepare(`SELECT COUNT(*) AS n FROM revisions WHERE created_at >= '2026-10-01'`).all());
+    const { rows } = await reads(() => buildCrew(db, NOW));
+    expect(rows).toBeLessThanOrEqual(week + 20);
   });
 });
 

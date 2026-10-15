@@ -1,6 +1,7 @@
 /**
- * Places on a map: MapLibre with OpenFreeMap's tiles (free, no key; attribution added by MapLibre).
- * Loaded only when a reader opens the map, as its own chunk. Points cluster when they crowd.
+ * Places on a map: MapLibre with OpenFreeMap's tiles (basemap.ts), light or dark with the page.
+ * Loaded only when a reader opens the map, as its own chunk. A place is a dot in its line's colour;
+ * places that crowd gather into an interchange, a ring with how many are inside.
  * The map reports where it was left (`onCamera`) and opens there again (`camera`), so going back
  * from a place finds it as it was; with `fit`, a map opened afresh frames the places it shows.
  *
@@ -14,20 +15,26 @@ import maplibregl, { type GeoJSONSource, type IControl, type LngLatBoundsLike, t
 import { useEffect, useRef } from 'react';
 import type { IndexEntry } from '../../shared/place-doc';
 import { COPY, type Locale } from '../../shared/i18n';
+import { LINES, lineFor } from '../../shared/lines';
 import type { Camera, Near } from '../geo';
 import { placeNames } from '../labels';
 import { navigate } from '../router';
 import { paths } from '../routes';
+import { useTheme } from '../theme';
+import { basemap, blankMissingImages, mapLocale, token } from './basemap';
 
-const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const LONDON: [number, number] = [-0.1276, 51.5072];
 /** How close a map opened on the reader, or framing its places, comes: a few streets, not one. */
 const NEAR_ZOOM = 13;
 const FIT_ZOOM = 14;
 /** The Earth's circumference at the equator, in metres, over the pixels MapLibre draws it in at zoom 0. */
 const METRES_PER_PIXEL_AT_ZERO = 40_075_016.686 / 512;
+const NO_LINES: readonly string[] = [];
 
-function features(entries: readonly IndexEntry[], locale: Locale) {
+/** Each place's dot colour: its line's (the first of `lines` it is on, else its first), as the page's tokens are now. */
+function features(entries: readonly IndexEntry[], locale: Locale, lines: readonly string[]) {
+  const colors = Object.fromEntries(LINES.map((line) => [line.id, token(line.color)])) as Record<string, string>;
+  const plain = token('--muted');
   return {
     type: 'FeatureCollection' as const,
     features: entries
@@ -35,7 +42,7 @@ function features(entries: readonly IndexEntry[], locale: Locale) {
       .map((entry) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [entry.lo!, entry.la!] },
-        properties: { id: entry.id, slug: entry.s, name: placeNames({ en: entry.n, zh: entry.z }, locale).main },
+        properties: { id: entry.id, slug: entry.s, name: placeNames({ en: entry.n, zh: entry.z }, locale).main, color: colors[lineFor(entry, lines) ?? ''] ?? plain },
       })),
   };
 }
@@ -87,6 +94,7 @@ export default function MapView({
   onLocate,
   locating = false,
   fit = false,
+  lines = NO_LINES,
 }: {
   entries: readonly IndexEntry[];
   locale: Locale;
@@ -98,7 +106,11 @@ export default function MapView({
   locating?: boolean;
   /** Open on the places shown rather than on all of London, unless a camera or the reader says where. */
   fit?: boolean;
+  /** The lines the reader filtered by: a place's dot wears the one it was found on. */
+  lines?: readonly string[];
 }) {
+  const [theme] = useTheme();
+  const shownTheme = useRef(theme);
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const locator = useRef<LocateControl | null>(null);
@@ -108,8 +120,8 @@ export default function MapView({
   const handlers = useRef({ onCamera, onLocate });
   handlers.current = { onCamera, onLocate };
   // What to draw when the style has loaded: the reader may have changed a filter while it loaded.
-  const latest = useRef({ entries, locale, near });
-  latest.current = { entries, locale, near };
+  const latest = useRef({ entries, locale, near, lines });
+  latest.current = { entries, locale, near, lines };
 
   /** The accuracy circle's size in pixels at the map's zoom; hidden while the position has no accuracy. */
   const sizeCircle = () => {
@@ -130,8 +142,9 @@ export default function MapView({
       : box
         ? { bounds: box, fitBoundsOptions: { padding: 48, maxZoom: FIT_ZOOM } }
         : { center: near ? ([near.lng, near.lat] as [number, number]) : LONDON, zoom: near ? NEAR_ZOOM : 10.5 };
-    const instance = new maplibregl.Map({ container: container.current, style: STYLE, ...start });
+    const instance = new maplibregl.Map({ container: container.current, style: basemap(theme), ...start, locale: mapLocale(locale) });
     map.current = instance;
+    blankMissingImages(instance);
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     if (handlers.current.onLocate) {
       locator.current = new LocateControl(() => handlers.current.onLocate?.());
@@ -142,12 +155,17 @@ export default function MapView({
       handlers.current.onCamera?.({ lng: center.lng, lat: center.lat, zoom: instance.getZoom() });
     });
     instance.on('zoom', sizeCircle);
-    instance.on('load', () => {
-      instance.addSource('places', { type: 'geojson', data: features(latest.current.entries, latest.current.locale), cluster: true, clusterRadius: 40, clusterMaxZoom: 15 });
-      instance.addLayer({ id: 'clusters', type: 'circle', source: 'places', filter: ['has', 'point_count'], paint: { 'circle-color': '#c8102e', 'circle-opacity': 0.85, 'circle-radius': ['step', ['get', 'point_count'], 14, 20, 18, 100, 24] } });
-      instance.addLayer({ id: 'cluster-count', type: 'symbol', source: 'places', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12, 'text-font': ['Noto Sans Bold'] }, paint: { 'text-color': '#ffffff' } });
-      instance.addLayer({ id: 'place', type: 'circle', source: 'places', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': '#c8102e', 'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' } });
-      instance.addLayer({ id: 'place-name', type: 'symbol', source: 'places', filter: ['!', ['has', 'point_count']], minzoom: 14, layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-font': ['Noto Sans Regular'] }, paint: { 'text-color': '#0f0f0f', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+    let wired = false;
+    // Every style that loads, the first and each one a theme change brings, gets the places again,
+    // in the theme's colours: an interchange is the page's card ringed in ink, with its count in ink.
+    instance.on('style.load', () => {
+      instance.addSource('places', { type: 'geojson', data: features(latest.current.entries, latest.current.locale, latest.current.lines), cluster: true, clusterRadius: 32, clusterMinPoints: 5, clusterMaxZoom: 14 });
+      instance.addLayer({ id: 'clusters', type: 'circle', source: 'places', filter: ['has', 'point_count'], paint: { 'circle-color': token('--card'), 'circle-stroke-color': token('--ink'), 'circle-stroke-width': 3, 'circle-radius': ['step', ['get', 'point_count'], 13, 20, 16, 100, 21] } });
+      instance.addLayer({ id: 'cluster-count', type: 'symbol', source: 'places', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12.5, 'text-font': ['Noto Sans Bold'] }, paint: { 'text-color': token('--ink') } });
+      instance.addLayer({ id: 'place', type: 'circle', source: 'places', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': ['get', 'color'], 'circle-radius': 6.5, 'circle-stroke-width': 2, 'circle-stroke-color': token('--card') } });
+      instance.addLayer({ id: 'place-name', type: 'symbol', source: 'places', filter: ['!', ['has', 'point_count']], minzoom: 14, layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-font': ['Noto Sans Regular'] }, paint: { 'text-color': token('--ink'), 'text-halo-color': token('--card'), 'text-halo-width': 1.5 } });
+      if (wired) return;
+      wired = true;
       instance.on('click', 'clusters', async (event) => {
         const feature = event.features?.[0];
         if (!feature) return;
@@ -162,6 +180,17 @@ export default function MapView({
         instance.on('mouseenter', layer, () => (instance.getCanvas().style.cursor = 'pointer'));
         instance.on('mouseleave', layer, () => (instance.getCanvas().style.cursor = ''));
       }
+      // A place names itself on hover, as on the other maps (CityMapView).
+      const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10, className: 'city-map-tip' });
+      instance.on('mousemove', 'place', (event) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        tip
+          .setLngLat((feature.geometry as unknown as { coordinates: [number, number] }).coordinates)
+          .setText(String(feature.properties.name ?? ''))
+          .addTo(instance);
+      });
+      instance.on('mouseleave', 'place', () => tip.remove());
     });
     return () => {
       instance.remove();
@@ -175,8 +204,15 @@ export default function MapView({
 
   useEffect(() => {
     const source = map.current?.getSource('places') as GeoJSONSource | undefined;
-    source?.setData(features(entries, locale));
-  }, [entries, locale]);
+    source?.setData(features(entries, locale, lines));
+  }, [entries, locale, lines]);
+
+  // A theme change loads the other tiles; the style's load puts the places back in the new colours.
+  useEffect(() => {
+    if (!map.current || shownTheme.current === theme) return;
+    shownTheme.current = theme;
+    map.current.setStyle(basemap(theme), { diff: false });
+  }, [theme]);
 
   // The reader's dot, over its circle, wherever they were found; gone when they turn "Near me" off.
   useEffect(() => {

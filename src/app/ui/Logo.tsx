@@ -1,23 +1,26 @@
 /**
- * The site's mark: a bowl and chopsticks on a red tile. public/favicon.svg draws the same.
+ * The site's mark: a bowl seen from above, a red ring, with a pair of chopsticks across it. It
+ * borrows the Underground's ring without its bar. public/favicon.svg draws the same.
  */
 
-export function LogoMark({ size = 22 }: { size?: number }) {
+export function LogoMark({ size = 30 }: { size?: number }) {
   return (
-    <svg className="logo-mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect className="tile" width="24" height="24" rx="6" />
-      <path className="bowl" d="M4.5 12.5h15a7.5 7.5 0 01-15 0z" />
-      <path className="sticks" d="M13.2 3.6l-2.4 7.4M18.6 4.6l-4.8 6.3" />
+    <svg className="logo-mark" width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+      <circle className="ring" cx="19" cy="22" r="12.5" />
+      <path className="sticks" d="M33.5 2.5L13.5 37M38 6L19.5 38" />
     </svg>
   );
 }
 
-/** Mark and wordmark, the name in the reader's language. */
-export function Logo({ name }: { name: string }) {
+/** Mark and wordmark: the name in the reader's language, and the small line under it. */
+export function Logo({ name, sub }: { name: string; sub?: string }) {
   return (
     <>
       <LogoMark />
-      <span className="wordmark">{name}</span>
+      <span className="wordmark">
+        <b>{name}</b>
+        {sub ? <small>{sub}</small> : null}
+      </span>
     </>
   );
 }

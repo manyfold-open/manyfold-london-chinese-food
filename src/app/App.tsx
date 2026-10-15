@@ -9,8 +9,14 @@ import { pathTitle } from '../shared/titles';
 import { Shell } from './components/Shell';
 import { useTitle } from './hooks';
 import { LocaleContext, rememberLocale, storedLocale } from './i18n';
-import { HomePage } from './pages/HomePage';
+import { DishesPage } from './pages/DishesPage';
 import { DishPage } from './pages/DishPage';
+import { GuidePage, GuidesPage } from './pages/GuidePage';
+import { HomePage } from './pages/HomePage';
+import { LightUpPage } from './pages/LightUpPage';
+import { LinePage } from './pages/LinePage';
+import { MapPage } from './pages/MapPage';
+import { NearPage } from './pages/NearPage';
 import { PlacePage } from './pages/PlacePage';
 import { SourcePage } from './pages/SourcePage';
 import { ContributePage, NotFoundPage, WordsPage } from './pages/TextPages';
@@ -54,6 +60,13 @@ export default function App() {
       <ToastProvider>
         <Shell>
           {route.page === 'home' ? <HomePage /> : null}
+          {route.page === 'map' ? <MapPage /> : null}
+          {route.page === 'dishes' ? <DishesPage /> : null}
+          {route.page === 'line' ? <LinePage key={route.id} id={route.id} /> : null}
+          {route.page === 'near' ? <NearPage key={route.campus} campusId={route.campus} /> : null}
+          {route.page === 'guides' ? <GuidesPage /> : null}
+          {route.page === 'guide' ? <GuidePage key={route.slug} slug={route.slug} campus={route.campus} /> : null}
+          {route.page === 'light-up' ? <LightUpPage /> : null}
           {route.page === 'place' ? <PlacePage key={route.id} id={route.id} /> : null}
           {route.page === 'dish' ? <DishPage key={route.key} dishKey={route.key} /> : null}
           {route.page === 'source' ? <SourcePage key={`${route.by}:${route.key}`} by={route.by} sourceKey={route.key} /> : null}

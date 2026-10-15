@@ -1,12 +1,24 @@
-/** The frame of every reader page: the top bar, the page, the footer. */
+/**
+ * The frame of every reader page: the top bar with the site's sections, the page, the footer, and
+ * on a phone a tab bar along the bottom, the way the app's main sections are reached by thumb.
+ */
 
 import type { ReactNode } from 'react';
 import { useLocale, useCopy, otherLocalePath, rememberLocale } from '../i18n';
 import { Link, useLocation } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
-import { Icon, IconButton, Logo, ManyfoldMark, Menu } from '../ui';
+import { Icon, IconButton, Logo, ManyfoldMark, Menu, type IconName } from '../ui';
 import { ConsentBar } from './Consent';
+
+interface Section {
+  key: string;
+  href: string;
+  label: string;
+  icon: IconName;
+  /** Paths under this section, so a place reached from the map keeps no tab lit but a dish keeps Dishes. */
+  under: readonly string[];
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const locale = useLocale();
@@ -15,39 +27,52 @@ export function Shell({ children }: { children: ReactNode }) {
   const [theme, toggleTheme] = useTheme();
   const other = locale === 'zh' ? 'en' : 'zh';
   const switchHref = `${otherLocalePath(pathname, other)}${search}`;
-  const pages = (['contribute', 'about'] as const).map((page) => ({ page, href: paths.page(locale, page), label: copy.nav[page] }));
+  const tabs: Section[] = [
+    { key: 'home', href: paths.home(locale), label: copy.nav.home, icon: 'home', under: [] },
+    { key: 'map', href: paths.map(locale), label: copy.nav.map, icon: 'map', under: [`/${locale}/line/`, `/${locale}/near/`] },
+    { key: 'dishes', href: paths.dishes(locale), label: copy.nav.dishes, icon: 'bowl', under: [`/${locale}/dish/`] },
+    { key: 'guides', href: paths.guides(locale), label: copy.nav.guides, icon: 'book', under: [`/${locale}/guide/`] },
+  ];
+  const more = [
+    { key: 'light-up', href: paths.lightUp(locale), label: copy.nav.lightUp },
+    { key: 'contribute', href: paths.page(locale, 'contribute'), label: copy.nav.contribute },
+    { key: 'about', href: paths.page(locale, 'about'), label: copy.nav.about },
+  ];
+  const current = (section: Section) => pathname === section.href || section.under.some((prefix) => pathname.startsWith(prefix));
 
   return (
     <div className="site">
       <header className="topbar">
         <div className="topbar-inner">
           <Link className="brand" href={paths.home(locale)} aria-label={copy.siteName}>
-            <Logo name={copy.siteShort} />
+            <Logo name={copy.brand.name} sub={copy.brand.sub} />
           </Link>
-          <span className="grow" />
           <nav className="topnav" aria-label={copy.siteShort}>
-            {pages.map(({ page, href, label }) => (
-              <Link key={page} href={href}>
+            {tabs.map((section) => (
+              <Link key={section.key} href={section.href} aria-current={current(section) ? 'page' : undefined}>
+                {section.label}
+              </Link>
+            ))}
+            {more.slice(0, 2).map(({ key, href, label }) => (
+              <Link key={key} href={href} aria-current={pathname === href ? 'page' : undefined}>
                 {label}
               </Link>
             ))}
           </nav>
+          <span className="grow" />
           <Link className="lang-switch" href={switchHref} lang={other === 'zh' ? 'zh-Hans' : 'en'} onClick={() => rememberLocale(other)}>
-            {copy.switchTo}
+            <span className="lang-long">{copy.switchTo}</span>
+            <span className="lang-short">{other === 'zh' ? '中' : 'EN'}</span>
           </Link>
-          <IconButton
-            label={theme === 'dark' ? copy.theme.light : copy.theme.dark}
-            icon={theme === 'dark' ? 'sun' : 'moon'}
-            onClick={toggleTheme}
-          />
-          {/* A phone's top bar has no room for the links beside the name: they fold into this menu. */}
+          <IconButton label={theme === 'dark' ? copy.theme.light : copy.theme.dark} icon={theme === 'dark' ? 'sun' : 'moon'} onClick={toggleTheme} />
+          {/* A phone's top bar has no room for the sections the tab bar leaves out: they fold into this menu. */}
           <nav className="topnav-phone" aria-label={copy.siteShort}>
             <Menu
               label={copy.nav.menu}
               icon="more"
               iconOnly
               end
-              items={pages.map(({ page, href, label }) => ({ key: page, label, href, app: true, current: pathname === href }))}
+              items={more.map(({ key, href, label }) => ({ key, label, href, app: true, current: pathname === href }))}
             />
           </nav>
         </div>
@@ -55,7 +80,9 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="site-main">{children}</main>
       <footer className="site-foot">
         <div className="site-foot-inner">
-          <p>{copy.attribution}</p>
+          <p>
+            <b>{copy.brand.motto}</b> {copy.attribution}
+          </p>
           <p className="foot-links">
             <Link href={paths.page(locale, 'about')}>{copy.nav.about}</Link>
             <Link href={paths.page(locale, 'contribute')}>{copy.nav.contribute}</Link>
@@ -69,6 +96,14 @@ export function Shell({ children }: { children: ReactNode }) {
           </p>
         </div>
       </footer>
+      <nav className="tabbar" aria-label={copy.siteShort}>
+        {tabs.map((section) => (
+          <Link key={section.key} href={section.href} aria-current={current(section) ? 'page' : undefined}>
+            <Icon name={section.icon} size={22} />
+            {section.label}
+          </Link>
+        ))}
+      </nav>
       <ConsentBar />
     </div>
   );

@@ -1,0 +1,99 @@
+/* Proposed (A + B + C): the arrivals board fills the column beside the map, never shows an empty
+   panel or a count of zero, and says plainly which state it is in. Written to move into
+   src/app/styles.css as it is. */
+
+/* C: beside the map, the board takes the column's remaining height; rows fill it. */
+@media (min-width: 1081px) {
+  .front-hero.fill {
+    align-items: stretch;
+  }
+
+  .front-hero.fill .front-hero-main {
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  }
+
+  .front-hero.fill .live-board {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .front-hero.fill .live-rows {
+    flex: 1 1 0;
+    min-height: calc(4 * 38px);
+  }
+}
+
+.live-rows {
+  position: relative;
+  overflow: hidden;
+}
+
+.live-row {
+  height: var(--row, 38px);
+}
+
+/* The dot blinks only while a check is under an hour old; quiet or showing pages, it holds still. */
+.live-dot.still {
+  animation: none;
+  background: var(--amber-dim);
+}
+
+.live-only.dim {
+  color: rgba(246, 239, 226, 0.4);
+}
+
+/* A: the fallback's rows are pages that changed, in the board's plainest colour. */
+.live-kind.update {
+  --c: rgba(246, 239, 226, 0.82);
+}
+
+/* A: while the data loads, grey rows of the same height. */
+.live-row.skel span {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
+  background-size: 200% 100%;
+  animation: board-shimmer 1.4s linear infinite;
+}
+
+.live-row.skel span:nth-child(2) {
+  height: 18px;
+}
+
+.live-row.skel span:nth-child(4) {
+  width: 36px;
+}
+
+@keyframes board-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-row.skel span {
+    animation: none;
+  }
+}
+
+/* B: the foot says what is so, never a zero. */
+.live-board footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.live-board footer b {
+  color: var(--warm);
+  font-weight: 600;
+}
+
+.live-board footer .skel {
+  display: inline-block;
+  width: 180px;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}

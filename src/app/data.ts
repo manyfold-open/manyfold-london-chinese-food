@@ -1,5 +1,6 @@
 /** What pages read from the API, typed. Answers are kept for the session (src/app/api.ts). */
 
+import type { Activity, CrewMember } from '../shared/activity';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import { useApi } from './api';
 
@@ -38,3 +39,9 @@ export const useSource = (by: 'source' | 'author', key: string, page: number) =>
 
 /** Which dishes have an approved illustration, and whether the site shows them at all. */
 export const useIllustrations = () => useApi<{ shown: boolean; dishes: Record<string, string> }>('/api/illustrations');
+
+/** The arrivals board: the newest checks of public records, and today's counts. */
+export const useActivity = () => useApi<Activity>('/api/activity');
+
+/** The agents at work this week. */
+export const useCrew = (wanted = true) => useApi<{ crew: CrewMember[] }>(wanted ? '/api/crew' : null);

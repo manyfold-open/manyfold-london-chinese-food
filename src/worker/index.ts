@@ -63,7 +63,7 @@ import {
   weakSourceDaily,
 } from './console';
 import { ensureSchema } from './db';
-import { buildDishes, buildIndex, datasetJson, dishPlaces, placeDoc, rebuildNow, refreshDocs, sourcePage } from './docs';
+import { buildCrew, buildDishes, buildIndex, datasetJson, dishPlaces, placeDoc, rebuildNow, refreshActivity, refreshDocs, refreshFront, sourcePage } from './docs';
 import { menusJsonl, placesCsv, placesJson } from './exports';
 import { maintain } from './maintenance';
 import { factsSettings, gatherFacts, updateFactsSettings } from './facts';
@@ -229,12 +229,15 @@ const SLOW_CACHE = cachedFor(300);
 const jsonText = (c: AppContext, text: string) => c.body(text, 200, { 'content-type': 'application/json; charset=utf-8' });
 
 /** A stored dataset, built at once the first time it is asked for. */
-async function dataset(c: AppContext, name: 'index' | 'dishes' | 'illustrations'): Promise<string> {
+async function dataset(c: AppContext, name: 'index' | 'dishes' | 'illustrations' | 'activity' | 'crew'): Promise<string> {
   const stored = await datasetJson(c.env.DB, name);
   if (stored !== null) return stored;
   if (name === 'index') await buildIndex(c.env.DB, new Date());
+  else if (name === 'activity') await refreshActivity(c.env.DB, new Date());
+  else if (name === 'crew') await buildCrew(c.env.DB, new Date());
   else await buildDishes(c.env.DB, new Date());
-  return (await datasetJson(c.env.DB, name)) ?? (name === 'illustrations' ? '{}' : '[]');
+  const empty = name === 'illustrations' ? '{}' : name === 'activity' ? '{"events":[],"day":"","checked":0,"agents":0,"built_at":""}' : '[]';
+  return (await datasetJson(c.env.DB, name)) ?? empty;
 }
 
 app.get('/api/index', PAGE_CACHE, async (c) => jsonText(c, `{"places":${await dataset(c, 'index')}}`));
@@ -246,6 +249,12 @@ app.get('/api/places/:id', PAGE_CACHE, async (c) => {
 });
 
 app.get('/api/dishes', SLOW_CACHE, async (c) => jsonText(c, `{"dishes":${await dataset(c, 'dishes')}}`));
+
+/** The front page's arrivals board: the newest checks of public records, and the day's counts. */
+app.get('/api/activity', PAGE_CACHE, async (c) => jsonText(c, await dataset(c, 'activity')));
+
+/** The agents at work this week. */
+app.get('/api/crew', SLOW_CACHE, async (c) => jsonText(c, `{"crew":${await dataset(c, 'crew')}}`));
 
 app.get('/api/dishes/:key', SLOW_CACHE, async (c) => c.json(await dishPlaces(c.env.DB, normName(decodeURIComponent(c.req.param('key'))))));
 
@@ -701,11 +710,12 @@ app.put('/api/admin/source-rechecks', async (c) => c.json({ daily: await setWeak
 async function runCron(env: Env, now: Date, everyDueRecord: boolean) {
   const housekeeping = await maintain(env.DB, now, { everyDueRecord });
   const docs = await refreshDocs(env.DB, now, { whole: everyDueRecord });
+  const front = await refreshFront(env.DB, now, { whole: everyDueRecord });
   const illustrate = await syncIllustrateWork(env.DB, now);
   const facts = await gatherFacts(env.DB, now);
   const purged = everyDueRecord ? await purgeMedia(env, now) : 0;
   const daily = everyDueRecord ? await onceADay(env, now) : null;
-  return { ...housekeeping, docs, illustrate, facts, purged, ...daily };
+  return { ...housekeeping, docs, front, illustrate, facts, purged, ...daily };
 }
 
 /** Items waiting this long for the site team go into the daily digest. */

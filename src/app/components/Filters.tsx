@@ -1,30 +1,45 @@
 /**
- * The front page's filters: open now, a menu, photos, and the kind of place, the cuisine and the
+ * The map page's filters: open now, a menu, photos, and the kind of place, the cuisine and the
  * borough, each choice with how many places the list would show with it. The same panel is the
  * left column on a wide screen and a sheet on a phone. Long lists start with the choices most
- * places have, a few at a time; a choice made always shows. Nothing here ranks a place.
+ * places have, a few at a time; a choice made always shows. Above the results, the lines and the
+ * campuses are a row of chips each (QuickFilters). Nothing here ranks a place.
  */
 
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { CAMPUSES } from '../../shared/campuses';
+import { LINES, lineOfCuisine } from '../../shared/lines';
 import type { FacetCounts } from '../../shared/places-query';
 import { useCopy, useLocale } from '../i18n';
 import { BOROUGH_CODES, boroughLabel, CATEGORIES, categoryLabel, CUISINES, cuisineLabel } from '../labels';
 import { CheckRow, ShowAll } from '../ui';
+import { LineDot, lineVars } from './Lines';
 
 export interface Filters {
   categories: string[];
   cuisines: string[];
   boroughs: string[];
+  /** On any of these lines. */
+  lines: string[];
+  /** Within a walk of this campus (src/shared/campuses.ts), or anywhere. */
+  campus: string | null;
   openOnly: boolean;
   withMenu: boolean;
   withPhotos: boolean;
 }
 
-export const NO_FILTERS: Filters = { categories: [], cuisines: [], boroughs: [], openOnly: true, withMenu: false, withPhotos: false };
+export const NO_FILTERS: Filters = { categories: [], cuisines: [], boroughs: [], lines: [], campus: null, openOnly: true, withMenu: false, withPhotos: false };
 
 /** How many filters are set beyond none: the Filters button on a phone shows it. */
 export const filterCount = (filters: Filters): number =>
-  filters.categories.length + filters.cuisines.length + filters.boroughs.length + (filters.withMenu ? 1 : 0) + (filters.withPhotos ? 1 : 0) + (filters.openOnly ? 0 : 1);
+  filters.categories.length +
+  filters.cuisines.length +
+  filters.boroughs.length +
+  filters.lines.length +
+  (filters.campus ? 1 : 0) +
+  (filters.withMenu ? 1 : 0) +
+  (filters.withPhotos ? 1 : 0) +
+  (filters.openOnly ? 0 : 1);
 
 /** Filters as stored (this browser, a history entry), with every value checked against the lists. */
 export function readFilters(stored: unknown): Filters {
@@ -35,6 +50,8 @@ export function readFilters(stored: unknown): Filters {
     categories: list(value.categories, CATEGORIES),
     cuisines: list(value.cuisines, CUISINES),
     boroughs: list(value.boroughs, BOROUGH_CODES),
+    lines: list(value.lines, LINES.map((line) => line.id)),
+    campus: CAMPUSES.some((campus) => campus.id === value.campus) ? (value.campus as string) : null,
     openOnly: flag(value.openOnly, NO_FILTERS.openOnly),
     withMenu: flag(value.withMenu, NO_FILTERS.withMenu),
     withPhotos: flag(value.withPhotos, NO_FILTERS.withPhotos),
@@ -83,7 +100,15 @@ export function FilterPanel({
       <Choices
         title={copy.home.cuisine}
         values={byPlaces(CUISINES, totals?.cuisines)}
-        label={(value) => cuisineLabel(value, locale)}
+        label={(value) => {
+          const line = lineOfCuisine(value);
+          return (
+            <span className="cuisine-choice">
+              {line ? <LineDot id={line} /> : null}
+              {cuisineLabel(value, locale)}
+            </span>
+          );
+        }}
         chosen={filters.cuisines}
         counts={counts?.cuisines ?? null}
         short
@@ -113,7 +138,7 @@ function Choices({
 }: {
   title: string;
   values: readonly string[];
-  label: (value: string) => string;
+  label: (value: string) => ReactNode;
   chosen: string[];
   counts: Record<string, number> | null;
   /** Show the first few until the reader asks for all. */
@@ -133,6 +158,54 @@ function Choices({
       {short && values.length > SHORT ? (
         <ShowAll expanded={all} total={values.length} more={copy.home.showAll(values.length)} less={copy.home.showFewer} onToggle={() => setAll(!all)} />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The lines and the campuses, a row of chips each, over the results: a line keeps the places on
+ * it (more than one, the places on any), a campus the places a walk from it, nearest first.
+ */
+export function QuickFilters({ filters, counts, onChange }: { filters: Filters; counts: FacetCounts | null; onChange: (filters: Filters) => void }) {
+  const copy = useCopy();
+  const lines = useId();
+  const campuses = useId();
+  const locale = useLocale();
+  return (
+    <div className="quick-filters">
+      <div className="quick-row" role="group" aria-labelledby={lines}>
+        <span id={lines} className="quick-label">
+          {copy.home.byLine}
+        </span>
+        <div className="quick-chips">
+          {LINES.map((line) => {
+            const on = filters.lines.includes(line.id);
+            return (
+              <button key={line.id} type="button" className="quick-chip" aria-pressed={on} style={lineVars(line.id)} onClick={() => onChange({ ...filters, lines: toggle(filters.lines, line.id) })}>
+                <i aria-hidden="true" />
+                {line.label[locale]}
+                {counts ? <em>{(counts.lines[line.id] ?? 0).toLocaleString('en-US')}</em> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="quick-row" role="group" aria-labelledby={campuses}>
+        <span id={campuses} className="quick-label">
+          {copy.home.byCampus}
+        </span>
+        <div className="quick-chips">
+          {CAMPUSES.map((campus) => {
+            const on = filters.campus === campus.id;
+            return (
+              <button key={campus.id} type="button" className="quick-chip" aria-pressed={on} title={campus.name[locale]} style={lineVars(campus.line)} onClick={() => onChange({ ...filters, campus: on ? null : campus.id })}>
+                <i aria-hidden="true" />
+                {campus.short}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
