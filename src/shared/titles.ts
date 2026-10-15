@@ -5,8 +5,11 @@
  */
 
 import { BOROUGHS, CATEGORY_LABELS } from '../../kinds/vocab.ts';
+import { campusById } from './campuses.ts';
 import { standardDish } from './dish.ts';
+import { guideBySlug } from './guides.ts';
 import { COPY, type Locale } from './i18n.ts';
+import { lineById } from './lines.ts';
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
@@ -43,10 +46,29 @@ export const notFoundTitle = (locale: Locale): string => `${COPY[locale].notFoun
  */
 export function pathTitle(locale: Locale, rest: string): { found: boolean; title: string } {
   const copy = COPY[locale];
-  const [, page, value] = rest.split('/');
+  const [, page, value, extra] = rest.split('/');
   const decoded = value ? decodeSegment(value) : '';
   const site = copy.siteShort;
   if (!page) return { found: true, title: `${copy.siteName} — ${copy.tagline}` };
+  if (!value && (page === 'map' || page === 'dishes' || page === 'guides' || page === 'light-up')) {
+    const name = page === 'map' ? copy.nav.map : page === 'dishes' ? copy.dishes.title : page === 'guides' ? copy.guides.title : copy.nav.lightUp;
+    return { found: true, title: `${name} · ${site}` };
+  }
+  if (page === 'line' && decoded && !extra) {
+    const line = lineById(decoded);
+    if (line) return { found: true, title: `${line.label[locale]} · ${site}` };
+  }
+  if (page === 'near' && decoded && !extra) {
+    const campus = campusById(decoded);
+    if (campus) return { found: true, title: `${copy.near.pageTitle(campus.short)} · ${site}` };
+  }
+  if (page === 'guide' && decoded) {
+    const guide = guideBySlug(decoded);
+    const campus = extra ? campusById(decodeSegment(extra)) : null;
+    if (guide && (!extra || (campus && guide.routes?.[campus.id]))) {
+      return { found: true, title: `${guide.title[locale]}${campus ? ` · ${campus.short}` : ''} · ${site}` };
+    }
+  }
   if (page === 'dish' && decoded) {
     const entry = standardDish(decoded);
     return { found: true, title: `${copy.dish.title((locale === 'zh' ? entry?.zh : entry?.en) ?? decoded)} · ${site}` };

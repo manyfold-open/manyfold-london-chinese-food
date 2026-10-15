@@ -11,7 +11,10 @@
 import { CUISINE_LABELS } from '../../kinds/vocab';
 import { COPY, localeFrom, localeFromAcceptLanguage, type Locale } from '../shared/i18n';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
+import { CAMPUSES, campusById } from '../shared/campuses';
 import { standardDish } from '../shared/dish';
+import { GUIDES, guideBySlug } from '../shared/guides';
+import { LINES } from '../shared/lines';
 import { decodeSegment, notFoundTitle, pathTitle, placeTitle } from '../shared/titles';
 
 /**
@@ -110,8 +113,26 @@ export function pathMeta(locale: Locale, rest: string): PageMeta {
   const { found, title } = pathTitle(locale, rest);
   if (!found) return { status: 404, locale, title, description: copy.notFound.text, rest, jsonLd: null };
   const [, page, value] = rest.split('/');
-  const dish = page === 'dish' && value ? standardDish(decodeSegment(value)) : null;
-  const description = page === 'contribute' ? copy.contribute.lead : (dish?.description ?? copy.description);
+  const decoded = value ? decodeSegment(value) : '';
+  const dish = page === 'dish' && value ? standardDish(decoded) : null;
+  const guide = page === 'guide' ? guideBySlug(decoded) : undefined;
+  const campus = page === 'near' ? campusById(decoded) : undefined;
+  const description =
+    page === 'contribute'
+      ? copy.contribute.lead
+      : page === 'dishes'
+        ? copy.dishes.lead
+        : page === 'guides'
+          ? copy.guides.lead
+          : page === 'light-up'
+            ? copy.lightUp.text
+            : page === 'line'
+              ? copy.lines.lead
+              : guide
+                ? guide.dek[locale]
+                : campus
+                  ? `${campus.name[locale]} · ${copy.near.tag}`
+                  : (dish?.description ?? copy.description);
   return { status: 200, locale, title, description, rest, jsonLd: null };
 }
 
@@ -166,11 +187,18 @@ function finish(response: Response, status: number, csp: boolean): Response {
   return new Response(response.body, { status, headers });
 }
 
-/** The sitemap: both languages of the front page, every public place, and the dishes served. */
+/** The sitemap: both languages of the front page, the browsing pages and guides, every public place, and the dishes served. */
 export function sitemap(site: string, places: readonly IndexEntry[], dishes: readonly [string, string | null, string | null, number][]): string {
   const urls: { loc: string; lastmod?: string }[] = [];
   for (const locale of ['zh', 'en'] as const) {
     urls.push({ loc: `${site}/${locale}/` });
+    for (const page of ['map', 'dishes', 'guides', 'light-up']) urls.push({ loc: `${site}/${locale}/${page}` });
+    for (const line of LINES) urls.push({ loc: `${site}/${locale}/line/${line.id}` });
+    for (const campus of CAMPUSES) urls.push({ loc: `${site}/${locale}/near/${campus.id}` });
+    for (const guide of GUIDES) {
+      urls.push({ loc: `${site}/${locale}/guide/${guide.slug}`, lastmod: guide.published });
+      for (const campus of Object.keys(guide.routes ?? {})) urls.push({ loc: `${site}/${locale}/guide/${guide.slug}/${campus}`, lastmod: guide.published });
+    }
     for (const entry of places) urls.push({ loc: `${site}/${locale}/place/${entry.id}${entry.s ? `/${entry.s}` : ''}`, lastmod: entry.u.slice(0, 10) });
     for (const [key] of dishes.slice(0, 2000)) urls.push({ loc: `${site}/${locale}/dish/${encodeURIComponent(key)}` });
   }

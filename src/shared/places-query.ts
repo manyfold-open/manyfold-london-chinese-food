@@ -5,6 +5,7 @@
  */
 
 import { findPostcode, normName } from './kinds.ts';
+import { linesOf } from './lines.ts';
 import { coreName, namesAlike } from './names.ts';
 import type { IndexEntry } from './place-doc.ts';
 
@@ -17,6 +18,10 @@ export interface PlaceQuery {
   categories?: readonly string[];
   cuisines?: readonly string[];
   boroughs?: readonly string[];
+  /** On any of these lines (kinds/vocab.ts, LINES). */
+  lines?: readonly string[];
+  /** Within a straight line of `km` of a point: a walk from a campus. */
+  within?: { lat: number; lng: number; km: number };
   /** Leave out places that closed for good. */
   openOnly?: boolean;
   withMenu?: boolean;
@@ -45,13 +50,15 @@ export function matchesText(entry: IndexEntry, q: string): boolean {
   return words.every((word) => haystack.includes(word));
 }
 
-type Facet = 'categories' | 'cuisines' | 'boroughs' | 'openOnly' | 'withMenu' | 'withPhotos';
+type Facet = 'categories' | 'cuisines' | 'boroughs' | 'lines' | 'within' | 'openOnly' | 'withMenu' | 'withPhotos';
 
 /** Each filter a reader can set, and whether an entry passes it. */
 const FACETS: readonly [Facet, (entry: IndexEntry, query: PlaceQuery) => boolean][] = [
   ['categories', (entry, query) => !query.categories?.length || query.categories.includes(entry.c)],
   ['cuisines', (entry, query) => !query.cuisines?.length || query.cuisines.some((cuisine) => entry.k.includes(cuisine))],
   ['boroughs', (entry, query) => !query.boroughs?.length || (entry.b !== null && query.boroughs.includes(entry.b))],
+  ['lines', (entry, query) => !query.lines?.length || linesOf(entry).some((line) => query.lines!.includes(line))],
+  ['within', (entry, query) => !query.within || (entry.la !== null && entry.lo !== null && distanceKm(query.within, { lat: entry.la, lng: entry.lo }) <= query.within.km)],
   ['openOnly', (entry, query) => !query.openOnly || entry.t !== 'closed'],
   ['withMenu', (entry, query) => !query.withMenu || entry.m > 0],
   ['withPhotos', (entry, query) => !query.withPhotos || entry.p > 0],
@@ -97,6 +104,7 @@ export interface FacetCounts {
   categories: Record<string, number>;
   cuisines: Record<string, number>;
   boroughs: Record<string, number>;
+  lines: Record<string, number>;
   openOnly: number;
   withMenu: number;
   withPhotos: number;
@@ -104,7 +112,7 @@ export interface FacetCounts {
 
 export function facetCounts(entries: readonly IndexEntry[], query: PlaceQuery): FacetCounts {
   const postcode = query.postcode ? compact(query.postcode) : null;
-  const counts: FacetCounts = { categories: {}, cuisines: {}, boroughs: {}, openOnly: 0, withMenu: 0, withPhotos: 0 };
+  const counts: FacetCounts = { categories: {}, cuisines: {}, boroughs: {}, lines: {}, openOnly: 0, withMenu: 0, withPhotos: 0 };
   const add = (into: Record<string, number>, value: string) => {
     into[value] = (into[value] ?? 0) + 1;
   };
@@ -117,6 +125,7 @@ export function facetCounts(entries: readonly IndexEntry[], query: PlaceQuery): 
     if (counted('categories')) add(counts.categories, entry.c);
     if (counted('cuisines')) for (const cuisine of entry.k) add(counts.cuisines, cuisine);
     if (counted('boroughs') && entry.b) add(counts.boroughs, entry.b);
+    if (counted('lines')) for (const line of linesOf(entry)) add(counts.lines, line);
     if (counted('openOnly') && entry.t !== 'closed') counts.openOnly += 1;
     if (counted('withMenu') && entry.m > 0) counts.withMenu += 1;
     if (counted('withPhotos') && entry.p > 0) counts.withPhotos += 1;

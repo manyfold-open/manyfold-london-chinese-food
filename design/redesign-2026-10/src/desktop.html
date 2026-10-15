@@ -1,0 +1,481 @@
+<div class="doc">
+
+  <header class="doc-head">
+    <div>
+      <div class="eyebrow">LONDON CHINESE FOOD · DESKTOP · MOCK V3 · 2026.10.14</div>
+      <h1>PC 端：同一套组件，<br><em>更大的地图</em></h1>
+      <p>四个关键页面的桌面版：首页、店铺页、菜品页、专题页。点页面顶部的「中文 / English」，或者浏览器框里导航右侧的 EN 按钮，整页文案、线路图和地图标注一起切换语言，演示同一页面在 /zh/ 和 /en/ 之间互跳。</p>
+      <div class="legend-tags">
+        <span><span class="tag real">真实数据</span> 线上已有</span>
+        <span><span class="tag new">需新增</span> 要做的新能力或数据集</span>
+        <span><span class="tag demo">示意</span> 样本或占位数字</span>
+        <span><span class="tag rule">铁律</span> 与 AGENTS.md 的规则相关</span>
+      </div>
+    </div>
+    <div class="principles">
+      <div class="principle"><span class="n" style="--c:var(--l-dimsum)">1</span><div><b>左边找，右边看</b><span>首屏一分为二：搜索和到站屏在左，1,559 家店的真实分布在右。宽屏的价值是同时看见"找什么"和"在哪里"。</span></div></div>
+      <div class="principle"><span class="n" style="--c:var(--l-spicy)">2</span><div><b>侧栏跟着走</b><span>店铺、菜品、专题页的地图和操作放在右侧，随滚动固定。主栏读内容，侧栏随时能"去那里"。</span></div></div>
+      <div class="principle"><span class="n" style="--c:var(--l-grocery)">3</span><div><b>中英一键切换</b><span>同一个页面、同一个位置，语言切换不跳回首页。标题是同一种形态：汉字用站酷庆科黄油体，英文和数字用 Fredoka 窄体，切换语言不换气质。</span></div></div>
+    </div>
+  </header>
+
+  <!-- ═════════ D1 HOME ═════════ -->
+  <section class="board">
+    <div class="board-head"><span class="num">D1</span><h2>首页 · Home</h2><p>手机首页的九个模块，在宽屏上重新编排成一张长页。</p></div>
+    <div class="frame-wrap">
+      <div class="browser">
+        <div class="chrome"><span class="tl"><i></i><i></i><i></i></span><span class="url" data-en="app.manyfold.ai/london-chinese-food/en/">app.manyfold.ai/london-chinese-food/zh/</span></div>
+        <div class="dnav" data-pin="1">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="wordmark"><b data-en="London Chinese Food">伦敦干饭地图</b><small data-en="THE EATING MAP · 伦敦干饭地图">LONDON CHINESE FOOD MAP</small></span></a>
+          <nav><a class="on" data-en="Home">首页</a><a data-en="Map">地图</a><a data-en="Dishes">菜品</a><a data-en="Guides">攻略</a><a data-en="Light up London">点亮伦敦</a><a data-en="Contribute">参与</a></nav>
+          <div class="r"><span class="live-pill"><i></i><span data-en="36 browsing">36 人在逛</span></span><button class="lang" data-toggle-lang data-en="中">EN</button></div>
+        </div>
+        <div class="dhero">
+          <div>
+            <p class="kicker"><span data-en="<b>1,559</b> open now"><b>1,559</b> 家在营业</span>·<span data-en="<b>2,557</b> quotes"><b>2,557</b> 段原话</span>·<span data-en="<b>140k</b> dishes priced"><b>14 万</b>道菜有价格</span></p>
+            <h1 data-pin="2"><span data-en="Fancy some">今天在伦敦</span><br><span data-en="">吃</span><span class="rotator"><span class="track"><span data-en="xiaolongbao">小笼包</span><span data-en="roujiamo">肉夹馍</span><span data-en="mango sago">杨枝甘露</span><span data-en="roast duck">烧鸭饭</span><span data-en="malatang">麻辣烫</span><span data-en="xiaolongbao">小笼包</span></span></span><span data-en="<br>tonight?">吗？</span></h1>
+            <label class="search"><svg class="icon"><use href="#i-search"/></svg><span data-en="A place, a dish, a postcode or your uni">搜店名、菜名、邮编，或者你的学校</span><b data-en="Go">搜</b></label>
+            <div class="chips" style="margin-left:0;padding-left:0">
+              <a class="chip"><i style="--c:var(--l-grocery)"></i><span data-en="Near UCL">UCL 周边</span></a>
+              <a class="chip"><i style="--c:var(--l-dimsum)"></i><span data-en="Full for a tenner">£10 吃饱</span></a>
+              <a class="chip"><i style="--c:var(--l-north)"></i><span data-en="Taste of home">一秒回国</span></a>
+              <a class="chip"><i style="--c:var(--l-boba)"></i><span data-en="Bubble tea run">奶茶续命</span></a>
+            </div>
+            <section class="live" style="margin:26px 0 0">
+              <header><span class="dot"></span><b data-en="Live arrivals">实时到站</b><span class="en">ONLY VERIFIED</span></header>
+              <div class="rows"><div class="track">
+                <div class="row"><time>now</time><em class="k" style="--c:var(--amber)" data-en="Menu">菜单</em><span class="t" data-en="Master Wei <small>67 prices checked</small>">Master Wei 西安小吃 <small>67 道菜价已核对</small></span><span class="o">WC1N</span></div>
+                <div class="row"><time>4 min</time><em class="k" style="--c:var(--l-boba)" data-en="Quote">原话</em><span class="t" data-en="Kawan <small>new from The Infatuation</small>">Kawan <small>The Infatuation 新摘录</small></span><span class="o">W1D</span></div>
+                <div class="row"><time>11 min</time><em class="k" style="--c:oklch(78% 0.13 152)" data-en="New">新店</em><span class="t" data-en="Noodle Theorist <small>added · Chongqing noodles</small>">Noodle Theorist <small>收录 · 重庆面馆</small></span><span class="o">N1</span></div>
+                <div class="row"><time>19 min</time><em class="k" style="--c:oklch(78% 0.1 302)" data-en="Art">示意图</em><span class="t" data-en="Egg waffle <small>AI illustration in</small>">鸡蛋仔 <small>有了 AI 示意图</small></span><span class="o">··</span></div>
+                <div class="row"><time>32 min</time><em class="k" style="--c:var(--l-boba)" data-en="Quote">原话</em><span class="t" data-en="Plum Valley <small>new from GourmandGunno</small>">Plum Valley <small>GourmandGunno 新摘录</small></span><span class="o">W1D</span></div>
+                <div class="row"><time>47 min</time><em class="k" style="--c:var(--amber)" data-en="Menu">菜单</em><span class="t" data-en="Barshu <small>178 prices checked</small>">Barshu <small>178 道菜价已核对</small></span><span class="o">W1D</span></div>
+                <div class="row"><time>1 hr</time><em class="k" style="--c:oklch(78% 0.13 152)" data-en="New">新店</em><span class="t" data-en="Hon's BBQ <small>added · roast meats</small>">Hon's BBQ <small>收录 · 烧腊</small></span><span class="o">E9</span></div>
+                <div class="row"><time>1 hr</time><em class="k" style="--c:oklch(72% 0.16 27)" data-en="Photo">首拍</em><span class="t" data-en="A place lit up <small>first photo approved</small>">一家店亮了 <small>第一张实拍通过审核</small></span><span class="o">··</span></div>
+                <div class="row"><time>now</time><em class="k" style="--c:var(--amber)" data-en="Menu">菜单</em><span class="t" data-en="Master Wei <small>67 prices checked</small>">Master Wei 西安小吃 <small>67 道菜价已核对</small></span><span class="o">WC1N</span></div>
+                <div class="row"><time>4 min</time><em class="k" style="--c:var(--l-boba)" data-en="Quote">原话</em><span class="t" data-en="Kawan <small>new from The Infatuation</small>">Kawan <small>The Infatuation 新摘录</small></span><span class="o">W1D</span></div>
+                <div class="row"><time>11 min</time><em class="k" style="--c:oklch(78% 0.13 152)" data-en="New">新店</em><span class="t" data-en="Noodle Theorist <small>added · Chongqing noodles</small>">Noodle Theorist <small>收录 · 重庆面馆</small></span><span class="o">N1</span></div>
+                <div class="row"><time>19 min</time><em class="k" style="--c:oklch(78% 0.1 302)" data-en="Art">示意图</em><span class="t" data-en="Egg waffle <small>AI illustration in</small>">鸡蛋仔 <small>有了 AI 示意图</small></span><span class="o">··</span></div>
+              </div></div>
+              <footer><span data-en="48 checked today · 17 agents on shift">今天已核实 48 条 · 17 位采集员在岗</span><a data-en="See all">看全部</a></footer>
+            </section>
+          </div>
+          <div class="dmap" data-pin="3">
+            <canvas data-london="desk"></canvas>
+            <div class="mapsearch"><span class="on" data-en="All lines">全部线路</span><span data-en="By uni">按学校</span><span data-en="Under £10">£10 以内</span></div>
+            <div class="mlegend" data-legend="map"></div>
+          </div>
+        </div>
+
+        <section class="dsec" data-pin="4" style="padding-top:28px">
+          <div class="dsec-head"><h2 data-en="The Food Lines">干饭线路图</h2><p data-en="Eight lines, one interchange. Each line is a family of cuisines; pick one to see every stop on it.">8 条线，1 个换乘站。每条线是一组菜系，点一条线，看这条线上所有的店。</p><a class="more"><span data-en="Browse by line">按线路逛</span><svg class="icon" style="width:15px;height:15px"><use href="#i-arrow"/></svg></a></div>
+          <div class="dtube"><svg class="tube" data-tube data-names viewBox="0 0 1150 300"></svg></div>
+        </section>
+
+        <section class="dsec drow" data-pin="5">
+          <article class="dotd dday">
+            <div class="pic ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eh2kvy1db8njjx7q5r455e/full.webp" alt=""></div>
+            <div class="body">
+              <div class="k" data-en="DISH OF THE DAY · 14 OCT">DISH OF THE DAY · 10.14</div>
+              <h3 data-en="Xiaolongbao<small class='cn'>小笼包</small>">小笼包<small>XIAOLONGBAO</small></h3>
+              <p data-en="On the menu at <b>79</b> places in London. Cheapest <b>£4.80</b>, priciest <b>£16.00</b>; half of them charge <b>£6.80</b> or less.">全伦敦 <b>79</b> 家店的菜单上有它。最便宜 <b>£4.80</b>，最贵 <b>£16.00</b>，一半的店不超过 <b>£6.80</b>。</p>
+              <svg class="plot" data-plot data-dark viewBox="0 0 400 90"></svg>
+              <div class="plot-cap" data-en="Each dot is one menu price · 52 places list one">每个点是一家店的菜单价 · 52 家标了价格</div>
+              <ul class="cheap">
+                <li><span class="p">£4.80</span><span class="n">A Bowl of Noodles</span><span class="a" data-en="Chinatown WC2H">唐人街 WC2H</span></li>
+                <li><span class="p">£5.00</span><span class="n">Golden Chopsticks</span><span class="a">Eltham SE9</span></li>
+                <li><span class="p">£5.50</span><span class="n">Pearl Liang</span><span class="a">Bayswater W2</span></li>
+              </ul>
+              <div style="margin-top:16px"><a class="btn amber"><span data-en="See all 79">看全部 79 家</span><svg class="icon" style="width:17px;height:17px"><use href="#i-arrow"/></svg></a></div>
+            </div>
+          </article>
+          <article class="dcampus">
+            <h3 data-en="Near your uni">学校周边</h3>
+            <p class="sub" data-en="Within 1 km · about a 12-minute walk">1 公里内 · 步行约 12 分钟</p>
+            <div class="crow"><span class="sc" style="--c:var(--l-spicy)">LSE</span><span class="ar"><b>Holborn</b><span data-en="Closest to Chinatown">离唐人街最近</span></span><span class="ct">90<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc" style="--c:var(--l-dimsum)">KCL</span><span class="ar"><b>Strand</b><span data-en="16 bubble tea shops">奶茶 16 家</span></span><span class="ct">79<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc" style="--c:var(--l-modern)">SOAS</span><span class="ar"><b>Russell Square</b><span data-en="Xi’an noodles galore">西北面馆扎堆</span></span><span class="ct">66<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc" style="--c:var(--l-grocery)">UCL</span><span class="ar"><b>Bloomsbury</b><span data-en="30 restaurants · 5 tea · 3 grocers">餐厅 30 · 奶茶 5 · 中超 3</span></span><span class="ct">38<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc" style="--c:var(--l-takeaway)">City</span><span class="ar"><b>Angel</b><span data-en="15 restaurants · 3 takeaways">餐厅 15 · 外卖 3</span></span><span class="ct">22<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc" style="--c:var(--l-north)">UAL</span><span class="ar"><b>King’s Cross</b><span data-en="16 restaurants">餐厅 16</span></span><span class="ct">20<small data-en="">家</small></span></div>
+            <div class="crow"><span class="sc dark" style="--c:var(--l-noodle)">Imperial</span><span class="ar"><b>South Kensington</b><span data-en="12 restaurants · 3 tea">餐厅 12 · 奶茶 3</span></span><span class="ct">15<small data-en="">家</small></span></div>
+            <div class="add" data-en="＋ Add your uni or office">＋ 加上你的学校或公司</div>
+          </article>
+        </section>
+
+        <section class="dsec" data-pin="6">
+          <div class="dsec-head"><h2 data-en="What they wrote">大家怎么说</h2><p data-en="Quotes, not scores: 2,557 of them, from English and Chinese press and bloggers.">只摘原话，不打分。2,557 段，来自中英文媒体和博主。</p><a class="more"><span data-en="Shuffle">换一批</span></a></div>
+          <div class="dquotes">
+            <blockquote class="q big yel" data-en="Zhang Liang Malatang, which takes you “back to China in one second”, has also opened in London!<cite><span class='tr'>Translated</span>Red Scarf 红领巾 · Zhang Liang Malatang</cite>">带你“一秒回国”的张亮麻辣烫也开到伦敦来咯！<cite>红领巾 Red Scarf · 张亮麻辣烫</cite></blockquote>
+            <blockquote class="q" data-en="Friends from Xi'an, come have a roujiamo for Chinese New Year, and savour a taste from home!<cite><span class='tr'>Translated</span>Dealmoon · Murger Han</cite>">菜品正宗程度是已经由东北留子盖章认证过的！<cite>Dealmoon 英国省钱快报 · 老地方</cite></blockquote>
+            <blockquote class="q ink" data-en="But sitting down at Master Wei, knowing that you’ve made it back for another bowl of London’s best beef biang biang noodles is a feeling you’ll go out of your way to recreate.<cite>The Infatuation · Master Wei</cite>">但坐进魏师傅，知道自己又回来吃一碗伦敦最好的牛肉 biangbiang 面——这种感觉会让你不惜绕路一再重温。<cite><span class="tr">译</span>The Infatuation · Master Wei</cite></blockquote>
+            <blockquote class="q green" data-en="…protein, fibre, vitamins and minerals, greatly raising our happiness living in London.<cite><span class='tr'>Translated</span>YYY TV · Q Beef Noodles</cite>">……大大提升了在伦敦生活的幸福程度。<cite>YYY TV · Q Beef Noodles</cite></blockquote>
+            <blockquote class="q pink" data-en="Manicures, face-changing, the noodle-pulling show and the big bear that keeps solo diners company are all there, and the prices are pretty sweet too!<cite><span class='tr'>Translated</span>Red Scarf · Haidilao at The O2</cite>">美甲、变脸、捞面表演还有陪伴独自用餐小伙伴的大熊一个不少，关键是价格还相当可爱！<cite>红领巾 Red Scarf · 海底捞 O2</cite></blockquote>
+            <blockquote class="q" data-en="Perhaps London’s most famous roast duck restaurant.<cite>James Dimitri · Four Seasons</cite>">或许是伦敦最著名的烧鸭酒家。<cite><span class="tr">译</span>James Dimitri · Four Seasons</cite></blockquote>
+            <blockquote class="q ink" data-en="A London Sichuan legend. Expect mouth-numbing peppers, dry-fried dishes, boiled fish in chilli oil and uncompromising Sichuan flavours. Not for those who avoid spice.<cite>James Dimitri · Barshu</cite>">伦敦川菜界的传奇老店。这里有让人舌尖酥麻的花椒、干煸佳肴、油润香浓的水煮鱼以及原汁原味、毫不妥协的正宗川味。不适合完全不吃辣的食客。<cite><span class="tr">译</span>James Dimitri · Barshu</cite></blockquote>
+            <blockquote class="q yel" data-en="This ‘heaven of soup dumplings’ is considered one of Chinatown’s very famous Chinese restaurants.<cite><span class='tr'>Translated</span>Red Scarf · Dumplings’ Legend</cite>">这家“小笼包的天堂”在中国城里也算是非常有名的中餐厅了。<cite>红领巾 Red Scarf · Dumplings’ Legend</cite></blockquote>
+          </div>
+        </section>
+
+        <section class="dsec" data-pin="7">
+          <div class="dsec-head"><h2 data-en="Guides">攻略专题</h2><p data-en="New every Wednesday. Find food by uni, budget or mood.">每周三更新。按学校、预算和心情找吃的。</p><a class="more"><span data-en="All 12 issues">全部 12 期</span><svg class="icon" style="width:15px;height:15px"><use href="#i-arrow"/></svg></a></div>
+          <div class="dguides">
+            <article class="guide-hero">
+              <span class="tagline" data-en="Back to uni · Issue 01">开学季特辑 · 第 01 期</span>
+              <h3 data-en="Full for<br>a tenner">伦敦 <span class="num">£10</span><br>吃饱指南</h3>
+              <p class="meta" data-en="By uni · 9 campuses · every price from the menu itself">按学校找 · 9 所学校 · 价格全部来自菜单原件</p>
+              <div class="plate ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/full.webp" alt=""></div>
+              <div class="sticker" style="width:84px;height:84px;right:100px;bottom:110px"><span data-en="<small>Roujiamo</small>£6.95"><small>肉夹馍</small>£6.95</span></div>
+            </article>
+            <article class="gcard ink"><div class="pic ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4etn4hf2t4ppb7mwhmytd0q/full.webp" alt=""></div><div class="t"><b data-en="Taste of home: Xi’an noodles">一秒回国：西北面食地图</b><span data-en="North Line · 228">北方线 · 228 家</span></div></article>
+            <article class="gcard pink"><div class="pic ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ew8fbajcw7yby49ffhc18a/full.webp" alt=""></div><div class="t"><b data-en="Bubble tea run">奶茶续命</b><span data-en="Bubble Tea Line · 253">奶茶线 · 253 家</span></div></article>
+            <ul class="glist">
+              <li><i style="--c:var(--l-spicy)"></i><b data-en="Hotpot night: Haidilao to Chaoshan beef">火锅局：从海底捞到潮汕牛肉</b><span>50</span></li>
+              <li><i style="--c:var(--l-grocery)"></i><b data-en="Mooncakes for Mid-Autumn: the grocer list">中秋月饼去哪买：中超清单</b><span>78</span></li>
+              <li><i style="--c:var(--l-modern)"></i><b data-en="Desk lunch in Canary Wharf">金丝雀码头打工人午餐</b><span>18</span></li>
+              <li><i style="--c:var(--l-dimsum)"></i><b data-en="Chinatown’s 130, by dish">唐人街 130 家，按菜找店</b><span>130</span></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="lightup dlight" data-pin="8">
+          <div>
+            <div class="k" data-en="LIGHT UP LONDON · SEASON 1">LIGHT UP LONDON · 第 1 季</div>
+            <h3 data-en="1,559 places.<br>Only <em>1</em> has a real photo.">1,559 家店<br>只有 <em>1</em> 家有实拍</h3>
+            <p data-en="Snap your plate. Once it’s approved the place lights up on the map, and yours is its first photo.">吃完顺手拍一张。审核通过后，这家店在地图上会亮起来，你拍的就是它的「首拍」。</p>
+            <div class="progress" style="margin-top:24px"><span>LIT 1 / 1,559</span><span data-en="SEASON ENDS 31.12">SEASON ENDS 12.31</span></div>
+            <div class="meter"><i></i></div>
+            <div class="acts"><a class="btn red"><svg class="icon"><use href="#i-camera"/></svg><span data-en="Upload the first photo">上传第一张实拍</span></a><a class="btn line" data-en="How to">怎么拍</a></div>
+            <p class="fine" data-en="Photos are re-encoded with location data removed, and no one sees them until they’re approved.">照片会重新编码，去掉拍摄地点等信息；审核通过前任何人都看不到。</p>
+          </div>
+          <canvas data-london="light"></canvas>
+        </section>
+
+        <section class="dsec" data-pin="9">
+          <div class="dsec-head"><h2 data-en="Today’s crew">今天在岗的采集员</h2><p data-en="Every entry carries its source, and another agent checks it against that source before it goes public.">每一条都带着出处原文，由另一位核实员对照来源后才公开。</p></div>
+          <div class="dcrew">
+            <div class="agent"><span class="av cn" style="--c:var(--l-dimsum)">锅</span><div><div class="nm">wok-scout-london</div><div class="rl" data-en="Collector · places <b>14</b> · menus <b>2</b>">采集 · 店铺 <b>14</b> · 菜单 <b>2</b></div></div></div>
+            <div class="agent"><span class="av cn" style="--c:var(--l-grocery)">核</span><div><div class="nm">GPT-6 luna</div><div class="rl" data-en="Checker · <b>28</b>">核实 · <b>28</b> 条</div></div></div>
+            <div class="agent"><span class="av cn" style="--c:var(--l-takeaway)">单</span><div><div class="nm">lcf-menu-scout</div><div class="rl" data-en="Collector · menus <b>7</b>">采集 · 菜单 <b>7</b></div></div></div>
+            <div class="agent"><span class="av cn" style="--c:var(--l-grocery)">核</span><div><div class="nm">gemini-02</div><div class="rl" data-en="Checker · <b>27</b>">核实 · <b>27</b> 条</div></div></div>
+            <div class="agent"><span class="av cn" style="--c:var(--l-boba)">画</span><div><div class="nm">dimsum-illustrator</div><div class="rl" data-en="Illustrator">画示意图</div></div></div>
+            <div class="agent"><span class="av cn" style="--c:var(--l-dimsum)">饺</span><div><div class="nm">dumpling-scout</div><div class="rl" data-en="Collector · places <b>3</b>">采集 · 店铺 <b>3</b></div></div></div>
+            <div class="crew-cta"><b data-en="Put your AI on shift">让你的 AI 也来值班</b><code data-en="One sentence to join · SKILL.md">一句话接入 · SKILL.md</code></div>
+          </div>
+        </section>
+
+        <footer class="dfoot"><span data-en="<b>No scores, just quotes.</b> Places and menus CC BY 4.0; quotes belong to their authors."><b>不打分，只摘原话。</b>店铺与菜单 CC BY 4.0，原话版权归作者。</span><span data-en="About · Contribute · Privacy · GitHub">关于 · 参与贡献 · 隐私 · GitHub</span></footer>
+      </div>
+    </div>
+    <ol class="notes dnotes">
+      <li><span class="pinno">1</span><div><b>导航</b>：六个入口与手机底栏对应，"点亮伦敦"在宽屏上单独成为一级入口。语言按钮就在导航里，切换后停在同一页。</div></li>
+      <li><span class="pinno">2</span><div><b>首屏左半</b>：标题、搜索、场景入口和到站屏。英文标题从两行变三行，字号单独调小。</div></li>
+      <li><span class="pinno">3</span><div><b>首屏右半</b>：1,559 家在营业店的真实坐标，按线路着色；学校和唐人街标注跟语言切换。<span class="tag real">真实数据</span></div></li>
+      <li><span class="pinno">4</span><div><b>宽版线路图</b>：线路名和店数直接标在线上，点一条线进入线路页。<span class="tag new">线路页</span></div></li>
+      <li><span class="pinno">5</span><div><b>今日一道菜和学校周边并排</b>：学校按 1 公里内的店数排列，像车站时刻表。<span class="tag real">真实数据</span></div></li>
+      <li><span class="pinno">6</span><div><b>原话墙四栏</b>：英文模式只出现有英文原文或已有译文的原话，所以第二条在英文里换成了韩记那句。<span class="tag rule">铁律 23</span></div></li>
+      <li><span class="pinno">7</span><div><b>攻略区</b>：主推专题占两行高度，另两期配大图，其余是列表。</div></li>
+      <li><span class="pinno">8</span><div><b>点亮伦敦整条深色带</b>：地图更大，进度和按钮在左。<span class="tag rule">铁律 19</span></div></li>
+      <li><span class="pinno">9</span><div><b>采集员</b>：六张名片加一个接入入口。头像里的汉字在英文版保留，作为装饰。<span class="tag demo">示意</span></div></li>
+    </ol>
+  </section>
+
+  <!-- ═════════ D2 PLACE ═════════ -->
+  <section class="board">
+    <div class="board-head"><span class="num">D2</span><h2>店铺页 · Place</h2><p>首屏左图右信息；往下主栏读内容，侧栏随滚动固定。</p></div>
+    <div class="frame-wrap">
+      <div class="browser">
+        <div class="chrome"><span class="tl"><i></i><i></i><i></i></span><span class="url" data-en="app.manyfold.ai/london-chinese-food/en/place/master-wei">app.manyfold.ai/london-chinese-food/zh/place/master-wei</span></div>
+        <div class="dnav">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="wordmark"><b data-en="London Chinese Food">伦敦干饭地图</b><small data-en="THE EATING MAP · 伦敦干饭地图">LONDON CHINESE FOOD MAP</small></span></a>
+          <nav><a data-en="Home">首页</a><a data-en="Map">地图</a><a data-en="Dishes">菜品</a><a data-en="Guides">攻略</a><a data-en="Light up London">点亮伦敦</a><a data-en="Contribute">参与</a></nav>
+          <div class="r"><label class="search" style="height:40px;width:300px;box-shadow:none;border-width:1.5px;border-radius:12px"><svg class="icon"><use href="#i-search"/></svg><span data-en="Search">搜店、搜菜</span></label><button class="lang" data-toggle-lang data-en="中">EN</button></div>
+        </div>
+        <div class="dcrumb" data-en="Home / North Line / <b>Master Wei</b>">首页 / 北方线 / <b>Master Wei</b></div>
+        <div class="dplace-top">
+          <div class="dcollage" data-pin="1">
+            <div class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4etn4hf2t4ppb7mwhmytd0q/full.webp" alt=""></div>
+            <div class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/thumb.webp" alt=""></div>
+            <div class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eyf8mc79d1z20mvkmhg8jd/thumb.webp" alt=""></div>
+            <div class="slot"><div><svg class="icon"><use href="#i-camera"/></svg><b data-en="First photo">首拍空位</b><span data-en="yours to take">等你来拍</span></div></div>
+          </div>
+          <aside class="dside">
+            <div class="sign" data-pin="2">
+              <div class="row1"><h1>Master Wei</h1><span class="zh">西安小吃</span></div>
+              <div class="lines"><span class="linebadge" style="--c:var(--l-north)" data-en="North Line">北方线</span><span class="linebadge" style="--c:var(--l-noodle)" data-en="Noodle Line">粉面线</span><span class="linebadge" style="--c:var(--l-dimsum)" data-en="Open">在营业</span></div>
+            </div>
+            <ul class="facts">
+              <li><svg class="icon"><use href="#i-pin"/></svg><div><b>13 Cosmo Place, WC1N 3AP</b> · Camden<div class="walk"><span data-en="Russell Square <em>3</em> min">Russell Square 站 <em>3</em> 分钟</span><span data-en="SOAS <em>7</em> min">SOAS <em>7</em> 分钟</span><span data-en="UCL <em>11</em> min">UCL <em>11</em> 分钟</span></div></div></li>
+              <li><svg class="icon"><use href="#i-bowl"/></svg><div><span data-en="Noodles <b>£13.10 to £16.10</b> · street food <b>£7.90 to £9.90</b>">面 <b>£13.10 至 £16.10</b> · 小吃 <b>£7.90 至 £9.90</b></span><br><span style="color:var(--muted);font-size:12px" data-en="Menu prices as of 9 Oct 2026">菜单价，见于 2026 年 10 月 9 日</span></div></li>
+              <li><svg class="icon"><use href="#i-doc"/></svg><div>020 7209 6888 · <a style="color:var(--red-ink);font-weight:650">master-wei.com ↗</a></div></li>
+            </ul>
+            <div class="dacts" data-pin="3">
+              <a class="btn red"><svg class="icon"><use href="#i-camera"/></svg><span data-en="Take the first photo">拍首拍</span></a>
+              <a class="btn ghost"><svg class="icon"><use href="#i-map"/></svg><span data-en="Directions">怎么去</span></a>
+              <a class="btn ghost"><svg class="icon"><use href="#i-share"/></svg><span data-en="Share">分享</span></a>
+            </div>
+            <div class="dminimap"><canvas data-london="place"></canvas><span class="dmapcap" data-en="Same stop: 9 more around Russell Square">同一站下车：附近还有 9 家</span></div>
+          </aside>
+        </div>
+
+        <div class="dplace-body">
+          <main>
+            <div class="press dpress" data-pin="4">
+              <div>
+                <div class="big" data-en="<b>16</b> sources wrote about it"><b>16</b>个来源写过它</div>
+                <div class="sub" data-en="18 quotes · from 2019 to 2026">18 段原话 · 从 2019 年写到 2026 年</div>
+                <div class="years"><i style="height:100%"></i><i style="height:6%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:75%"></i><i style="height:50%"></i><i style="height:25%"></i><i style="height:50%"></i></div>
+                <div class="years-x"><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span></div>
+              </div>
+              <div class="srcs">
+                <span class="src">The Infatuation <small data-en="critic">评论家</small></span>
+                <span class="src">The Guardian <small data-en="critic">评论家</small></span>
+                <span class="src">Time Out <small data-en="press">媒体</small></span>
+                <span class="src zh">第一财经 <small data-en="press">媒体</small></span>
+                <span class="src zh">Dealmoon 英国省钱快报 <small data-en="press">媒体</small></span>
+                <span class="src">Resy <small data-en="press">媒体</small></span>
+                <span class="src">The Nudge <small data-en="press">媒体</small></span>
+                <span class="src">Hot Dinners <small data-en="press">媒体</small></span>
+                <span class="src">London On The Inside <small data-en="press">媒体</small></span>
+                <span class="src">James Dimitri <small data-en="blog">博客</small></span>
+                <span class="src">London Travel Geek <small data-en="blog">博客</small></span>
+                <span class="src">The Picky Glutton <small data-en="blog">博客</small></span>
+                <span class="src">Cheese and Biscuits <small data-en="blog">博客</small></span>
+                <span class="src">GourmandGunno <small data-en="blog">博客</small></span>
+                <span class="src">Quiet Eating <small data-en="blog">博客</small></span>
+                <span class="src">Nyam with Ny <small data-en="blog">博客</small></span>
+              </div>
+            </div>
+
+            <h3 class="dh3"><span data-en="In their words">原话</span><span class="en" data-en="ORIGINAL LANGUAGE FIRST">原文优先 · 英文附译文</span></h3>
+            <div class="dqgrid">
+              <div class="qcard ink"><p data-en="But sitting down at Master Wei, knowing that you’ve made it back for another bowl of London’s best beef biang biang noodles is a feeling you’ll go out of your way to recreate.">但坐进魏师傅，知道自己又回来吃一碗伦敦最好的牛肉 biangbiang 面——这种感觉会让你不惜绕路一再重温。</p><cite data-en="The Infatuation · Heidi Lauth Beasley · 2024">译 · The Infatuation · Heidi Lauth Beasley · 2024</cite></div>
+              <div class="qcard yel"><p data-en="…it’ll be singing with fire, garlic and oil, against the intensely satisfying chewiness of the noodles.">白面烙饼上带着几处翻烙的焦黑……咬一口满嘴流油。</p><cite data-en="Time Out · Tania Ballantine · 2023">第一财经 · 杨猛 · 2025</cite></div>
+              <div class="qcard"><p data-en="On a scorching summer day, having a bowl of sweet-and-sour, refreshing liangpi with rich sesame sauce, followed by a roujiamo, is truly satisfying.">在炎炎夏日吃一碗酸甜可口带着香浓麻酱汁儿的凉皮，再来个肉夹馍真是非常满足。</p><cite data-en="Translated · Dealmoon · 2022">Dealmoon 英国省钱快报 · 2022</cite></div>
+              <div class="qcard"><p data-en="Lovely, chilli-slicked belts of oodles goodness served with buttery smooth pak choi, textured morsels of pork and tomato and egg…">裹着红亮辣椒油的美味宽面条，搭配爽滑的上海青、口感丰富的肉末碎、西红柿和鸡蛋，令人垂涎……</p><cite data-en="The Nudge · 2021">译 · The Nudge · 2021</cite></div>
+            </div>
+
+            <h3 class="dh3" data-pin="5"><span data-en="Menu">菜单</span><span class="en" data-en="67 DISHES · PRICED · 9 OCT 2026">67 道 · 带价格 · 2026.10.09</span></h3>
+            <div class="dmenu">
+              <nav>
+                <a><em style="font-style:normal" data-en="Cold dishes">凉菜</em><span>13</span></a>
+                <a><em style="font-style:normal" data-en="Appetisers &amp; soups">小吃与汤</em><span>11</span></a>
+                <a class="on"><em style="font-style:normal" data-en="Xi’an street food">西安小吃</em><span>12</span></a>
+                <a><em style="font-style:normal" data-en="Biang biang noodles">油泼面</em><span>6</span></a>
+                <a><em style="font-style:normal" data-en="Hand-pulled noodles">拉面</em><span>6</span></a>
+                <a><em style="font-style:normal" data-en="Stir-fries &amp; rice">炒菜与饭</em><span>10</span></a>
+                <a><em style="font-style:normal" data-en="Drinks">饮品</em><span>9</span></a>
+              </nav>
+              <div>
+                <div class="items">
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eyf8mc79d1z20mvkmhg8jd/thumb.webp" alt=""></span><div data-en="<b>Traditional Xi’an liang pi</b><span class='cnsub'>西安凉皮</span>"><b>西安凉皮</b><span>Traditional Xi’an Liang Pi</span></div><span class="pr">£9.90</span></div>
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eyf8mc79d1z20mvkmhg8jd/thumb.webp" alt=""></span><div data-en="<b>Liang pi in sesame sauce</b><span class='cnsub'>麻酱凉皮</span>"><b>麻酱凉皮</b><span>Xi’an Liang Pi in Sesame Sauce</span></div><span class="pr">£9.90</span></div>
+                  <div class="dish-row"><span class="noimg"><svg class="icon"><use href="#i-bowl"/></svg></span><div data-en="<b>Wontons in chicken broth</b><span class='cnsub'>鸡汤云吞</span>"><b>鸡汤云吞</b><span>Wontons in Chicken Broth</span></div><span class="pr">£9.40</span></div>
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ev51w0j7q7794r6pnym1he/thumb.webp" alt=""></span><div data-en="<b>Chicken &amp; mushroom pot-stickers</b><span class='cnsub'>鸡肉锅贴</span>"><b>鸡肉锅贴</b><span>Chicken and Mushroom Pot-stickers</span></div><span class="pr">£8.60</span></div>
+                  <div class="dish-row"><span class="noimg"><svg class="icon"><use href="#i-bowl"/></svg></span><div data-en="<b>Xi’an tiger skin crispy dumplings</b><span class='cnsub'>西安虎皮酥饺</span>"><b>西安虎皮酥饺</b><span>Xi’an Tiger Skin Crispy Dumplings</span></div><span class="pr">£8.60</span></div>
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhc0nd7qfz6e6ywpnfdr0/thumb.webp" alt=""></span><div data-en="<b>Wontons in special chilli oil</b><span class='cnsub'>红油云吞</span>"><b>红油云吞</b><span>Wontons in Special Chilli Oil Sauce</span></div><span class="pr">£8.40</span></div>
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/thumb.webp" alt=""></span><div data-en="<b>Xi’an pulled pork ‘burger’</b><span class='cnsub'>腊汁肉夹馍</span>"><b>腊汁肉夹馍</b><span>Traditional Xi’an Pulled Pork ‘Burger’</span></div><span class="pr">£7.90</span></div>
+                  <div class="dish-row"><span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/thumb.webp" alt=""></span><div data-en="<b>Spicy cumin beef ‘burger’</b><span class='cnsub'>孜然牛肉夹馍</span>"><b>孜然牛肉夹馍</b><span>Spicy Cumin Beef ‘Burger’</span></div><span class="pr">£7.90</span></div>
+                </div>
+                <div class="menu-src"><span data-en="Prices as of 9 Oct 2026 · 4 more in this section">价格见于 2026.10.09 · 本类还有 4 道</span><a data-en="Original PDF menu ↗">菜单原件 PDF ↗</a></div>
+              </div>
+            </div>
+          </main>
+          <aside data-pin="6">
+            <div>
+              <h3 class="dh3" data-en="Dishes in the quotes">原话里出现的菜</h3>
+              <div class="mentions">
+                <span class="mention"><span class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4etn4hf2t4ppb7mwhmytd0q/thumb.webp" alt=""></span><span data-en="Biang biang">油泼面</span><em>×8</em></span>
+                <span class="mention"><span class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/thumb.webp" alt=""></span><span data-en="Roujiamo">肉夹馍</span><em>×3</em></span>
+                <span class="mention"><span class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eyf8mc79d1z20mvkmhg8jd/thumb.webp" alt=""></span><span data-en="Liang pi">凉皮</span><em>×3</em></span>
+                <span class="mention"><span class="ai"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4gp48dmetased3eeqeaxg42/thumb.webp" alt=""></span><span data-en="Cumin lamb">孜然羊肉</span><em>×1</em></span>
+              </div>
+              <p class="mention-note" data-en="Counts mentions, not how good anything is.">只数被提到几次，不代表好不好吃。</p>
+            </div>
+            <div>
+              <h3 class="dh3" data-en="The record">这家店的档案</h3>
+              <ol class="timeline">
+                <li><span class="node ok"><svg class="icon"><use href="#i-check"/></svg></span><div class="what" data-en="Place details rechecked · <code>gemini-02</code><small>9 Oct, 21:23</small>">店铺信息复核通过 · <code>gemini-02</code><small>10 月 9 日 21:23</small></div></li>
+                <li><span class="node ok"><svg class="icon"><use href="#i-check"/></svg></span><div class="what" data-en="67 prices checked against the PDF · <code>gemini-02</code><small>9 Oct, 01:36</small>">67 道菜价对照菜单 PDF 核实 · <code>gemini-02</code><small>10 月 9 日 01:36</small></div></li>
+                <li><span class="node"><svg class="icon"><use href="#i-doc"/></svg></span><div class="what" data-en="Menu submitted · <code>wok-scout-london</code><small>9 Oct, 01:32 · checked 4 minutes later</small>">提交菜单 · <code>wok-scout-london</code><small>10 月 9 日 01:32 · 4 分钟后被核实</small></div></li>
+                <li><span class="node"><svg class="icon"><use href="#i-pin"/></svg></span><div class="what" data-en="<b>Added</b> · the site team’s first batch<small>8 Oct</small>"><b>收录</b> · 站务组首批<small>10 月 8 日</small></div></li>
+              </ol>
+            </div>
+            <div>
+              <h3 class="dh3" data-en="Same stop">同一站下车</h3>
+              <ul class="near">
+                <li><i style="--c:var(--l-north)"></i><b>Urumchi<small data-en="Uyghur">新疆菜</small></b><span data-en="same street">同一条街</span></li>
+                <li><i style="--c:var(--l-spicy)"></i><b>Master Cao Malatang<small>曹师傅麻辣烫</small></b><span>90 m</span></li>
+                <li><i style="--c:var(--l-spicy)"></i><b>Chuan Young<small>川扬楼</small></b><span>180 m</span></li>
+                <li><i style="--c:var(--l-dimsum)"></i><b>Bao Spot<small>包记</small></b><span>320 m</span></li>
+                <li><i style="--c:var(--l-boba)"></i><b>Truedan<small>珍煮丹</small></b><span>330 m</span></li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+    <ol class="notes dnotes">
+      <li><span class="pinno">1</span><div><b>拼图头</b>：一大两小加一个首拍空位，全部是这家店招牌菜的 AI 示意图，都有标签。<span class="tag rule">铁律 18</span></div></li>
+      <li><span class="pinno">2</span><div><b>右侧一屏看完</b>：店名、线路、地址、步行时间、价格区间、电话网站。<span class="tag new">车站与学校坐标表</span></div></li>
+      <li><span class="pinno">3</span><div><b>操作和周边小地图</b>：小地图标出店、地铁站、学校和同一站的几家店（底图为示意）。</div></li>
+      <li><span class="pinno">4</span><div><b>来源横条</b>：宽屏上 16 个来源可以全部列出，分评论家、媒体、博客。不参与排序。<span class="tag real">真实数据</span><span class="tag rule">铁律 17</span></div></li>
+      <li><span class="pinno">5</span><div><b>菜单</b>：左侧分类导航随滚动固定，右侧两栏。没有标准菜名的菜（虎皮酥饺）不配示意图，留空。<span class="tag real">真实数据</span><span class="tag rule">铁律 24</span></div></li>
+      <li><span class="pinno">6</span><div><b>侧栏随滚动固定</b>：原话里的菜、档案时间线、同一站下车。英文模式下菜名英文在前、中文在后。</div></li>
+    </ol>
+  </section>
+
+  <!-- ═════════ D3 DISH ═════════ -->
+  <section class="board">
+    <div class="board-head"><span class="num">D3</span><h2>菜品页 · Dish</h2><p>"伦敦哪里有、多少钱"：左边是价格表，右边是地图。</p></div>
+    <div class="frame-wrap">
+      <div class="browser">
+        <div class="chrome"><span class="tl"><i></i><i></i><i></i></span><span class="url" data-en="app.manyfold.ai/london-chinese-food/en/dish/小笼包">app.manyfold.ai/london-chinese-food/zh/dish/小笼包</span></div>
+        <div class="dnav">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="wordmark"><b data-en="London Chinese Food">伦敦干饭地图</b><small data-en="THE EATING MAP · 伦敦干饭地图">LONDON CHINESE FOOD MAP</small></span></a>
+          <nav><a data-en="Home">首页</a><a data-en="Map">地图</a><a class="on" data-en="Dishes">菜品</a><a data-en="Guides">攻略</a><a data-en="Light up London">点亮伦敦</a><a data-en="Contribute">参与</a></nav>
+          <div class="r"><label class="search" style="height:40px;width:300px;box-shadow:none;border-width:1.5px;border-radius:12px"><svg class="icon"><use href="#i-search"/></svg><span data-en="Search">搜店、搜菜</span></label><button class="lang" data-toggle-lang data-en="中">EN</button></div>
+        </div>
+        <div class="dcrumb" data-en="Dishes / Dim Sum Line / <b>Xiaolongbao</b>">菜品 / 点心线 / <b>小笼包</b></div>
+        <div class="ddish-top">
+          <div class="ddish-img ai" data-pin="1"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eh2kvy1db8njjx7q5r455e/full.webp" alt=""></div>
+          <div>
+            <h1 data-en="Xiaolongbao">小笼包</h1>
+            <div class="sub"><span data-en="<span class='cn'>小笼包</span> · soup dumplings">Xiaolongbao · 汤包</span><span class="linebadge" style="--c:var(--l-dimsum)" data-en="Dim Sum Line">点心线</span><span class="linebadge" style="--c:var(--l-north)" data-en="North Line">北方线</span></div>
+            <p class="lede" data-en="On the menu at <b>79</b> places in London. Cheapest <b>£4.80</b>, priciest <b>£16.00</b>; half of them charge <b>£6.80</b> or less.">全伦敦 <b>79</b> 家店的菜单上有它。最便宜 <b>£4.80</b>，最贵 <b>£16.00</b>，一半的店不超过 <b>£6.80</b>。</p>
+            <div class="staff en-only" data-pin="2"><span class="big">小笼包</span><div><div class="lbl">SHOW THE STAFF</div><div class="py">xiǎo lóng bāo</div><small>Point at this when you order.</small></div></div>
+            <div class="plotbox" data-pin="3"><svg class="plot" data-plot viewBox="0 0 540 100"></svg><div class="cap"><span data-en="Each dot = one place’s menu price">每个点 = 一家店的菜单价</span><span data-en="52 places list a price">52 家标了价格</span></div></div>
+            <div class="fact-sticker"><span class="x">×3.3</span><span data-en="Same basket: <span class='num'>£4.80</span> in Chinatown, <span class='num'>£16.00</span> at London Bridge">同一笼小笼包，唐人街 <span class="num">£4.80</span>，伦敦桥 <span class="num">£16.00</span></span><small data-en="Portions differ; check the menu">份量不一样，以菜单为准</small></div>
+          </div>
+        </div>
+        <div class="ddish-body">
+          <main data-pin="4">
+            <div class="seg"><span class="on" data-en="Cheapest">最便宜</span><span data-en="Nearest">离我近</span><span data-en="By area">按区域</span></div>
+            <table class="dtable">
+              <thead><tr><th data-en="PRICE">价格</th><th data-en="PLACE">店</th><th data-en="AREA">区域</th><th data-en="TYPE">类型</th><th data-en="FROM">来自</th></tr></thead>
+              <tbody>
+                <tr><td class="p low">£4.80</td><td><b>A Bowl of Noodles</b></td><td class="m" data-en="Chinatown · WC2H">唐人街 · WC2H</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu · 5 pieces">菜单 · 5 个</td></tr>
+                <tr><td class="p low">£5.00</td><td><b>Golden Chopsticks</b></td><td class="m">Eltham · SE9</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£5.50</td><td><b>Pearl Liang</b></td><td class="m">Bayswater · W2</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£5.59</td><td><b>Yum Yum Chinese Restaurant</b></td><td class="m">Fulham · SW6</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£5.70</td><td><b>Taste Of China</b></td><td class="m">Catford · SE6</td><td><span class="tagx" data-en="Takeaway">外卖</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£5.80</td><td><b>Golden Phoenix</b><span class="cnn">金凤凰大酒楼</span></td><td class="m" data-en="Chinatown · W1D">唐人街 · W1D</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.00</td><td><b>A.Wong</b></td><td class="m">Pimlico · SW1V</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.00</td><td><b>Sun Ya</b></td><td class="m">Blackheath · SE3</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.20</td><td><b>Golden Dragon</b><span class="cnn">金龍軒</span></td><td class="m">Colindale · NW9</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.20</td><td><b>Panda Canteen</b></td><td class="m">Lewisham · SE13</td><td><span class="tagx" data-en="Takeaway">外卖</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.25</td><td><b>HK Noodles</b></td><td class="m">Enfield · EN2</td><td><span class="tagx" data-en="Takeaway">外卖</span></td><td class="m" data-en="Menu">菜单</td></tr>
+                <tr><td class="p">£6.30</td><td><b>Go Sing</b></td><td class="m">West Drayton · UB7</td><td><span class="tagx" data-en="Restaurant">餐厅</span></td><td class="m" data-en="Menu">菜单</td></tr>
+              </tbody>
+            </table>
+            <a class="btn ghost dmore" data-en="67 more">再看 67 家</a>
+          </main>
+          <aside>
+            <div class="dmapbox" data-pin="5"><canvas data-london="dish"></canvas><span class="dmapcap" data-en="79 places · green dots serve it">79 家 · 绿点是有小笼包的店</span></div>
+            <div>
+              <h3 class="dh3" data-en="Who wrote about it">写过它的人</h3>
+              <div class="qcard yel" style="width:auto;min-height:0"><p data-en="One of Chinatown’s busiest and most reliable dim sum spots. Famous for xiao long bao (soup dumplings), Shanghainese snacks and large-group dining.">这家“小笼包的天堂”在中国城里也算是非常有名的中餐厅了，普通的小笼包如果不能满足你作为吃货的心，那么麻辣小龙虾馅儿的小笼包呢？</p><cite data-en="James Dimitri · Dumplings’ Legend">红领巾 Red Scarf · Dumplings’ Legend</cite></div>
+            </div>
+            <div>
+              <h3 class="dh3" data-en="People also look for">吃了这个的人也找</h3>
+              <div class="rel-grid">
+                <div class="rel"><div class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4fmas762w2zp3gq3ekxrjdb/thumb.webp" alt=""></div><b data-en="Shengjianbao">生煎包</b><span data-en="13 · from £5.80">13 家 · £5.80 起</span></div>
+                <div class="rel"><div class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ev51w0j7q7794r6pnym1he/thumb.webp" alt=""></div><b data-en="Potstickers">锅贴</b><span data-en="96 · from £4.99">96 家 · £4.99 起</span></div>
+                <div class="rel"><div class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eh2ftf704j124t4t5na0fd/thumb.webp" alt=""></div><b data-en="Har gow">虾饺</b><span data-en="127 · from £3.80">127 家 · £3.80 起</span></div>
+                <div class="rel"><div class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eh2h3zhfgh3cnr0npmt8fg/thumb.webp" alt=""></div><b data-en="Siu mai">烧卖</b><span data-en="107 · from £3.80">107 家 · £3.80 起</span></div>
+              </div>
+            </div>
+            <div class="callout" data-pin="6"><div><b data-en="79 places, 0 real photos">79 家，0 张实拍</b><span data-en="Your basket could be the first.">你吃的那一笼，可以是第一张。</span></div><a class="btn amber"><svg class="icon"><use href="#i-camera"/></svg><span data-en="Snap">拍</span></a></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+    <ol class="notes dnotes">
+      <li><span class="pinno">1</span><div><b>大图加结论并排</b>：宽屏上头图和"79 家、£4.80 起"同时进入视线。<span class="tag rule">铁律 18</span></div></li>
+      <li><span class="pinno">2</span><div><b>Show the staff</b>（切到 English 可见）：大字中文菜名加拼音，给不会中文的读者点菜用。<span class="tag new">标准菜名表加拼音</span></div></li>
+      <li><span class="pinno">3</span><div><b>价格点图加宽</b>：52 个真实菜单价，分布一眼可见。<span class="tag real">真实数据</span></div></li>
+      <li><span class="pinno">4</span><div><b>价格表</b>：按价格排，可切换距离、区域；列里没有"评分"，"来自"一栏说明价格出自菜单。<span class="tag rule">铁律 17</span></div></li>
+      <li><span class="pinno">5</span><div><b>地图</b>：79 家有这道菜的店（绿点，真实坐标），标出最便宜和最贵。<span class="tag real">真实数据</span></div></li>
+      <li><span class="pinno">6</span><div><b>原话和实拍征集在侧栏</b>：中文模式引用红领巾，英文模式引用 James Dimitri 的英文原文。</div></li>
+    </ol>
+  </section>
+
+  <!-- ═════════ D4 GUIDE ═════════ -->
+  <section class="board">
+    <div class="board-head"><span class="num">D4</span><h2>专题页 · Guide</h2><p>封面横幅加一条"今天的路线"；左边按站点读，右边地图同步。</p></div>
+    <div class="frame-wrap">
+      <div class="browser">
+        <div class="chrome"><span class="tl"><i></i><i></i><i></i></span><span class="url" data-en="app.manyfold.ai/london-chinese-food/en/guide/full-for-a-tenner/ucl">app.manyfold.ai/london-chinese-food/zh/guide/full-for-a-tenner/ucl</span></div>
+        <div class="dnav" style="background:var(--l-noodle);border-bottom-color:oklch(78% 0.15 89)">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="wordmark"><b data-en="London Chinese Food">伦敦干饭地图</b><small data-en="THE EATING MAP · 伦敦干饭地图">LONDON CHINESE FOOD MAP</small></span></a>
+          <nav style="color:var(--ink)"><a data-en="Home">首页</a><a data-en="Map">地图</a><a data-en="Dishes">菜品</a><a class="on" data-en="Guides">攻略</a><a data-en="Light up London">点亮伦敦</a><a data-en="Contribute">参与</a></nav>
+          <div class="r"><button class="lang" data-toggle-lang data-en="中" style="border-color:var(--ink)">EN</button></div>
+        </div>
+        <div class="cover dcover" data-pin="1">
+          <div>
+            <div class="issue"><span data-en="BACK TO UNI">开学季特辑</span><span data-en="NO. 01 · AUTUMN 2026">NO. 01 · 2026 秋</span></div>
+            <h1 data-en="Full for<br>a tenner">伦敦 <span class="num">£10</span><br>吃饱指南</h1>
+            <p class="dek" data-en="Within a 20-minute walk of campus. For each stop, what £10 gets you. Every price comes from the menu itself.">从学校门口出发，步行 20 分钟以内，每家告诉你 £10 能吃到什么。价格全部来自菜单原件。</p>
+            <div class="schools" data-pin="2"><span class="on">UCL</span><span>LSE</span><span>KCL</span><span>SOAS</span><span>Imperial</span><span>QMUL</span><span>UAL</span><span>City</span><span>Goldsmiths</span></div>
+          </div>
+          <div class="route">
+            <div class="cap" data-en="Today’s route: UCL → Euston → Russell Sq → Chinatown">今天的路线：UCL → Euston → Russell Sq → 唐人街</div>
+            <svg class="tube" data-strip viewBox="0 0 520 52"></svg>
+            <div class="rstats">
+              <div><b>5</b><span data-en="stops">站</span></div>
+              <div><b>19<small style="font-size:14px" data-en=" min"> 分钟</small></b><span data-en="to the last stop">走到最后一站</span></div>
+              <div><b>£2.10</b><span data-en="cheapest bite">最便宜的一口</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="dguide-body">
+          <main data-pin="3">
+            <div class="stop"><span class="no">1</span><div class="bd">
+              <div class="hd"><div><h3>Murger Han<small>西安韩记</small></h3><div class="where"><svg class="icon"><use href="#i-walk"/></svg><span data-en="Euston · 7 min walk">Euston · 步行 7 分钟</span></div>
+                <div class="eat"><span data-en="Pulled pork roujiamo <b>£6.95</b>">腊汁肉夹馍 <b>£6.95</b></span></div>
+                <blockquote data-en="“Murger Han first opened in Euston, which is perfect for enjoying a delicious meal while waiting for a train.”<cite>Translated · Dealmoon</cite>">“韩记最早开在Euston，正适合等火车时美餐一顿。”<cite>Dealmoon</cite></blockquote></div>
+                <span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhb2mzc9tn92wep1fpcsm/thumb.webp" alt=""></span></div>
+            </div></div>
+            <div class="stop"><span class="no">2</span><div class="bd">
+              <div class="hd"><div><h3>Master Wei<small>西安小吃</small></h3><div class="where"><svg class="icon"><use href="#i-walk"/></svg><span data-en="Russell Sq · 11 min walk">Russell Sq · 步行 11 分钟</span></div>
+                <div class="eat"><span data-en="Roujiamo <b>£7.90</b>">腊汁肉夹馍 <b>£7.90</b></span><span data-en="Dipping dumplings <b>£8.60</b>">沾汁水饺 <b>£8.60</b></span></div>
+                <blockquote data-en="“…followed by a roujiamo, is truly satisfying.”<cite>Translated · Dealmoon</cite>">“……再来个肉夹馍真是非常满足。”<cite>Dealmoon</cite></blockquote></div>
+                <span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4fm3kqf32che3qcdeesphrs/thumb.webp" alt=""></span></div>
+            </div></div>
+            <div class="stop"><span class="no">3</span><div class="bd">
+              <div class="hd"><div><h3>Q Beef Noodles</h3><div class="where"><svg class="icon"><use href="#i-walk"/></svg><span data-en="Chinatown · 17 min walk">唐人街 · 步行 17 分钟</span></div>
+                <div class="eat"><span data-en="Chilli oil wontons <b>£9.50</b>">红油抄手 <b>£9.50</b></span><span data-en="Mango sago <b>£4.90</b>">杨枝甘露 <b>£4.90</b></span></div>
+                <blockquote data-en="“…greatly raising our happiness living in London.”<cite>Translated · YYY TV</cite>">“……大大提升了在伦敦生活的幸福程度。”<cite>YYY TV</cite></blockquote></div>
+                <span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4ekhc0nd7qfz6e6ywpnfdr0/thumb.webp" alt=""></span></div>
+            </div></div>
+            <div class="stop"><span class="no">4</span><div class="bd">
+              <div class="hd"><div><h3>A Bowl of Noodles</h3><div class="where"><svg class="icon"><use href="#i-walk"/></svg><span data-en="Chinatown · 18 min walk">唐人街 · 步行 18 分钟</span></div>
+                <div class="eat"><span data-en="Xiaolongbao ×5 <b>£4.80</b>">小笼包 5 个 <b>£4.80</b></span><span data-en="Shengjianbao ×5 <b>£7.00</b>">生煎包 5 个 <b>£7.00</b></span></div></div>
+                <span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4eh2kvy1db8njjx7q5r455e/thumb.webp" alt=""></span></div>
+            </div></div>
+            <div class="stop"><span class="no">5</span><div class="bd">
+              <div class="hd"><div><h3>Chinatown Bakery</h3><div class="where"><svg class="icon"><use href="#i-walk"/></svg><span data-en="Chinatown · 19 min walk">唐人街 · 步行 19 分钟</span></div>
+                <div class="eat"><span data-en="Char siu bao <b>£2.50</b>">叉烧包 <b>£2.50</b></span><span data-en="Egg tart <b>£2.10</b>">蛋挞 <b>£2.10</b></span></div>
+                <blockquote data-en="“The classic Chinese bakery experience: pineapple buns, egg tarts, Swiss rolls and savoury pastries.”<cite>James Dimitri</cite>">“经典的传统中式糕点体验：菠萝包、蛋挞、瑞士卷和咸口酥皮点心。”<cite>译 · James Dimitri</cite></blockquote></div>
+                <span class="ai sm"><img src="https://app.manyfold.ai/london-chinese-food/media/i/rec_01m4gkty6rajrjakmqz855jhj0/thumb.webp" alt=""></span></div>
+            </div></div>
+          </main>
+          <aside>
+            <div class="dmapbox droutemap" data-pin="4"><canvas data-london="route"></canvas><span class="dmapcap" data-en="Walking route · schematic base map">步行路线 · 底图为示意</span></div>
+            <div class="guide-foot" data-pin="5"><span data-en="In walking order, <b>not a ranking</b>. Edited by the site team · prices from menus seen in October 2026; check in store.">按步行顺序排列，<b>不是名次</b>。编辑：站务组 · 价格见于 2026 年 10 月的菜单原件，以店内为准。</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><a class="btn red"><svg class="icon"><use href="#i-share"/></svg><span data-en="Save as image">生成长图</span></a><a class="btn ghost" data-en="Another uni">换个学校</a></div></div>
+          </aside>
+        </div>
+        <footer class="dfoot" style="margin-top:0"><span data-en="<b>No scores, just quotes.</b> Places and menus CC BY 4.0; quotes belong to their authors."><b>不打分，只摘原话。</b>店铺与菜单 CC BY 4.0，原话版权归作者。</span><span data-en="About · Contribute · Privacy · GitHub">关于 · 参与贡献 · 隐私 · GitHub</span></footer>
+      </div>
+    </div>
+    <ol class="notes dnotes">
+      <li><span class="pinno">1</span><div><b>封面横幅</b>：整版铺这期的线路色，导航也跟着变色。英文标题 "Full for a tenner" 是重写，不是翻译。</div></li>
+      <li><span class="pinno">2</span><div><b>九所学校一字排开</b>：同一期专题按学校切换，URL 带学校（/guide/full-for-a-tenner/ucl）。<span class="tag new">专题配置</span></div></li>
+      <li><span class="pinno">3</span><div><b>站点列表</b>：按步行顺序，每站回答"£10 能吃到什么"，价格来自 UCL 周边店铺的真实菜单。<span class="tag real">真实数据</span><span class="tag rule">铁律 17</span></div></li>
+      <li><span class="pinno">4</span><div><b>路线地图</b>：五站的真实坐标连成线，随滚动固定。街道是手画的示意底图，正式版接地图服务。<span class="tag new">底图</span></div></li>
+      <li><span class="pinno">5</span><div><b>说明和分享</b>：写明"不是名次"、价格日期；生成长图用于朋友圈和小红书。</div></li>
+    </ol>
+  </section>
+
+  <p class="footnote">数据说明：店数、价格、原话（逐字照录，省略处用省略号）、采集员名字、店铺档案与坐标来自 2026 年 10 月 14 日线上公开接口。"36 人在逛"、"今天已核实 48 条"、采集员件数为示意。地图底图中的街道和公园为手画示意。</p>
+</div>

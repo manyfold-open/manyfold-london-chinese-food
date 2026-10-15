@@ -58,6 +58,89 @@ export const CUISINE_LABELS: Labels = {
 };
 export const CUISINES = valuesOf(CUISINE_LABELS);
 
+/**
+ * The site's "lines": the cuisines in eight families, drawn like London's Underground and all
+ * meeting at Chinatown. Every cuisine is on exactly one line; a category with no cuisine of its own
+ * puts a place on a line too (a bubble tea shop on the Bubble Tea line). `ends` name the two areas
+ * the line runs out to on the diagram, and `color` is its token in src/app/styles.css. Readers
+ * browse by line; nothing is ranked by it.
+ */
+export interface Line {
+  id: string;
+  label: Bilingual;
+  color: string;
+  cuisines: readonly string[];
+  categories: readonly string[];
+  ends: readonly [Bilingual, Bilingual];
+}
+
+export const LINES: readonly Line[] = [
+  {
+    id: 'dimsum',
+    label: { en: 'Dim Sum Line', zh: '点心线' },
+    color: '--line-dimsum',
+    cuisines: ['cantonese', 'dim-sum', 'roast-meats', 'hong-kong-cafe', 'chaoshan', 'hakka', 'fujian', 'shanghai', 'jiangzhe'],
+    categories: [],
+    ends: [{ en: 'Bayswater', zh: '贝斯沃特' }, { en: 'Croydon', zh: '克罗伊登' }],
+  },
+  {
+    id: 'takeaway',
+    label: { en: 'Takeaway Line', zh: '外卖线' },
+    color: '--line-takeaway',
+    cuisines: ['british-chinese'],
+    categories: ['takeaway'],
+    ends: [{ en: 'Enfield', zh: '恩菲尔德' }, { en: 'Eltham', zh: '埃尔瑟姆' }],
+  },
+  {
+    id: 'noodle',
+    label: { en: 'Noodle Line', zh: '粉面线' },
+    color: '--line-noodle',
+    cuisines: ['noodles', 'street-food'],
+    categories: [],
+    ends: [{ en: 'Whitechapel', zh: '白教堂' }, { en: 'Bayswater', zh: '贝斯沃特' }],
+  },
+  {
+    id: 'boba',
+    label: { en: 'Bubble Tea Line', zh: '奶茶线' },
+    color: '--line-boba',
+    cuisines: ['bubble-tea', 'tea', 'desserts', 'bakery'],
+    categories: ['tea-drinks', 'bakery-dessert'],
+    ends: [{ en: 'Soho', zh: '苏豪' }, { en: 'Canary Wharf', zh: '金丝雀码头' }],
+  },
+  {
+    id: 'north',
+    label: { en: 'North Line', zh: '北方线' },
+    color: '--line-north',
+    cuisines: ['dongbei', 'beijing', 'shandong', 'shaanxi', 'lanzhou', 'xinjiang', 'dumplings'],
+    categories: [],
+    ends: [{ en: 'Islington', zh: '伊斯灵顿' }, { en: 'Whitechapel', zh: '白教堂' }],
+  },
+  {
+    id: 'spicy',
+    label: { en: 'Spicy Line', zh: '麻辣线' },
+    color: '--line-spicy',
+    cuisines: ['sichuan', 'chongqing', 'hunan', 'guizhou', 'yunnan', 'hotpot', 'malatang', 'bbq'],
+    categories: [],
+    ends: [{ en: 'London Bridge', zh: '伦敦桥' }, { en: 'Islington', zh: '伊斯灵顿' }],
+  },
+  {
+    id: 'modern',
+    label: { en: 'New Wave Line', zh: '新派线' },
+    color: '--line-modern',
+    cuisines: ['taiwanese', 'malaysian-chinese', 'modern-chinese', 'vegetarian'],
+    categories: [],
+    ends: [{ en: 'Tooting', zh: '图廷' }, { en: 'Bayswater', zh: '贝斯沃特' }],
+  },
+  {
+    id: 'grocery',
+    label: { en: 'Grocery Line', zh: '中超线' },
+    color: '--line-grocery',
+    cuisines: ['groceries'],
+    categories: ['grocery'],
+    ends: [{ en: 'Holloway', zh: '霍洛威' }, { en: 'Canary Wharf', zh: '金丝雀码头' }],
+  },
+];
+
 export const STATUS_LABELS: Labels = {
   open: { en: 'Open', zh: '营业中' },
   'temporarily-closed': { en: 'Temporarily closed', zh: '暂停营业' },

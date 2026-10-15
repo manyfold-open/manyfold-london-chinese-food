@@ -8,6 +8,8 @@
  *   dataset 'dishes'  the dish catalog readers search, loaded only when they search
  *   dataset 'illustrations'  which dishes have an approved illustration
  *   source_entries    every public excerpt by source and author, for their pages
+ *   dataset 'activity'  the newest checks of public records, for the front page's arrivals board
+ *   dataset 'crew'      the agents at work this week, with what each has done
  *
  * The cron finds what changed through records.updated_at (one range read), marks the places it
  * touches dirty — a brand's change marks every branch — and rebuilds a bounded number each run.
@@ -15,6 +17,7 @@
  * drift. A reader's request reads one row or a dataset's few parts.
  */
 
+import { ACTIVITY_KEEP, activityEvent, londonDay, type Activity, type ActivityEvent, type ActivityRow, type CrewMember } from '../shared/activity';
 import { buildPlace, type DocHistoryEntry, type DocRecord, type IndexEntry } from '../shared/place-doc';
 import type { RecordData } from '../shared/kinds';
 import type { RecordStatus } from '../shared/types';
@@ -320,6 +323,159 @@ async function recountDishes(db: D1Database, now: Date): Promise<void> {
     )
     .bind(now.toISOString())
     .run();
+}
+
+/* ───────── the arrivals board and the crew ───────── */
+
+/** How many revisions one run reads for the board: a busy hour is caught up over a few runs. */
+const ACTIVITY_READ = 500;
+/** Where a first build starts: the board opens with the last few hundred changes, not with none. */
+const ACTIVITY_START = 400;
+const NOT_AGENTS = ['admin', 'system', 'visitor'];
+
+interface ActivityState {
+  day: string;
+  /** Who sent or checked a record that day; kept out of the public dataset. */
+  actors: string[];
+}
+
+/**
+ * The arrivals board, carried forward from revisions it has not read: each check of a record that
+ * is public now becomes an event, newest first, and the day's counts move. The events already on
+ * the board are looked at again, so one whose record stopped being public (rejected, withdrawn, its
+ * place gone) leaves it. Revision ids only grow, so the newest one read is the watermark.
+ */
+export async function refreshActivity(db: D1Database, now: Date): Promise<number | null> {
+  const [head, latest] = await db.batch([
+    db.prepare(`SELECT watermark FROM dataset_heads WHERE name = 'activity'`),
+    db.prepare('SELECT MAX(id) AS id FROM revisions'),
+  ]);
+  const stored = (head?.results[0] as { watermark: string | null } | undefined)?.watermark;
+  const newest = Number((latest?.results[0] as { id: number | null } | undefined)?.id ?? 0);
+  const watermark = stored == null ? Math.max(0, newest - ACTIVITY_START) : Number(stored);
+  if (stored != null && newest <= watermark) return null;
+
+  const { results: revisions } = await db
+    .prepare(
+      `SELECT v.id, v.record_id, v.kind, v.actor, v.action, v.created_at, r.status, r.root_id, r.parent_id, r.data_json, r.evidence
+       FROM revisions v JOIN records r ON r.id = v.record_id
+       WHERE v.id > ?1 AND v.id <= ?2 AND v.action IN ('submit', 'verify') ORDER BY v.id LIMIT ?3`,
+    )
+    .bind(watermark, newest, ACTIVITY_READ)
+    .all<{ id: number; record_id: string; kind: string; actor: string; action: string; created_at: string; status: string; root_id: string | null; parent_id: string | null; data_json: string; evidence: string }>();
+  const readTo = revisions.length === ACTIVITY_READ ? revisions[revisions.length - 1]!.id : newest;
+
+  const [previousJson, stateJson] = await Promise.all([datasetJson(db, 'activity'), datasetJson(db, 'activity-state')]);
+  const previous = previousJson ? (JSON.parse(previousJson) as Activity) : null;
+  const today = londonDay(now.toISOString());
+  const state: ActivityState = stateJson ? (JSON.parse(stateJson) as ActivityState) : { day: today, actors: [] };
+  let checked = previous && previous.day === today ? previous.checked : 0;
+  const actors = new Set(state.day === today ? state.actors : []);
+
+  const rows: (ActivityRow & { actor: string })[] = revisions.map((v) => ({
+    revision: v.id,
+    record_id: v.record_id,
+    kind: v.kind,
+    action: v.action,
+    created_at: v.created_at,
+    status: v.status,
+    place_id: v.kind === 'place' ? v.record_id : (v.root_id ?? v.parent_id),
+    data: JSON.parse(v.data_json) as Record<string, unknown>,
+    evidence: v.evidence,
+    actor: v.actor,
+  }));
+  for (const row of rows) {
+    if (londonDay(row.created_at) !== today) continue;
+    if (row.action === 'verify') checked += 1;
+    if (!NOT_AGENTS.includes(row.actor)) actors.add(row.actor);
+  }
+
+  // Everything the new events and the old ones need, by id: their records now, their places, who checked.
+  const kept = previous?.events ?? [];
+  const recordIds = [...new Set(kept.map((event) => event.id))];
+  const placeIds = [...new Set([...rows.map((row) => row.place_id), ...kept.map((event) => event.place?.id ?? null)].filter((id): id is string => id !== null))];
+  const actorIds = [...new Set(rows.map((row) => row.actor))];
+  const [statuses, entries, labels] = await db.batch([
+    db.prepare('SELECT id, status FROM records WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(recordIds)),
+    db.prepare('SELECT place_id, entry_json FROM place_docs WHERE place_id IN (SELECT value FROM json_each(?)) AND entry_json IS NOT NULL').bind(JSON.stringify(placeIds)),
+    db.prepare('SELECT id, label FROM tokens WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(actorIds)),
+  ]);
+  const statusOf = new Map(((statuses?.results ?? []) as { id: string; status: string }[]).map((row) => [row.id, row.status]));
+  const entryOf = new Map(((entries?.results ?? []) as { place_id: string; entry_json: string }[]).map((row) => [row.place_id, JSON.parse(row.entry_json) as IndexEntry]));
+  const labelOf = new Map(((labels?.results ?? []) as { id: string; label: string }[]).map((row) => [row.id, row.label]));
+
+  const fresh: ActivityEvent[] = [];
+  for (const row of rows) {
+    const event = activityEvent(row, row.place_id ? (entryOf.get(row.place_id) ?? null) : null, actorLabel(row.actor, labelOf.get(row.actor)));
+    if (event) fresh.push(event);
+  }
+  const stillPublic = kept.filter((event) => ['verified', 'stale'].includes(statusOf.get(event.id) ?? '') && (event.place === null || entryOf.has(event.place.id)));
+  const events = [...fresh.reverse(), ...stillPublic].slice(0, ACTIVITY_KEEP);
+  const at = now.toISOString();
+  const activity: Activity = { events, day: today, checked, agents: actors.size, built_at: at };
+  const nextState: ActivityState = { day: today, actors: [...actors] };
+  await db.batch([
+    ...storeDataset(db, 'activity', JSON.stringify(activity), events.length, at, true),
+    ...storeDataset(db, 'activity-state', JSON.stringify(nextState), actors.size, at, true),
+    db.prepare(`UPDATE dataset_heads SET watermark = ? WHERE name = 'activity'`).bind(String(readTo)),
+  ]);
+  return events.length;
+}
+
+/**
+ * The front page's datasets, after the pages they point at are built: the board every run, from
+ * what changed; the crew once a day with the whole rebuild (its weekly counts are a day fresh), or
+ * when it was never built.
+ */
+export async function refreshFront(db: D1Database, now: Date, options: { whole?: boolean } = {}): Promise<{ activity: number | null; crew: number | null }> {
+  const activity = await refreshActivity(db, now);
+  const built = options.whole ? null : await db.prepare(`SELECT built_at FROM dataset_heads WHERE name = 'crew'`).first<{ built_at: string }>();
+  const crew = options.whole || !built ? await buildCrew(db, now) : null;
+  return { activity, crew };
+}
+
+/** How long an agent counts as on the crew after it last worked. */
+const CREW_DAYS = 7;
+
+/**
+ * The crew: every agent that worked in the last week, with what it has done. A collector counts its
+ * records that passed (its standing, src/worker/tokens.ts); a maintainer its checks this week, read
+ * along revisions_actor_time. Newest at work first, never an order of merit.
+ */
+export async function buildCrew(db: D1Database, now: Date): Promise<number> {
+  const since = new Date(now.getTime() - CREW_DAYS * 86_400_000).toISOString();
+  const { results: tokens } = await db
+    .prepare(`SELECT id, role, label, last_used_at FROM tokens WHERE status = 'active' AND last_used_at >= ? ORDER BY last_used_at DESC LIMIT 40`)
+    .bind(since)
+    .all<{ id: string; role: string; label: string; last_used_at: string | null }>();
+  const collectors = tokens.filter((token) => token.role === 'collector');
+  const maintainers = tokens.filter((token) => token.role === 'maintainer');
+  const [standings, ...checks] = await db.batch([
+    db.prepare('SELECT token_id, kind, verified FROM standings WHERE token_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(collectors.map((token) => token.id))),
+    ...maintainers.map((token) =>
+      db.prepare(`SELECT kind, COUNT(*) AS n FROM revisions INDEXED BY revisions_actor_time WHERE actor = ? AND created_at >= ? AND action = 'verify' GROUP BY kind`).bind(token.id, since),
+    ),
+  ]);
+  const byToken = new Map<string, { kind: string; n: number }[]>();
+  for (const row of (standings?.results ?? []) as { token_id: string; kind: string; verified: number }[]) {
+    byToken.set(row.token_id, [...(byToken.get(row.token_id) ?? []), { kind: row.kind, n: row.verified }]);
+  }
+  maintainers.forEach((token, i) => byToken.set(token.id, ((checks[i]?.results ?? []) as { kind: string; n: number }[]).map((row) => ({ kind: row.kind, n: row.n }))));
+  const crew: CrewMember[] = tokens
+    .map((token) => {
+      const counts = byToken.get(token.id) ?? [];
+      const top = [...counts].sort((a, b) => b.n - a.n)[0];
+      return {
+        label: token.label,
+        role: token.role === 'maintainer' ? ('maintainer' as const) : ('collector' as const),
+        count: counts.reduce((sum, row) => sum + row.n, 0),
+        kind: top && top.n > 0 ? top.kind : null,
+        last_at: token.last_used_at,
+      };
+    })
+    .filter((member) => member.count > 0);
+  await db.batch(storeDataset(db, 'crew', JSON.stringify(crew), crew.length, now.toISOString(), true));
+  return crew.length;
 }
 
 export interface RefreshReport {

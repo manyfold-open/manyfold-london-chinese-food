@@ -1,18 +1,20 @@
 /**
- * One place in a list, as a row or as a card in a grid: its names, what kind of place, where,
- * and what there is to read.
+ * One place in a list, as a row or as a card in a grid: the ring of its line, its names, what
+ * kind of place, where, and what there is to read.
  */
 
 import type { IndexEntry } from '../../shared/place-doc';
 import type { Copy, Locale } from '../../shared/i18n';
+import { lineFor } from '../../shared/lines';
 import { distance } from '../format';
 import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, categoryLabel, cuisineLabel, placeNames } from '../labels';
 import { Link } from '../router';
 import { paths } from '../routes';
+import { LineDot } from './Lines';
 
 /** What a row and a card both say about a place. */
-function describe(entry: IndexEntry, locale: Locale, copy: Copy) {
+function describe(entry: IndexEntry, locale: Locale, copy: Copy, lines?: readonly string[]) {
   return {
     names: placeNames({ en: entry.n, zh: entry.z }, locale),
     category: categoryLabel(entry.c, locale),
@@ -26,14 +28,20 @@ function describe(entry: IndexEntry, locale: Locale, copy: Copy) {
       .filter(Boolean)
       .join(' · '),
     trading: entry.t !== 'open' ? <span className={`trading ${entry.t}`}>{copy.place.trading[entry.t as 'closed']}</span> : null,
+    line: lineFor(entry, lines),
   };
 }
 
-export function PlaceRow({ entry, km }: { entry: IndexEntry; km?: number | null }) {
+/** The ring of a place's first line, or a plain one when it is on none. */
+const Ring = ({ line }: { line: string | null }) => (line ? <LineDot id={line} /> : <i className="line-dot" aria-hidden="true" />);
+
+/** `lines`: the lines the reader filtered by, so a place wears the one it was found on. */
+export function PlaceRow({ entry, km, lines }: { entry: IndexEntry; km?: number | null; lines?: readonly string[] }) {
   const locale = useLocale();
-  const place = describe(entry, locale, useCopy());
+  const place = describe(entry, locale, useCopy(), lines);
   return (
     <Link className={`place-row${entry.t === 'closed' ? ' closed' : ''}`} href={paths.place(locale, entry.id, entry.s)}>
+      <Ring line={place.line} />
       <span className="place-row-main">
         <b>{place.names.main}</b>
         {place.names.other ? <span className="other-name">{place.names.other}</span> : null}
@@ -48,13 +56,16 @@ export function PlaceRow({ entry, km }: { entry: IndexEntry; km?: number | null 
   );
 }
 
-export function PlaceCard({ entry, km }: { entry: IndexEntry; km?: number | null }) {
+export function PlaceCard({ entry, km, lines }: { entry: IndexEntry; km?: number | null; lines?: readonly string[] }) {
   const locale = useLocale();
-  const place = describe(entry, locale, useCopy());
+  const place = describe(entry, locale, useCopy(), lines);
   return (
     <Link className={`place-card${entry.t === 'closed' ? ' closed' : ''}`} href={paths.place(locale, entry.id, entry.s)}>
       <span className="place-card-top">
-        <span>{place.category}</span>
+        <span className="place-card-kind">
+          <Ring line={place.line} />
+          {place.category}
+        </span>
         {km !== undefined && km !== null ? <b>{distance(km, locale)}</b> : null}
       </span>
       <b className="place-card-name">{place.names.main}</b>

@@ -62,6 +62,19 @@ describe('finding places', () => {
     expect(counts.categories).toEqual({ restaurant: 1, takeaway: 1 });
   });
 
+  it('keeps the places on any line chosen, or a walk from a point, and counts each line', () => {
+    const names = (query: Parameters<typeof queryPlaces>[1]) => queryPlaces(places, { sort: 'name', ...query }).map((place) => place.id);
+    // Dim sum rides with Cantonese; a tea shop is on the Bubble Tea line by its category too.
+    expect(names({ lines: ['dimsum'] })).toEqual(['golden dragon', 'old canteen']);
+    expect(names({ lines: ['north', 'boba'], openOnly: true })).toEqual(['noodle bar', 'tea house']);
+    const located = [entry('near', { la: 51.5246, lo: -0.134 }), entry('far', { la: 51.45, lo: 0 }), entry('nowhere', {})];
+    expect(queryPlaces(located, { within: { lat: 51.5246, lng: -0.134, km: 1 } }).map((place) => place.id)).toEqual(['near']);
+    const counts = facetCounts(places, { lines: ['north'], openOnly: true });
+    // A line's count is what choosing it would add, as for the other lists.
+    expect(counts.lines).toEqual({ dimsum: 1, north: 1, noodle: 1, boba: 1 });
+    expect(counts.cuisines).toEqual({ noodles: 1, shaanxi: 1 });
+  });
+
   it('counts only what matches the words typed', () => {
     const counts = facetCounts(places, { q: 'tea' });
     expect(counts.categories).toEqual({ 'tea-drinks': 1 });

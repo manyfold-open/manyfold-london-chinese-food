@@ -30,6 +30,13 @@ const PATHS = {
   globe: <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z" /></>,
   image: <><rect x="4" y="5" width="16" height="14" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M20 16l-5-5-8 8" /></>,
   quote: <path d="M9 7H5v5h4v-1c0 2-1 3-3 4M19 7h-4v5h4v-1c0 2-1 3-3 4" />,
+  home: <path d="M4 11l8-7 8 7v9h-5.5v-6h-5v6H4z" />,
+  bowl: <path d="M3.5 11.5h17a8.5 8.5 0 01-17 0zM9 20.5h6M14.5 3.5L11 10M19 4.5L13.5 10" />,
+  book: <path d="M5 4.5A1.5 1.5 0 016.5 3H19v15H6.5A1.5 1.5 0 005 19.5zM5 19.5A1.5 1.5 0 006.5 21H19M9 7h6" />,
+  walk: <><circle cx="13" cy="4.5" r="1.8" /><path d="M9.5 21l2.5-6.5-2.5-3 1.5-4.5 3.5 3 3 1.5M9.5 11.5L7 14.5M12 14.5l3 2.5 1 4" /></>,
+  share: <path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" />,
+  train: <><rect x="6" y="3.5" width="12" height="13" rx="3" /><path d="M6 10h12M9 20l-1.5 1.5M15 20l1.5 1.5" /></>,
+  route: <><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.5 6H15a3.5 3.5 0 010 7H9a3.5 3.5 0 000 7h6.5" /></>,
 } as const;
 
 export type IconName = keyof typeof PATHS | 'discord';
