@@ -6,7 +6,7 @@
  * made up, and nothing is ranked by how good anyone says it is (AGENTS.md, invariant 17).
  */
 
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { ActivityEvent } from '../../shared/activity';
 import { CAMPUSES, placesNear } from '../../shared/campuses';
 import { dishOfDay } from '../../shared/day-dish';
@@ -88,7 +88,7 @@ export function HomePage() {
             {copy.front.hero.before}
             <br />
             {copy.front.hero.eat}
-            <Rotator words={copy.front.hero.words} />
+            <Ticker words={copy.front.hero.words} />
             {copy.front.hero.after}
           </h1>
           <form className="front-search" role="search" onSubmit={submit}>
@@ -153,14 +153,46 @@ export function HomePage() {
   );
 }
 
-/** The headline's dish, turning over every few seconds; still when the reader asks for less motion. */
-function Rotator({ words }: { words: string[] }) {
+/** How fast the headline's sign runs, in ems a second. */
+const TICKER_SPEED = 1.8;
+
+/**
+ * The headline's dishes running across a dot-matrix sign, like the next-station display on a Tube
+ * train: amber dots on black, at one speed whatever the language (the run is measured, and its time
+ * set from its width). Readers who ask for less motion see the first dish, still.
+ */
+function Ticker({ words }: { words: string[] }) {
+  const run = useRef<HTMLSpanElement>(null);
+  const [time, setTime] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = run.current;
+    if (!element) return;
+    const measure = () => setTime(Math.round((element.offsetWidth / parseFloat(getComputedStyle(element).fontSize) / TICKER_SPEED) * 10) / 10);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <span className="rotator" aria-label={words[0]}>
-      <span className="rotator-track" aria-hidden="true">
-        {[...words, words[0]].map((word, i) => (
-          <span key={i}>{word}</span>
+    <span className="ticker">
+      <span className="visually-hidden">{words[0]}</span>
+      <span className="ticker-size" aria-hidden="true">
+        {words.map((word) => (
+          <span key={word}>{word}</span>
         ))}
+      </span>
+      <span className="ticker-glow" aria-hidden="true">
+        <span className="ticker-dots">
+          <span className="ticker-track" style={time ? ({ '--ticker-time': `${time}s` } as CSSProperties) : undefined}>
+            {[0, 1].map((copy) => (
+              <span key={copy} ref={copy === 0 ? run : undefined} className="ticker-run">
+                {words.map((word) => (
+                  <span key={word}>{word}</span>
+                ))}
+              </span>
+            ))}
+          </span>
+        </span>
       </span>
     </span>
   );

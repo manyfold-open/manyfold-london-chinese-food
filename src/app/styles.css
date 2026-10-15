@@ -4312,54 +4312,75 @@ html:lang(en) .front-title {
   font-size: min(var(--title-size), 11.2cqi);
 }
 
-.rotator {
-  display: inline-block;
+/* The headline's sign: the next-station display on a Tube train. The board and its unlit dots are
+   drawn behind; the lit dishes run under a grid of dots that stays still (.ticker-dots, a mask), so
+   the dots keep their places as the letters move through them, and each lit dot glows
+   (.ticker-glow). The hidden .ticker-size makes the sign as wide as its longest dish. */
+.ticker {
+  --dot: 0.075em;
+  position: relative;
+  display: inline-grid;
   height: var(--title-line);
   margin: 0 0.1em;
-  padding: 0 0.14em;
+  padding: 0 0.2em;
   border-radius: 10px;
-  background: var(--line-noodle);
-  color: #151a2b;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.07), transparent 45%),
+    radial-gradient(circle, color-mix(in srgb, var(--amber) 13%, transparent) 0 32%, transparent 42%) 0 0 / var(--dot) var(--dot),
+    var(--board);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: var(--amber);
   overflow: hidden;
   vertical-align: bottom;
-  transform: rotate(-2.5deg);
 }
 
-.rotator-track {
+.ticker-size {
+  display: grid;
+  visibility: hidden;
+}
+
+.ticker-size span {
+  grid-area: 1 / 1;
+}
+
+/* English dishes run long ("xiaolongbao"): while they move, the sign is narrower than the longest,
+   as a train's is. Standing still for readers who ask for less motion, it holds the whole first. */
+@media (prefers-reduced-motion: no-preference) {
+  html:lang(en) .ticker-size {
+    width: 3.4em;
+  }
+}
+
+.ticker-glow {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(0 0 0.04em var(--amber));
+}
+
+.ticker-dots {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  animation: rotate-words 12s var(--ease) infinite;
+  height: 100%;
+  mask: radial-gradient(circle, #000 0 40%, transparent 52%) 0 0 / var(--dot) var(--dot);
 }
 
-.rotator-track span {
-  display: block;
-  height: var(--title-line);
+.ticker-track {
+  display: flex;
+  flex: none;
+  animation: ticker var(--ticker-time, 12s) linear infinite;
 }
 
-@keyframes rotate-words {
-  0%,
-  17% {
-    transform: translateY(0);
-  }
-  20%,
-  37% {
-    transform: translateY(calc(-1 * var(--title-line)));
-  }
-  40%,
-  57% {
-    transform: translateY(calc(-2 * var(--title-line)));
-  }
-  60%,
-  77% {
-    transform: translateY(calc(-3 * var(--title-line)));
-  }
-  80%,
-  97% {
-    transform: translateY(calc(-4 * var(--title-line)));
-  }
-  100% {
-    transform: translateY(calc(-5 * var(--title-line)));
+.ticker-run {
+  display: flex;
+}
+
+.ticker-run span {
+  padding-right: 1.2em;
+  white-space: nowrap;
+}
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
   }
 }
 
@@ -5941,9 +5962,24 @@ html:lang(en) .front-title {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rotator-track,
+  .ticker-track,
   .live-dot {
     animation: none;
+  }
+
+  /* the sign stands still on the first dish */
+  .ticker-track {
+    flex: auto;
+    justify-content: center;
+  }
+
+  .ticker-run + .ticker-run,
+  .ticker-run span + span {
+    display: none;
+  }
+
+  .ticker-run span {
+    padding: 0;
   }
 }
 
