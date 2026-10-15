@@ -453,8 +453,10 @@ textarea {
   padding: 24px 32px 56px;
 }
 
+/* Backwards, not both: a transform held after the page has come in would pin its fixed parts (a
+   place's action bar on a phone) to the page instead of the screen. */
 .screen {
-  animation: screen-in 220ms var(--ease) both;
+  animation: screen-in 220ms var(--ease) backwards;
 }
 
 @keyframes screen-in {
@@ -2449,9 +2451,12 @@ h1 .other-name {
   font-weight: 500;
 }
 
+/* Each keeps its width: on a phone the row scrolls sideways rather than squeezing them. */
 .dish-hit {
   display: inline-flex;
+  flex: none;
   flex-direction: column;
+  max-width: 240px;
   padding: 8px 12px;
   border-radius: 12px;
   background: var(--chip);
@@ -2462,6 +2467,12 @@ h1 .other-name {
 .dish-hit:hover {
   background: var(--chip-h);
   text-decoration: none;
+}
+
+.dish-hit b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dish-hit span {
@@ -2790,6 +2801,129 @@ h1 .other-name {
 
   .filters-button {
     display: none;
+  }
+}
+
+/* A phone held upright: the map layout is the whole screen between the top bar and the tab bar,
+   the search, the chips and the tools floating over it and the count in its corner. Touches that
+   miss them reach the map, so one finger moves it and nothing scrolls under it. The sort has
+   nothing to order on a map. */
+@media (max-width: 767px) and (min-height: 520px) {
+  .home.is-map {
+    position: fixed;
+    top: var(--top-h);
+    right: 0;
+    bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    left: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 10px;
+    pointer-events: none;
+  }
+
+  .site:has(.home.is-map) .site-foot {
+    display: none;
+  }
+
+  .home.is-map .results {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: auto;
+  }
+
+  .home.is-map .map {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .home.is-map .search,
+  .home.is-map .dish-hits .chips,
+  .home.is-map .quick-chips,
+  .home.is-map .results-tools > *,
+  .home.is-map .results-head .segmented {
+    pointer-events: auto;
+  }
+
+  .home.is-map .home-search,
+  .home.is-map .results-head {
+    padding: 0 12px;
+  }
+
+  .home.is-map .home-search .search input {
+    height: 48px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .home.is-map .dish-hits {
+    margin-top: 8px;
+  }
+
+  .home.is-map .dish-hits .chips {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .home.is-map .dish-hits h2,
+  .home.is-map .quick-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .home.is-map .quick-filters {
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  .home.is-map .quick-chips {
+    margin: 0;
+    padding: 0 12px;
+  }
+
+  .home.is-map .results-head {
+    flex-wrap: nowrap;
+  }
+
+  .home.is-map .results-tools {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+  }
+
+  .home.is-map .sort {
+    display: none;
+  }
+
+  .home.is-map .quick-chip,
+  .home.is-map .dish-hit,
+  .home.is-map .results-tools .pill,
+  .home.is-map .results-head .segmented,
+  .home.is-map .results-count {
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+  }
+
+  /* The count and the zoom and locate buttons stand in the thumb's corners, clear of the chips and
+     of the credits, which open across the bottom for their first five seconds (foldCredits). */
+  .home.is-map .results-count {
+    position: absolute;
+    bottom: 56px;
+    left: 10px;
+    padding: 5px 12px;
+    border-radius: 99px;
+    background: var(--card);
+    font-size: 15px;
+  }
+
+  .home.is-map .maplibregl-ctrl-top-right {
+    top: auto;
+    bottom: 46px;
   }
 }
 
@@ -3421,6 +3555,35 @@ a.dish-name:hover {
   .instruction {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* Thumb-sized: a segmented choice (a place's menu, quotes and photos; a dish's sort), the maps'
+     own zoom and locate buttons, the footer's links. A place's three tabs share the row. */
+  .segmented button {
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .place-tabs .segmented {
+    flex: 1;
+  }
+
+  .place-tabs .segmented button {
+    flex: 1;
+  }
+
+  .maplibregl-ctrl-group button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .foot-links {
+    gap: 4px 18px;
+  }
+
+  .foot-links a {
+    min-height: 32px;
   }
 }
 
@@ -4095,6 +4258,7 @@ a.mk:hover {
 .front-hero-main {
   display: grid;
   gap: 18px;
+  container-type: inline-size;
 }
 
 /* Beside the map, the board takes the rest of the column, and its lines fill it (LiveBoard). */
@@ -4139,6 +4303,8 @@ a.mk:hover {
   line-height: var(--title-line);
 }
 
+/* The English title's second line, "[xiaolongbao] tonight?", is about 8.7em wide: it shrinks to
+   fit its column but keeps the Chinese lines' height, so both titles stand the same. */
 html:lang(en) .front-title {
   font-size: min(var(--title-size), 11.2cqi);
 }
@@ -4214,7 +4380,8 @@ html:lang(en) .front-title {
   padding: 0;
   border: 0;
   background: none;
-  font-size: 15px;
+  /* 16px, as on every phone field: iOS zooms into anything smaller. */
+  font-size: 16px;
 }
 
 .front-search input:focus {
@@ -4260,7 +4427,6 @@ html:lang(en) .front-title {
 
 .map-legend {
   position: absolute;
-  container-type: inline-size;
   left: 16px;
   bottom: 16px;
   display: grid;
@@ -4303,8 +4469,6 @@ html:lang(en) .front-title {
 .section-head {
   display: flex;
   flex-wrap: wrap;
-/* The English title's second line, "[xiaolongbao] tonight?", is about 8.7em wide: it shrinks to
-   fit its column but keeps the Chinese lines' height, so both titles stand the same. */
   align-items: baseline;
   gap: 6px 16px;
   margin-bottom: 18px;
@@ -5482,13 +5646,27 @@ html:lang(en) .front-title {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* One column: the map first, then what the page is for (the places, the prices, the stops),
+     then the rest of the side column: the cuisines, the other lines and campuses, related dishes. */
   .browse {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
   }
 
   .browse-side {
-    position: static;
+    display: contents;
+  }
+
+  .browse-side > .side-map,
+  .browse-side > .map-caption {
     order: -1;
+  }
+
+  .browse-main,
+  .browse > .stops {
+    margin: 10px 0 18px;
   }
 
   .guide-grid {
@@ -5954,6 +6132,57 @@ html:lang(en) .front-title {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* On a phone a place's page trades the tab bar for its own: share, directions and the first photo,
+   in the thumb's reach wherever the reader is on a long menu. Directions open upwards. */
+@media (max-width: 767px) {
+  .site:has(.place-acts) .tabbar {
+    display: none;
+  }
+
+  .place-acts {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    padding: 10px 12px env(safe-area-inset-bottom);
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+  }
+
+  .place-acts .btn {
+    width: 100%;
+    height: 44px;
+  }
+
+  .place-acts .btn.primary {
+    order: 1;
+  }
+
+  /* Directions, a menu, dressed as the secondary button beside it. */
+  .place-acts .menu > .link-button {
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    border-radius: 8px;
+    background: var(--chip);
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .place-acts .menu-list {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
 }
 
 .mini-map {

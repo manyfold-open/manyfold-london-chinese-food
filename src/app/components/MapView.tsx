@@ -21,7 +21,7 @@ import { placeNames } from '../labels';
 import { navigate } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
-import { basemap, blankMissingImages, mapLocale, token } from './basemap';
+import { basemap, blankMissingImages, foldCredits, mapLocale, token } from './basemap';
 
 const LONDON: [number, number] = [-0.1276, 51.5072];
 /** How close a map opened on the reader, or framing its places, comes: a few streets, not one. */
@@ -145,6 +145,7 @@ export default function MapView({
     const instance = new maplibregl.Map({ container: container.current, style: basemap(theme), ...start, locale: mapLocale(locale) });
     map.current = instance;
     blankMissingImages(instance);
+    foldCredits(instance);
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     if (handlers.current.onLocate) {
       locator.current = new LocateControl(() => handlers.current.onLocate?.());
