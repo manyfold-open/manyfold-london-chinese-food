@@ -21,7 +21,7 @@ import { placeNames } from '../labels';
 import { navigate } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
-import { basemap, blankMissingImages, foldCredits, mapLocale, token } from './basemap';
+import { basemap, blankMissingImages, foldCredits, mapLocale, quietTitles, token } from './basemap';
 
 const LONDON: [number, number] = [-0.1276, 51.5072];
 /** How close a map opened on the reader, or framing its places, comes: a few streets, not one. */
@@ -146,6 +146,7 @@ export default function MapView({
     map.current = instance;
     blankMissingImages(instance);
     foldCredits(instance);
+    quietTitles(instance);
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     if (handlers.current.onLocate) {
       locator.current = new LocateControl(() => handlers.current.onLocate?.());
@@ -257,7 +258,6 @@ export default function MapView({
     const button = locator.current?.button;
     if (!button) return;
     const label = COPY[locale].map.locate;
-    button.title = label;
     button.setAttribute('aria-label', label);
     button.setAttribute('aria-pressed', String(near !== null));
     button.classList.toggle('maplibregl-ctrl-geolocate-waiting', locating);

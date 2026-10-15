@@ -1,5 +1,6 @@
 // No browser-default control appears in the reader flow: every select, checkbox, radio,
-// date picker and dialog is our own, from src/app/ui/. This scans the page code for the
+// date picker, file picker, suggestion list and dialog is our own, from src/app/ui/, and no
+// reader page leans on the system's tooltip. This scans the page code for the
 // native ones, in the reader flow and the admin console alike.
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
@@ -10,8 +11,13 @@ const EXEMPT = /^\.\.\/src\/app\/ui\//;
 const NATIVE = [
   /<select\b/,
   /<dialog\b/,
-  /type=["'](checkbox|radio|date|datetime-local|time|month|week|color|range)["']/,
+  /<datalist\b/,
+  /type=["'](checkbox|radio|date|datetime-local|time|month|week|color|range|file)["']/,
 ];
+// The system's own tooltip, in the reader flow: the reader's controls use Tooltip (src/app/ui/).
+// A title on an element of the page itself (lowercase tag), not a component's title prop.
+const NATIVE_READER = [/<[a-z][\w-]*\s[^>]*\btitle=/, /\.title = /];
+const reader = (path: string) => !path.includes('/settings/');
 const scanned = Object.keys(sources).filter((path) => !EXEMPT.test(path));
 
 describe('native controls', () => {
@@ -27,7 +33,8 @@ describe('native controls', () => {
     const found: string[] = [];
     for (const path of scanned) {
       sources[path]!.split('\n').forEach((line, index) => {
-        for (const pattern of NATIVE) if (pattern.test(line)) found.push(`${path.slice(3)}:${index + 1}: ${line.trim()}`);
+        const patterns = reader(path) ? [...NATIVE, ...NATIVE_READER] : NATIVE;
+        for (const pattern of patterns) if (pattern.test(line)) found.push(`${path.slice(3)}:${index + 1}: ${line.trim()}`);
       });
     }
     expect(found).toEqual([]);

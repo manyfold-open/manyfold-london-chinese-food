@@ -3630,9 +3630,9 @@ a.dish-name:hover {
 .wordmark small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
 }
 
 /* The current section is a pill like the hover, in the accent's tint rather than the neutral chip. */
@@ -4490,9 +4490,18 @@ html:lang(en) .front-title {
 }
 
 .section-lead {
+  order: 3;
   flex-basis: 100%;
   max-width: 62ch;
   color: var(--ink2);
+}
+
+/* The lead always takes a line of its own under the title and its tag: its max-width would
+   otherwise let it fit beside them on a wide screen, the tag stranded between the two. */
+.section-head:has(.section-lead)::after {
+  content: '';
+  order: 2;
+  flex-basis: 100%;
 }
 
 .section-more {
@@ -5291,7 +5300,7 @@ html:lang(en) .front-title {
 }
 
 .guide-head h1 {
-  font-size: 88px;
+  font-size: clamp(56px, 7vw, 88px);
   line-height: 1;
 }
 
@@ -5754,8 +5763,10 @@ html:lang(en) .front-title {
     font-size: 20px;
   }
 
+  /* Small, but still read: as wide as the name above it, no wider. */
   .wordmark small {
-    font-size: 7px;
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
   }
 
   .front {
@@ -5894,8 +5905,10 @@ html:lang(en) .front-title {
     font-size: 40px;
   }
 
+  /* A phone's title fits its width: two words a line, never one cut in half. */
   .guide-head h1 {
-    font-size: 56px;
+    font-size: clamp(38px, 12.5vw, 56px);
+    overflow-wrap: break-word;
   }
 
   .page-intro h1 {
@@ -6503,12 +6516,12 @@ html:lang(en) .front-title {
 }
 
 .dish-intro h1 {
-  font-size: 92px;
+  font-size: clamp(64px, 7.5vw, 92px);
   line-height: 1;
 }
 
 html:lang(en) .dish-intro h1 {
-  font-size: 76px;
+  font-size: clamp(56px, 6.2vw, 76px);
 }
 
 .dish-sub {
@@ -6766,7 +6779,8 @@ html:lang(en) .dish-intro h1 {
 
   .dish-intro h1,
   html:lang(en) .dish-intro h1 {
-    font-size: 56px;
+    font-size: clamp(38px, 12.5vw, 56px);
+    overflow-wrap: break-word;
   }
 
   .dish-hero .dish-image {
@@ -6780,4 +6794,703 @@ html:lang(en) .dish-intro h1 {
   .related {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ───────── no browser defaults ─────────
+   What the browser would otherwise draw in its own look: scrollbars, placeholders, autofill,
+   text selected by a tap on a button, the map library's controls and credits, a chosen file. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--line2) transparent;
+}
+
+:root {
+  accent-color: var(--accent);
+}
+
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+/* Autofill keeps the field's own fill, not the browser's pale blue or yellow. */
+input:-webkit-autofill,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--accent);
+  box-shadow: inset 0 0 0 100px var(--chip);
+  transition: background-color 600000s;
+}
+
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    inset 0 0 0 100px var(--bg);
+}
+
+/* A long press or double tap on a control does not select its words. */
+button,
+[role='button'],
+[role='option'],
+[role='radio'],
+[role='checkbox'],
+.tabbar,
+.sheet-grab,
+.sheet-head {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 99px;
+    background: var(--line2) padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted);
+  }
+}
+
+.front-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.select-list,
+.suggest-list {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.scrim {
+  touch-action: none;
+}
+
+/* A text field's suggestions, in the listbox every other choice uses. */
+.suggest {
+  position: relative;
+}
+
+.suggest-list {
+  right: 0;
+  max-height: 240px;
+  white-space: normal;
+}
+
+/* A photo picker: a tile the size of a thumb, then the pictures chosen. */
+.file-pick {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1.5px dashed var(--line2);
+  border-radius: var(--radius);
+  background: var(--chip);
+  cursor: pointer;
+  transition:
+    border-color 160ms,
+    background 160ms,
+    transform 120ms var(--ease);
+}
+
+.file-pick:hover {
+  border-color: var(--accent);
+  background: var(--chip-h);
+}
+
+.file-pick:active {
+  transform: scale(0.99);
+}
+
+.file-pick:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.file-pick.chosen {
+  border-style: solid;
+  border-color: var(--line);
+  background: var(--card);
+}
+
+/* The input covers the tile, so a tap anywhere opens the picker on every phone. */
+.file-pick-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-pick-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.file-pick-face svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.file-pick-face > span {
+  display: grid;
+  min-width: 0;
+}
+
+.file-pick-face small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-pick-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.file-pick-thumbs img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  animation: pop-in 260ms var(--ease) backwards;
+}
+
+.file-pick-thumbs img:nth-child(2) { animation-delay: 30ms; }
+.file-pick-thumbs img:nth-child(3) { animation-delay: 60ms; }
+.file-pick-thumbs img:nth-child(4) { animation-delay: 90ms; }
+.file-pick-thumbs img:nth-child(n + 5) { animation-delay: 120ms; }
+
+.file-pick:not(.chosen) .file-pick-face {
+  min-height: 64px;
+}
+
+/* One photo: its picture beside its name. Several: the pictures in a row above. */
+.file-pick.chosen:not(.many) {
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+}
+
+.file-pick.chosen:not(.many) .file-pick-thumbs {
+  grid-template-columns: 64px;
+}
+
+.file-pick.chosen .file-pick-face {
+  justify-content: flex-start;
+}
+
+/* ── the map library's controls, in the site's own look ── */
+
+.maplibregl-map {
+  font-family: var(--font);
+}
+
+.maplibregl-map .maplibregl-ctrl-group {
+  overflow: visible;
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.maplibregl-map .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: var(--pop);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button {
+  position: relative;
+  transition: background-color 120ms;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--line);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:first-child {
+  border-radius: 10px 10px 0 0;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:last-child {
+  border-radius: 0 0 10px 10px;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:only-child {
+  border-radius: 10px;
+}
+
+.maplibregl-map .maplibregl-ctrl button:not(:disabled):hover,
+.maplibregl-map .maplibregl-ctrl button:not(:disabled):active {
+  background-color: var(--hover);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:focus:focus-visible,
+.maplibregl-map .maplibregl-ctrl-attrib-button:focus-visible {
+  box-shadow: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib-button:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:not(:disabled):active .maplibregl-ctrl-icon {
+  transform: scale(0.88);
+}
+
+.maplibregl-map .maplibregl-ctrl-icon {
+  transition: transform 120ms var(--ease);
+}
+
+/* Each button's name, in the site's tooltip (MapLibre's own title tooltips are taken off). */
+@media (hover: hover) and (pointer: fine) {
+  .maplibregl-map .maplibregl-ctrl-group button[aria-label]::after {
+    content: attr(aria-label);
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 8px);
+    z-index: 2;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: var(--bg);
+    font: 500 12px/1.3 var(--font);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(2px, -50%);
+    transition:
+      opacity 120ms,
+      transform 120ms var(--ease);
+  }
+
+  .maplibregl-map .maplibregl-ctrl-group button[aria-label]:hover::after {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
+.maplibregl-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background-color: color-mix(in srgb, var(--card) 80%, transparent);
+  color: var(--muted);
+  font: 11px/1.6 var(--font);
+  backdrop-filter: blur(6px);
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib a {
+  color: var(--ink2);
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  border-radius: 12px;
+  background-color: var(--card);
+  color: var(--muted);
+  box-shadow: var(--pop);
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+  background-color: var(--hover);
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib-button {
+  border-radius: 12px;
+}
+
+/* MapLibre's icons are dark grey drawings: light ones on the dark map. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .maplibregl-ctrl-icon,
+  :root:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+    filter: invert(0.9);
+  }
+}
+
+:root[data-theme='dark'] .maplibregl-ctrl-icon,
+:root[data-theme='dark'] .maplibregl-ctrl-attrib-button {
+  filter: invert(0.9);
+}
+
+.maplibregl-map .maplibregl-cooperative-gesture-screen {
+  background: color-mix(in srgb, var(--board) 55%, transparent);
+  font: 600 16px/1.4 var(--font);
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(2px);
+}
+
+/* A phone's front map: while the credits are open across its foot, the zoom and locate buttons
+   rise clear of them, and settle back once the credits fold. */
+@media (max-width: 767px) {
+  .home.is-map .maplibregl-ctrl-top-right {
+    transition: bottom 320ms var(--ease);
+  }
+
+  .home.is-map:has(.maplibregl-compact-show) .maplibregl-ctrl-top-right {
+    bottom: 96px;
+  }
+}
+
+/* ───────── motion ─────────
+   Small and quick, in the site's one easing: a control gives under a press, a card lifts under the
+   pointer, pictures fade in when they arrive, sections rise into place as they scroll in. All of it
+   stops for readers who ask for less motion (the block under "reduced motion", and the gates here). */
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes tab-pop {
+  40% {
+    transform: translateY(-2px) scale(1.12);
+  }
+}
+
+/* Pictures fade in as their bytes arrive, rather than painting in strips. */
+.fade-img {
+  opacity: 0;
+  transform: scale(1.015);
+  transition:
+    opacity 420ms ease,
+    transform 700ms var(--ease);
+}
+
+.fade-img[data-loaded] {
+  opacity: 1;
+  transform: none;
+}
+
+/* A press: the control gives a little under the finger or the mouse. */
+.pill,
+.quick-chip,
+.chip-link,
+.chip,
+.icon-button,
+.select-button,
+.segmented button,
+.front-search button,
+.show-all {
+  transition:
+    background 120ms,
+    color 120ms,
+    box-shadow 120ms,
+    transform 160ms var(--ease);
+}
+
+.pill:active,
+.quick-chip:active,
+.chip-link:active,
+.chip:active,
+.icon-button:active,
+.select-button:active,
+.front-search button:active,
+.show-all:active {
+  transform: scale(0.95);
+}
+
+.segmented button:active {
+  transform: scale(0.94);
+}
+
+.front-search button:hover {
+  background: var(--btn-h);
+}
+
+.tabbar a svg {
+  transition: transform 160ms var(--ease);
+}
+
+.tabbar a:active svg {
+  transform: scale(0.88);
+}
+
+.tabbar a[aria-current='page'] svg {
+  animation: tab-pop 380ms var(--ease);
+}
+
+/* Cards: a tap presses them in; on a desktop the pointer lifts them and nudges their picture. */
+.dish-tile,
+.guide-card,
+.guide-tile,
+.guide-cover,
+.place-card,
+.campus,
+.route-card,
+.collage-tile {
+  transition:
+    background 120ms,
+    box-shadow 200ms var(--ease),
+    transform 220ms var(--ease);
+}
+
+.dish-tile:active,
+.guide-card:active,
+.guide-tile:active,
+.guide-cover:active,
+.place-card:active,
+.route-card:active,
+.collage-tile:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .guide-card:hover,
+  .guide-tile:hover,
+  .guide-cover:hover,
+  .place-card:hover,
+  .route-card:hover {
+    transform: translateY(-3px);
+  }
+
+  .guide-card:hover,
+  .guide-tile:hover,
+  .route-card:hover {
+    box-shadow: 0 14px 30px rgba(8, 10, 16, 0.18);
+  }
+
+  .dish-tile:hover .fade-img[data-loaded],
+  .guide-card:hover .fade-img[data-loaded],
+  .collage-tile:hover .fade-img[data-loaded] {
+    transform: scale(1.045);
+  }
+
+  .guide-card:active,
+  .guide-tile:active,
+  .guide-cover:active,
+  .place-card:active,
+  .route-card:active {
+    transform: translateY(-1px) scale(0.99);
+  }
+}
+
+/* Sections rise into place as they scroll in, where the browser ties an animation to the scroll
+   (nothing to run or watch in script). Only from the start of a section's entry to a third in. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .front-section,
+    .campuses,
+    .day-dish,
+    .light-up:not(.page),
+    .dish-shelf,
+    .guide-shelf,
+    .dish-tile,
+    .guide-card,
+    .stop {
+      animation: rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}
+
+/* The theme changes with a crossfade (setTheme in src/app/theme.ts) rather than a cut. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--ease);
+}
+
+/* ── the photo viewer (src/app/ui/Media.tsx) ── */
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: calc(64px + env(safe-area-inset-top)) 16px calc(64px + env(safe-area-inset-bottom));
+}
+
+.viewer-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 16, 0.92);
+  opacity: 0;
+  touch-action: none;
+  backdrop-filter: blur(6px);
+  transition: opacity 220ms;
+}
+
+.viewer.open .viewer-scrim {
+  opacity: 1;
+}
+
+.viewer-stage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: min(100%, 1200px);
+  margin: 0;
+  opacity: 0;
+  transform: scale(0.96);
+  touch-action: pan-y;
+  transition:
+    opacity 220ms,
+    transform 280ms var(--ease);
+}
+
+.viewer.open .viewer-stage {
+  opacity: 1;
+  transform: none;
+}
+
+.viewer-stage img {
+  max-width: 100%;
+  max-height: calc(100dvh - 180px);
+  border-radius: 14px;
+  object-fit: contain;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  -webkit-user-drag: none;
+}
+
+.viewer-stage figcaption {
+  max-width: 40em;
+  color: #f3eee4;
+  font-size: 14px;
+  text-align: center;
+}
+
+.viewer-button {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    background 120ms,
+    opacity 220ms,
+    transform 160ms var(--ease);
+}
+
+.viewer.open .viewer-button {
+  opacity: 1;
+}
+
+.viewer-button:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.viewer-button:active {
+  transform: scale(0.9);
+}
+
+.viewer-close {
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+}
+
+.viewer-prev,
+.viewer-next {
+  top: 50%;
+  translate: 0 -50%;
+}
+
+.viewer-prev {
+  left: 16px;
+}
+
+.viewer-next {
+  right: 16px;
+}
+
+.viewer-count {
+  position: absolute;
+  top: calc(26px + env(safe-area-inset-top));
+  left: 50%;
+  translate: -50% 0;
+  color: rgba(255, 255, 255, 0.72);
+  font: 13px var(--f-board);
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 767px) {
+  .viewer-prev,
+  .viewer-next {
+    top: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    translate: none;
+  }
+
+  .viewer-prev {
+    left: calc(50% - 60px);
+  }
+
+  .viewer-next {
+    right: calc(50% - 60px);
+  }
+}
+
+/* While a large photo is on its way, a ring turns where it will be. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.viewer-stage:has(.fade-img:not([data-loaded]))::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 2.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.viewer-stage:has(.fade-img:not([data-loaded])) {
+  min-width: 120px;
+  min-height: 120px;
 }

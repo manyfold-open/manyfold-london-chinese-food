@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- The browser's own bars and first paint in the site's colours, not its defaults (theme.js
+         and src/app/theme.ts follow a theme the reader picked). -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf7f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#11141c" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="伦敦哪里吃得到中国菜：每家店的菜单、照片和来自全网的评价原文，没有评分，由 AI agent 收集并核对。" />
     <title>伦敦中餐 · London Chinese Food</title>
     <!-- The reader's theme pick, before the first paint (src/app/theme.ts). A file, not inline,
