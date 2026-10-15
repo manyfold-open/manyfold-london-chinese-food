@@ -7,7 +7,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 // lead), the admin's and agents' routes, and the upload form's Turnstile key stay with the local
 // Worker and its local D1.
 const LIVE_SITE = 'https://app.manyfold.ai/london-chinese-food';
-const LIVE_READS = /^\/(?:api\/(?:index|places\/[^/]+|dishes(?:\/[^/]+)?|illustrations|sources\/[^/]+|critics\/[^/]+|search)|media\/[pi]\/[^/]+\/[^/]+)$/;
+const LIVE_READS = /^\/(?:api\/(?:index|places\/[^/]+|dishes(?:\/[^/]+)?|illustrations|sources\/[^/]+|critics\/[^/]+|search|activity|crew)|media\/[pi]\/[^/]+\/[^/]+)$/;
 
 function liveReads(): Plugin {
   return {
@@ -44,6 +44,12 @@ function liveReads(): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [...(mode === 'live' ? [liveReads()] : []), react(), cloudflare()],
+  build: {
+    // Fonts stay files, however small: the pages' content security policy (src/worker/seo.ts)
+    // allows fonts from this site only, never a data: URL, so an inlined slice of a face would be
+    // refused and its characters drawn in another font. tests/dist-urls.test.ts checks.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
+  },
   experimental: {
     // The site is served under app.manyfold.ai/london-chinese-food as well as at the root of
     // its workers.dev host. URLs inside scripts and stylesheets (lazy chunks such as the map

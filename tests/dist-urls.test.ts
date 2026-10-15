@@ -22,4 +22,15 @@ describe('built URLs', () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  // The pages' content security policy allows fonts from this site only, so a font Vite inlined as
+  // a data: URL would be refused in the browser (vite.config.ts keeps them files).
+  it.skipIf(!built)('hold no font inlined as a data: URL', () => {
+    const offenders: string[] = [];
+    for (const name of readdirSync(ASSETS)) {
+      if (!name.endsWith('.css')) continue;
+      if (readFileSync(new URL(name, ASSETS), 'utf8').includes('data:font/')) offenders.push(name);
+    }
+    expect(offenders).toEqual([]);
+  });
 });
