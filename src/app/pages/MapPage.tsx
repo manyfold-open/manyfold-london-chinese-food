@@ -8,7 +8,8 @@
  *
  * The search is kept in the page's history entry with how far down the list the reader had got,
  * so Back from a place finds the list as it was, scrolled where it was (src/app/router.tsx). The
- * filters, sort and layout are also remembered in this browser, for the next visit.
+ * filters, sort and layout are also remembered in this browser, for the next visit. A phone opens
+ * the page on the map, which fills its screen between the top bar and the tab bar.
  */
 
 import { lazy, Suspense, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -54,6 +55,9 @@ const isLayout = (value: unknown): value is Layout => LAYOUTS.includes(value as 
 /** The search this tab had last: a new visit to the page in the same tab starts from it. */
 let last: HomeState | null = null;
 
+/** A phone opens the page on the map its tab names; a wider screen, with the filters beside them, on the list. */
+const firstLayout = (): Layout => (window.matchMedia('(max-width: 767px)').matches ? 'map' : 'list');
+
 /** The filters, sort and layout this browser chose before, or none. */
 function saved(): Pick<HomeState, 'filters' | 'sort' | 'layout'> {
   let stored: { filters?: unknown; sort?: unknown; layout?: unknown } = {};
@@ -62,7 +66,7 @@ function saved(): Pick<HomeState, 'filters' | 'sort' | 'layout'> {
   } catch {
     // storage blocked or unreadable: start from none
   }
-  return { filters: readFilters(stored.filters), sort: isSort(stored.sort) ? stored.sort : 'recent', layout: isLayout(stored.layout) ? stored.layout : 'list' };
+  return { filters: readFilters(stored.filters), sort: isSort(stored.sort) ? stored.sort : 'recent', layout: isLayout(stored.layout) ? stored.layout : firstLayout() };
 }
 
 /**
@@ -74,7 +78,9 @@ function readHome(stored: unknown): HomeState {
     const sent = new URLSearchParams(location.search).get('q');
     const view = new URLSearchParams(location.search).get('view');
     const start = last ? { ...last, shown: PAGE } : { ...saved(), q: '', shown: PAGE, near: null, camera: null };
-    return { ...start, ...(sent !== null ? { q: sent } : {}), ...(isLayout(view) ? { layout: view } : {}) };
+    // A search sent from the front page looks for names, which the map only shows close up: it opens on the list.
+    const layout = isLayout(view) ? view : sent !== null && start.layout === 'map' ? 'list' : start.layout;
+    return { ...start, ...(sent !== null ? { q: sent } : {}), layout };
   }
   const value = stored as Partial<Record<keyof HomeState, unknown>>;
   return {
@@ -172,7 +178,8 @@ export function MapPage() {
   ];
 
   return (
-    <div className="home screen">
+    // On a phone the map layout is the whole screen between the bars, the search and the chips over it.
+    <div className={`home screen${layout === 'map' ? ' is-map' : ''}`}>
       <h1 className="visually-hidden">{copy.nav.map}</h1>
 
       <div className="home-search">

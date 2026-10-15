@@ -16,7 +16,7 @@ import { placeNames } from '../labels';
 import { Link, navigate } from '../router';
 import { paths } from '../routes';
 import { useTheme } from '../theme';
-import { basemap, blankMissingImages, mapLocale, token } from './basemap';
+import { basemap, blankMissingImages, foldCredits, mapLocale, token } from './basemap';
 import { LONDON, type Bounds, type CityMapProps, type Marker } from './CityMap';
 
 const LAYERS = ['cm-ring-fill', 'cm-ring-line', 'cm-route-casing', 'cm-route', 'cm-glow', 'cm-dots', 'cm-hl', 'cm-names'];
@@ -216,6 +216,7 @@ export default function CityMapView(props: CityMapProps) {
     instance.touchZoomRotate.disableRotation();
     instance.keyboard.disableRotation();
     blankMissingImages(instance);
+    foldCredits(instance);
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
     map.current = instance;
     let wired = false;
