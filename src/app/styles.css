@@ -4243,8 +4243,11 @@ a.mk:hover {
 
 /* the front page */
 
+/* one column no wider than the screen: a section whose content will not shrink overflows itself,
+   rather than widening every other section with it */
 .front {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 56px;
 }
 
@@ -4986,9 +4989,10 @@ html:lang(en) .front-title {
   gap: 12px;
 }
 
+/* minmax(0, …), so a long agent name is cut short with an ellipsis instead of widening the card */
 .agent {
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 14px;
@@ -5864,7 +5868,7 @@ html:lang(en) .front-title {
   }
 
   .crew {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
