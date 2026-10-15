@@ -358,13 +358,13 @@ export interface Copy {
 
 const zh: Copy = {
   htmlLang: 'zh-Hans',
-  siteName: '伦敦干饭地图 · London Chinese Food',
-  siteShort: '伦敦干饭地图',
+  siteName: '伦敦中餐地图 · London Chinese Food',
+  siteShort: '伦敦中餐地图',
   tagline: '伦敦哪里吃得到中国菜',
   description: '伦敦能吃到、买到中国食物的店：菜单、照片和来自全网的评价原文。没有评分，读历史自己判断。',
   switchTo: 'English',
   nav: { home: '首页', contribute: '参与贡献', about: '关于', menu: '菜单', map: '地图', dishes: '菜品', guides: '攻略', lightUp: '点亮伦敦' },
-  brand: { name: '伦敦干饭地图', sub: 'LONDON CHINESE FOOD MAP', motto: '没有评分，只摘原话。' },
+  brand: { name: '伦敦中餐地图', sub: 'LONDON CHINESE FOOD MAP', motto: '没有评分，只摘原话。' },
   front: {
     kicker: { open: '家在营业', quotes: '段原话', dishes: '道菜单菜品' },
     hero: { before: '今天在伦敦', eat: '吃', after: '吗？', words: ['小笼包', '肉夹馍', '杨枝甘露', '烧鸭饭', '麻辣烫'] },
@@ -730,7 +730,7 @@ const en: Copy = {
   description: 'Every place in London to eat or buy Chinese food: menus, photos and review excerpts from across the web. No ratings: read the history and judge for yourself.',
   switchTo: '中文',
   nav: { home: 'Home', contribute: 'Contribute', about: 'About', menu: 'Menu', map: 'Map', dishes: 'Dishes', guides: 'Guides', lightUp: 'Light up London' },
-  brand: { name: 'London Chinese Food', sub: 'THE EATING MAP · 伦敦干饭地图', motto: 'No scores, just quotes.' },
+  brand: { name: 'London Chinese Food', sub: 'THE EATING MAP · 伦敦中餐地图', motto: 'No scores, just quotes.' },
   front: {
     kicker: { open: 'open now', quotes: 'quotes', dishes: 'menu items' },
     hero: { before: 'Fancy some', eat: '', after: 'tonight?', words: ['xiaolongbao', 'roujiamo', 'mango sago', 'roast duck', 'malatang'] },

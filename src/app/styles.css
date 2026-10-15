@@ -1,4 +1,4 @@
-/* 伦敦干饭地图 · London Chinese Food: the reader's stylesheet. The admin console adds settings/settings.css.
+/* 伦敦中餐地图 · London Chinese Food: the reader's stylesheet. The admin console adds settings/settings.css.
 
    London's Underground map, drawn for Chinese food: a warm paper page, deep ink, and eight line
    colours that stand for families of cuisines (kinds/vocab.ts, LINES), all meeting at Chinatown.
@@ -3424,7 +3424,7 @@ a.dish-name:hover {
   }
 }
 
-/* ───────── 伦敦干饭地图: the Underground, drawn for Chinese food ───────── */
+/* ───────── 伦敦中餐地图: the Underground, drawn for Chinese food ───────── */
 
 /* Board colours stay the same in both themes: the board is always dark. */
 :root {

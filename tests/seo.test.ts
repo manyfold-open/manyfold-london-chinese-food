@@ -23,7 +23,7 @@ const doc = {
 describe('page meta', () => {
   it('describes a place in the page language, with its address, cuisine and dishes, and no rating', () => {
     const meta = placeMeta(doc, 'zh', '/place/x/example-noodle-house', 'https://site/zh/place/x');
-    expect(meta.title).toBe('示例面馆 Example Noodle House · 餐厅 · 威斯敏斯特 · 伦敦干饭地图');
+    expect(meta.title).toBe('示例面馆 Example Noodle House · 餐厅 · 威斯敏斯特 · 伦敦中餐地图');
     expect(meta.description).toContain('12 Example Street, W1D 6JW.');
     expect(meta.description).toContain('菜单有油泼面');
     expect(meta.description).toContain('没有评分');
@@ -31,7 +31,7 @@ describe('page meta', () => {
     expect(english.title).toBe('Example Noodle House (示例面馆) — Restaurant in Westminster · London Chinese Food');
     const { name_zh: _, ...englishName } = doc.place;
     const englishOnly = { ...doc, place: englishName } as PlaceDoc;
-    expect(placeMeta(englishOnly, 'zh', '/place/x', 'https://site/zh/place/x').title).toBe('Example Noodle House · 餐厅 · 威斯敏斯特 · 伦敦干饭地图');
+    expect(placeMeta(englishOnly, 'zh', '/place/x', 'https://site/zh/place/x').title).toBe('Example Noodle House · 餐厅 · 威斯敏斯特 · 伦敦中餐地图');
   });
 
   it('gives a place structured data with no rating at all', () => {
@@ -43,7 +43,7 @@ describe('page meta', () => {
   it('answers 404 for a place that is not public and a page that does not exist', () => {
     expect(placeMeta(null, 'en', '/place/x', '').status).toBe(404);
     expect(pathMeta('en', '/nowhere').status).toBe(404);
-    expect(pathMeta('zh', '/dish/%E6%B2%B9%E6%B3%BC%E9%9D%A2').title).toBe('伦敦哪里吃得到油泼面 · 伦敦干饭地图');
+    expect(pathMeta('zh', '/dish/%E6%B2%B9%E6%B3%BC%E9%9D%A2').title).toBe('伦敦哪里吃得到油泼面 · 伦敦中餐地图');
   });
 
   it('picks the language: an earlier choice, then the browser, then Chinese', () => {
@@ -68,7 +68,7 @@ describe('titles', () => {
       }
       expect(placeTitle(doc.place, locale)).toBe(placeMeta(doc, locale, '/place/x', '').title);
     }
-    expect(pathTitle('zh', '/').title).toBe('伦敦干饭地图 · London Chinese Food — 伦敦哪里吃得到中国菜');
+    expect(pathTitle('zh', '/').title).toBe('伦敦中餐地图 · London Chinese Food — 伦敦哪里吃得到中国菜');
     expect(pathTitle('en', `/dish/${encodeURIComponent('叉烧肠粉')}`).title).toBe('Where to eat Char siu cheung fun in London · London Chinese Food');
     expect(pathTitle('en', '/nowhere')).toEqual({ found: false, title: 'Page not found · London Chinese Food' });
   });

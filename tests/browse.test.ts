@@ -141,9 +141,9 @@ describe('the pages', () => {
   });
 
   it('have titles, and an unknown line, campus or guide is not found', () => {
-    expect(pathTitle('zh', '/line/north')).toEqual({ found: true, title: '北方线 · 伦敦干饭地图' });
+    expect(pathTitle('zh', '/line/north')).toEqual({ found: true, title: '北方线 · 伦敦中餐地图' });
     expect(pathTitle('en', '/near/ucl')).toEqual({ found: true, title: 'Chinese food near UCL · London Chinese Food' });
-    expect(pathTitle('zh', '/guide/full-for-a-tenner/ucl').title).toBe('伦敦 £10 吃饱指南 · UCL · 伦敦干饭地图');
+    expect(pathTitle('zh', '/guide/full-for-a-tenner/ucl').title).toBe('伦敦 £10 吃饱指南 · UCL · 伦敦中餐地图');
     expect(pathTitle('en', '/map').found).toBe(true);
     for (const rest of ['/line/nowhere', '/near/oxford', '/guide/nothing', '/guide/full-for-a-tenner/oxford', '/guide/hotpot-night/ucl']) expect(pathTitle('zh', rest).found, rest).toBe(false);
   });
