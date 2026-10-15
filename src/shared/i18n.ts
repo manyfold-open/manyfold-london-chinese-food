@@ -733,7 +733,7 @@ const en: Copy = {
   brand: { name: 'London Chinese Food', sub: 'THE EATING MAP · 伦敦中餐地图', motto: 'No scores, just quotes.' },
   front: {
     kicker: { open: 'open now', quotes: 'quotes', dishes: 'menu items' },
-    hero: { before: 'Fancy some', eat: '', after: 'tonight?', words: ['xiaolongbao', 'roujiamo', 'mango sago', 'roast duck', 'malatang'] },
+    hero: { before: 'Fancy some', eat: '', after: ' tonight?', words: ['xiaolongbao', 'roujiamo', 'mango sago', 'roast duck', 'malatang'] },
     search: 'A place, a dish, a postcode or your uni',
     go: 'Go',
     chips: { near: (campus) => `Near ${campus}`, tenner: 'Full for a tenner', home: 'Taste of home', boba: 'Bubble tea run', hotpot: 'Hotpot night' },

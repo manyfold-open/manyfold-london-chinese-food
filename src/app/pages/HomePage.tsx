@@ -89,7 +89,6 @@ export function HomePage() {
             <br />
             {copy.front.hero.eat}
             <Rotator words={copy.front.hero.words} />
-            {locale === 'en' ? <br /> : null}
             {copy.front.hero.after}
           </h1>
           <form className="front-search" role="search" onSubmit={submit}>

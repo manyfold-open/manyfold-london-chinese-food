@@ -4133,17 +4133,19 @@ a.mk:hover {
 }
 
 .front-title {
-  font-size: 64px;
-  line-height: 1.12;
+  --title-size: 64px;
+  --title-line: calc(var(--title-size) * 1.12);
+  font-size: var(--title-size);
+  line-height: var(--title-line);
 }
 
 html:lang(en) .front-title {
-  font-size: 60px;
+  font-size: min(var(--title-size), 11.2cqi);
 }
 
 .rotator {
   display: inline-block;
-  height: 1.12em;
+  height: var(--title-line);
   margin: 0 0.1em;
   padding: 0 0.14em;
   border-radius: 10px;
@@ -4163,7 +4165,7 @@ html:lang(en) .front-title {
 
 .rotator-track span {
   display: block;
-  height: 1.12em;
+  height: var(--title-line);
 }
 
 @keyframes rotate-words {
@@ -4173,22 +4175,22 @@ html:lang(en) .front-title {
   }
   20%,
   37% {
-    transform: translateY(-1.12em);
+    transform: translateY(calc(-1 * var(--title-line)));
   }
   40%,
   57% {
-    transform: translateY(-2.24em);
+    transform: translateY(calc(-2 * var(--title-line)));
   }
   60%,
   77% {
-    transform: translateY(-3.36em);
+    transform: translateY(calc(-3 * var(--title-line)));
   }
   80%,
   97% {
-    transform: translateY(-4.48em);
+    transform: translateY(calc(-4 * var(--title-line)));
   }
   100% {
-    transform: translateY(-5.6em);
+    transform: translateY(calc(-5 * var(--title-line)));
   }
 }
 
@@ -4258,6 +4260,7 @@ html:lang(en) .front-title {
 
 .map-legend {
   position: absolute;
+  container-type: inline-size;
   left: 16px;
   bottom: 16px;
   display: grid;
@@ -4300,6 +4303,8 @@ html:lang(en) .front-title {
 .section-head {
   display: flex;
   flex-wrap: wrap;
+/* The English title's second line, "[xiaolongbao] tonight?", is about 8.7em wide: it shrinks to
+   fit its column but keeps the Chinese lines' height, so both titles stand the same. */
   align-items: baseline;
   gap: 6px 16px;
   margin-bottom: 18px;
@@ -5576,11 +5581,7 @@ html:lang(en) .front-title {
   }
 
   .front-title {
-    font-size: 44px;
-  }
-
-  html:lang(en) .front-title {
-    font-size: 46px;
+    --title-size: 44px;
   }
 
   .front-map {
