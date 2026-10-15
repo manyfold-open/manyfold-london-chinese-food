@@ -12,7 +12,10 @@ import { useCopy, useLocale } from '../i18n';
 import { boroughLabel, placeNames, subjectLabel } from '../labels';
 import { Link } from '../router';
 import { paths } from '../routes';
-import { Button, CheckRow, RadioPills, Sheet, Textarea, TextField, useToast } from '../ui';
+import { useTheme } from '../theme';
+import { Button, CheckRow, FilePicker, RadioPills, Sheet, SuggestField, Textarea, TextField, useToast } from '../ui';
+
+const PHOTO_TYPES = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 
 const SUBJECTS = ['dish', 'menu', 'storefront', 'interior', 'other'] as const;
 type Subject = (typeof SUBJECTS)[number];
@@ -20,7 +23,10 @@ type Subject = (typeof SUBJECTS)[number];
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: { sitekey: string; action: string; callback: (token: string) => void; 'expired-callback': () => void; language?: string }) => string;
+      render: (
+        element: HTMLElement,
+        options: { sitekey: string; action: string; callback: (token: string) => void; 'expired-callback': () => void; language?: string; theme?: 'light' | 'dark'; size?: 'flexible' },
+      ) => string;
       remove: (id: string) => void;
     };
   }
@@ -44,6 +50,8 @@ function loadTurnstile(): Promise<void> {
 function Turnstile({ onAnswer }: { onAnswer: (token: string | null) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const locale = useLocale();
+  // The site's theme, not the system's (Turnstile's own "auto" follows the system).
+  const [theme] = useTheme();
   useEffect(() => {
     let id: string | null = null;
     let cancelled = false;
@@ -56,6 +64,8 @@ function Turnstile({ onAnswer }: { onAnswer: (token: string | null) => void }) {
           sitekey: turnstile_site_key,
           action: 'photo-upload',
           language: locale === 'zh' ? 'zh-cn' : 'en',
+          theme,
+          size: 'flexible',
           callback: (token) => onAnswer(token),
           'expired-callback': () => onAnswer(null),
         });
@@ -65,7 +75,7 @@ function Turnstile({ onAnswer }: { onAnswer: (token: string | null) => void }) {
       cancelled = true;
       if (id && window.turnstile) window.turnstile.remove(id);
     };
-  }, [locale, onAnswer]);
+  }, [locale, onAnswer, theme]);
   return <div className="turnstile" ref={box} />;
 }
 
@@ -117,7 +127,14 @@ export function UploadSheet({ open, onClose, placeId, dishes }: { open: boolean;
         <p className="form-note">{copy.upload.rules}</p>
         <label className="field">
           <span>{copy.upload.file}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+          <FilePicker
+            accept={PHOTO_TYPES}
+            files={file ? [file] : []}
+            label={copy.upload.file}
+            choose={copy.upload.choose}
+            change={copy.upload.change}
+            onChange={(chosen) => setFile(chosen[0] ?? null)}
+          />
         </label>
         <div className="field">
           <span>{copy.upload.subject}</span>
@@ -126,12 +143,7 @@ export function UploadSheet({ open, onClose, placeId, dishes }: { open: boolean;
         {subject === 'dish' ? (
           <label className="field">
             <span>{copy.upload.dishName}</span>
-            <TextField value={dish} maxLength={60} list="upload-dishes" onChange={(event) => setDish(event.target.value)} />
-            <datalist id="upload-dishes">
-              {dishes.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
+            <SuggestField value={dish} suggestions={dishes} maxLength={60} onChange={setDish} />
           </label>
         ) : null}
         <label className="field">
@@ -224,11 +236,14 @@ export function MenuSheet({ open, onClose, placeId }: { open: boolean; onClose: 
           <>
             <label className="field">
               <span>{copy.menuSheet.pages}</span>
-              <input
-                type="file"
+              <FilePicker
+                accept={PHOTO_TYPES}
                 multiple
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                onChange={(event) => setPages([...(event.target.files ?? [])])}
+                files={pages}
+                label={copy.menuSheet.pages}
+                choose={copy.menuSheet.choose}
+                change={copy.upload.change}
+                onChange={setPages}
               />
               <small className="field-help">
                 {pages.length > MENU_PAGES_MAX ? copy.menuSheet.tooManyPages : pages.length > 0 ? copy.menuSheet.pagesChosen(pages.length) : copy.menuSheet.pagesHelp}

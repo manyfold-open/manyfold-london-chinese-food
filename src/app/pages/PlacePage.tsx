@@ -27,7 +27,7 @@ import { boroughLabel, categoryLabel, cuisineLabel, dietaryLabel, languageLabel,
 import { mapLinks } from '../model/maps';
 import { Link, useEntryState } from '../router';
 import { paths } from '../routes';
-import { Button, CheckRow, Icon, Menu, Segmented, Skeleton, useToast } from '../ui';
+import { Button, CheckRow, FadeImg, Icon, Menu, PhotoViewer, Segmented, Skeleton, useToast, type ViewerPhoto } from '../ui';
 import { NotFoundPage } from './TextPages';
 
 type Tab = 'menu' | 'reviews' | 'photos';
@@ -45,6 +45,17 @@ const linkKind = (url: string): 'pdf' | 'image' | 'page' => {
 const itemsOf = (doc: PlaceDoc): DocItem[] => doc.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items));
 
 /** The dishes the quotes name, most named first, with how many quotes name each. */
+/** A place's photos for the viewer, large, with what each shows. */
+function viewerPhotos(photos: PlaceDoc['photos'], locale: ReturnType<typeof useLocale>): ViewerPhoto[] {
+  return photos.map((photo) => {
+    const shows = photo.dish_name ?? subjectLabel(photo.subject, locale);
+    return { src: appUrl(`/media/p/${photo.id}/full.webp`), alt: shows, caption: [shows, photo.caption].filter(Boolean).join(' · ') };
+  });
+}
+
+/** A click that asks for the photo in a tab of its own (a modifier, the middle button) goes there. */
+const ownTab = (event: React.MouseEvent) => event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+
 function mentionCounts(reviews: readonly DocReview[]): { key: string; dish: string | null; name: string; count: number }[] {
   const counts = new Map<string, { key: string; dish: string | null; name: string; count: number }>();
   for (const review of reviews) {
@@ -283,6 +294,7 @@ function Collage({ doc, illustrations, onUpload }: { doc: PlaceDoc; illustration
   const copy = useCopy();
   const locale = useLocale();
   const [wanted] = useAiPreference();
+  const [viewing, setViewing] = useState<number | null>(null);
   const photos = doc.photos.filter((photo) => photo.subject !== 'menu').slice(0, 3);
   const photographed = new Set(itemsOf(doc).flatMap((item) => (item.photo && item.dish ? [item.dish] : [])));
   const candidates = [...mentionCounts(doc.reviews).map((m) => m.dish), ...itemsOf(doc).map((item) => item.dish), ...doc.mentioned.map((m) => m.dish)];
@@ -290,11 +302,23 @@ function Collage({ doc, illustrations, onUpload }: { doc: PlaceDoc; illustration
   const tiles = photos.length + drawn.length;
   return (
     <div className={`collage tiles-${Math.min(3, tiles + (photos.length === 0 ? 1 : 0))}`}>
-      {photos.map((photo) => (
-        <a key={photo.id} className="collage-tile" href={appUrl(`/media/p/${photo.id}/full.webp`)} target="_blank" rel="noopener">
-          <img src={appUrl(`/media/p/${photo.id}/${tiles === 1 ? 'full' : 'thumb'}.webp`)} alt={photo.dish_name ?? subjectLabel(photo.subject, locale)} />
+      {photos.map((photo, index) => (
+        <a
+          key={photo.id}
+          className="collage-tile"
+          href={appUrl(`/media/p/${photo.id}/full.webp`)}
+          target="_blank"
+          rel="noopener"
+          onClick={(event) => {
+            if (ownTab(event)) return;
+            event.preventDefault();
+            setViewing(index);
+          }}
+        >
+          <FadeImg src={appUrl(`/media/p/${photo.id}/${tiles === 1 ? 'full' : 'thumb'}.webp`)} alt={photo.dish_name ?? subjectLabel(photo.subject, locale)} draggable={false} />
         </a>
       ))}
+      <PhotoViewer photos={viewerPhotos(photos, locale)} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} words={copy.viewer} />
       {drawn.map((dish, i) => (
         <span key={dish} className="collage-tile">
           <DishImage photo={null} dish={dish} name={dish} illustrations={illustrations} size={i === 0 && photos.length === 0 ? 'full' : 'thumb'} />
@@ -714,13 +738,23 @@ function ReviewCard({ review, onReport }: { review: DocReview; onReport: () => v
 function PhotosTab({ doc }: { doc: PlaceDoc }) {
   const copy = useCopy();
   const locale = useLocale();
+  const [viewing, setViewing] = useState<number | null>(null);
   if (doc.photos.length === 0) return <p className="empty">{copy.place.noPhotos}</p>;
   return (
     <section className="photos">
-      {doc.photos.map((photo) => (
+      {doc.photos.map((photo, index) => (
         <figure key={photo.id}>
-          <a href={appUrl(`/media/p/${photo.id}/full.webp`)} target="_blank" rel="noopener">
-            <img src={appUrl(`/media/p/${photo.id}/thumb.webp`)} alt={photo.dish_name ?? subjectLabel(photo.subject, locale)} loading="lazy" decoding="async" />
+          <a
+            href={appUrl(`/media/p/${photo.id}/full.webp`)}
+            target="_blank"
+            rel="noopener"
+            onClick={(event) => {
+              if (ownTab(event)) return;
+              event.preventDefault();
+              setViewing(index);
+            }}
+          >
+            <FadeImg src={appUrl(`/media/p/${photo.id}/thumb.webp`)} alt={photo.dish_name ?? subjectLabel(photo.subject, locale)} loading="lazy" decoding="async" draggable={false} />
           </a>
           <figcaption>
             {photo.dish_name ?? subjectLabel(photo.subject, locale)}
@@ -729,6 +763,7 @@ function PhotosTab({ doc }: { doc: PlaceDoc }) {
           </figcaption>
         </figure>
       ))}
+      <PhotoViewer photos={viewerPhotos(doc.photos, locale)} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} words={copy.viewer} />
     </section>
   );
 }

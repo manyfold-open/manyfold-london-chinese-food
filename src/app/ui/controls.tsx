@@ -8,7 +8,9 @@ import {
   forwardRef,
   useEffect,
   useId,
+  useMemo,
   useRef,
+  useState,
   type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -364,20 +366,169 @@ export function SearchField({
   );
 }
 
+/* The browser's own history of what was typed would open its own dropdown over ours: off by default. */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea(
-  { className, ...rest },
+  { className, autoComplete = 'off', ...rest },
   ref,
 ) {
-  return <textarea ref={ref} className={cx('textarea', className)} {...rest} />;
+  return <textarea ref={ref} className={cx('textarea', className)} autoComplete={autoComplete} {...rest} />;
 });
 
 /** One line of text, styled as the Textarea. Only the plain text types: pickers have their own controls. */
 export const TextField = forwardRef<
   HTMLInputElement,
   Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & { type?: 'text' | 'email' | 'url' }
->(function TextField({ className, type = 'text', ...rest }, ref) {
-  return <input ref={ref} type={type} className={cx('text-field', className)} {...rest} />;
+>(function TextField({ className, type = 'text', autoComplete = 'off', ...rest }, ref) {
+  return <input ref={ref} type={type} className={cx('text-field', className)} autoComplete={autoComplete} {...rest} />;
 });
+
+/**
+ * A text field that suggests from a list as the reader types, in our listbox rather than a
+ * native <datalist>: arrow keys move, Enter takes the suggestion, Escape closes the list.
+ * What the reader types stands as it is; a suggestion only saves typing.
+ */
+export function SuggestField({
+  value,
+  suggestions,
+  onChange,
+  maxLength,
+  limit = 8,
+}: {
+  value: string;
+  suggestions: readonly string[];
+  onChange: (value: string) => void;
+  maxLength?: number;
+  limit?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const id = useId();
+  const query = value.trim().toLowerCase();
+  const matches = useMemo(
+    () => suggestions.filter((name) => name.toLowerCase() !== query && (!query || name.toLowerCase().includes(query))).slice(0, limit),
+    [suggestions, query, limit],
+  );
+  const shown = open && matches.length > 0;
+  const pick = (name: string) => {
+    onChange(name);
+    setOpen(false);
+    setActive(-1);
+  };
+
+  return (
+    <div className="suggest">
+      <input
+        type="text"
+        className="text-field"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={shown}
+        aria-controls={id}
+        aria-activedescendant={shown && active >= 0 ? `${id}-${active}` : undefined}
+        autoComplete="off"
+        spellCheck={false}
+        maxLength={maxLength}
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+          setActive(-1);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!shown) return setOpen(true);
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            setActive((Math.max(active, step > 0 ? -1 : 0) + step + matches.length) % matches.length);
+          } else if (event.key === 'Enter' && shown && active >= 0 && matches[active]) {
+            event.preventDefault();
+            pick(matches[active]!);
+          } else if (event.key === 'Escape' && shown) {
+            event.preventDefault();
+            setOpen(false);
+          }
+        }}
+      />
+      {shown ? (
+        <div className="menu-list select-list suggest-list" role="listbox" id={id}>
+          {matches.map((name, index) => (
+            <div
+              key={name}
+              id={`${id}-${index}`}
+              role="option"
+              aria-selected={index === active}
+              className={index === active ? 'menu-item active' : 'menu-item'}
+              onMouseEnter={() => setActive(index)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => pick(name)}
+            >
+              {name}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Photos from the reader's device, without the browser's own file button: a tile that opens the
+ * picker (the input stays in the page, hidden, so the keyboard and screen readers still reach it)
+ * and, once chosen, shows the pictures themselves.
+ */
+export function FilePicker({
+  accept,
+  multiple,
+  files,
+  label,
+  choose,
+  change,
+  onChange,
+}: {
+  accept: string;
+  multiple?: boolean;
+  files: readonly File[];
+  /** Accessible name of the input: the field's visible label. */
+  label: string;
+  /** The tile's words before anything is chosen, and after. */
+  choose: string;
+  change: string;
+  onChange: (files: File[]) => void;
+}) {
+  const previews = useMemo(() => files.slice(0, 10).map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
+  useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews]);
+  return (
+    <span className={cx('file-pick', files.length > 0 && 'chosen', files.length > 1 && 'many')}>
+      <input
+        type="file"
+        className="file-pick-input"
+        accept={accept}
+        multiple={multiple}
+        aria-label={label}
+        onChange={(event) => {
+          onChange([...(event.target.files ?? [])]);
+          event.target.value = ''; // the same file chosen again still reports a change
+        }}
+      />
+      {previews.length > 0 ? (
+        <span className="file-pick-thumbs" aria-hidden="true">
+          {previews.map((preview) => (
+            <img key={preview.url} src={preview.url} alt="" />
+          ))}
+        </span>
+      ) : null}
+      <span className="file-pick-face">
+        <Icon name="camera" size={18} />
+        <span>
+          {files.length > 0 ? change : choose}
+          {files.length === 1 ? <small>{files[0]!.name}</small> : null}
+        </span>
+      </span>
+    </span>
+  );
+}
 
 /* ───────── labels ───────── */
 

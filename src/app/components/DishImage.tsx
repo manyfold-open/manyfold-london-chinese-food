@@ -7,7 +7,7 @@
 import { appUrl } from '../base';
 import { useAiPreference } from '../ai';
 import { useCopy } from '../i18n';
-import { Icon } from '../ui';
+import { FadeImg, Icon } from '../ui';
 
 export interface DishPictureInput {
   photo: string | null;
@@ -27,7 +27,7 @@ export function DishImage({
   if (photo) {
     return (
       <span className="dish-image">
-        <img src={appUrl(`/media/p/${photo}/${size}.webp`)} alt={name} loading="lazy" decoding="async" />
+        <FadeImg src={appUrl(`/media/p/${photo}/${size}.webp`)} alt={name} loading="lazy" decoding="async" />
       </span>
     );
   }
@@ -35,7 +35,7 @@ export function DishImage({
   if (illustration) {
     return (
       <span className="dish-image ai">
-        <img src={appUrl(`/media/i/${illustration}/${size}.webp`)} alt={copy.ai.alt(name)} loading="lazy" decoding="async" />
+        <FadeImg src={appUrl(`/media/i/${illustration}/${size}.webp`)} alt={copy.ai.alt(name)} loading="lazy" decoding="async" />
         <span className="ai-badge">{copy.ai.badge}</span>
       </span>
     );

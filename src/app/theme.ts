@@ -39,9 +39,19 @@ const subscribe = (onChange: () => void) => {
   };
 };
 
+/** The browser's own bars (Safari's, Chrome on Android) in the page's background. */
+const BARS: Record<Theme, string> = { light: '#faf7f0', dark: '#11141c' };
+
 /** Shows a theme now and keeps it for next time, even if the browser refuses to store it. */
 export function setTheme(theme: Theme): void {
-  document.documentElement.setAttribute('data-theme', theme);
+  const apply = () => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('meta[name="theme-color"]').forEach((bar) => bar.setAttribute('content', BARS[theme]));
+  };
+  // The page crossfades from one theme to the other where the browser can, rather than cutting.
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (document.startViewTransition && !still) document.startViewTransition(apply);
+  else apply();
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {

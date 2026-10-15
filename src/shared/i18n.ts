@@ -290,6 +290,8 @@ export interface Copy {
     caption: string;
     attribution: string;
     file: string;
+    choose: string;
+    change: string;
     license: string;
     send: string;
     sending: string;
@@ -308,6 +310,7 @@ export interface Copy {
     pages: string;
     pagesHelp: string;
     pagesChosen: (count: number) => string;
+    choose: string;
     tooManyPages: string;
     license: string;
     send: string;
@@ -354,6 +357,8 @@ export interface Copy {
   theme: { light: string; dark: string };
   /** The words that close a sheet. */
   close: string;
+  /** A photo shown large over the page. */
+  viewer: { close: string; previous: string; next: string };
 }
 
 const zh: Copy = {
@@ -623,6 +628,8 @@ const zh: Copy = {
     caption: '说明（选填）',
     attribution: '署名（选填）',
     file: '照片',
+    choose: '选择照片',
+    change: '换一张',
     license: '这是我拍的照片，我同意以 CC BY 4.0 许可发布。',
     send: '上传',
     sending: '上传中',
@@ -641,6 +648,7 @@ const zh: Copy = {
     pages: '菜单照片',
     pagesHelp: '每页拍一张，按页码顺序选好，最多 10 张。拍清楚菜名和价格，避开人脸。',
     pagesChosen: (count) => `已选 ${count} 页`,
+    choose: '选择照片（可多选）',
     tooManyPages: '一次最多 10 页。',
     license: '这些照片是我拍的，我同意以 CC BY 4.0 许可发布。',
     send: '提交',
@@ -720,6 +728,7 @@ const zh: Copy = {
   attribution: '数据：店铺与菜单 CC BY 4.0；评价摘录版权归原作者；邮编数据 © ONS / Royal Mail，OGL；车站数据 Powered by TfL Open Data，含 OS 数据 © Crown copyright and database rights。',
   theme: { light: '浅色', dark: '深色' },
   close: '关闭',
+  viewer: { close: '关闭照片', previous: '上一张', next: '下一张' },
 };
 
 const en: Copy = {
@@ -995,6 +1004,8 @@ const en: Copy = {
     caption: 'Caption (optional)',
     attribution: 'Credit (optional)',
     file: 'Photo',
+    choose: 'Choose a photo',
+    change: 'Choose again',
     license: 'I took this photo and agree to publish it under CC BY 4.0.',
     send: 'Upload',
     sending: 'Uploading',
@@ -1013,6 +1024,7 @@ const en: Copy = {
     pages: 'Photos of the menu',
     pagesHelp: 'One photo a page, chosen in page order, up to 10. Make the names and prices sharp, and keep faces out.',
     pagesChosen: (count) => `${count} ${count === 1 ? 'page' : 'pages'} chosen`,
+    choose: 'Choose photos',
     tooManyPages: 'At most 10 pages at once.',
     license: 'I took these photos and agree to publish them under CC BY 4.0.',
     send: 'Send',
@@ -1092,6 +1104,7 @@ const en: Copy = {
   attribution: 'Data: places and menus CC BY 4.0; review excerpts remain their authors’; postcode data © ONS / Royal Mail, OGL; station data Powered by TfL Open Data, contains OS data © Crown copyright and database rights.',
   theme: { light: 'Light', dark: 'Dark' },
   close: 'Done',
+  viewer: { close: 'Close photo', previous: 'Previous photo', next: 'Next photo' },
 };
 
 export const COPY: Record<Locale, Copy> = { zh, en };

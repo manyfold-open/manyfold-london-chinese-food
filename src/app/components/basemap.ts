@@ -50,5 +50,20 @@ export function foldCredits(map: MapLibre): void {
   map.once('remove', () => clearTimeout(timer));
 }
 
+/**
+ * MapLibre names its buttons with `title` as well as `aria-label`, and a title draws the system's
+ * own tooltip. The titles go (whenever MapLibre sets them again); the stylesheet shows the
+ * aria-label in the site's tooltip instead.
+ */
+export function quietTitles(map: MapLibre): void {
+  const controls = map.getContainer().querySelector('.maplibregl-control-container');
+  if (!controls) return;
+  const strip = () => controls.querySelectorAll('[title]').forEach((element) => element.removeAttribute('title'));
+  strip();
+  const watcher = new MutationObserver(strip);
+  watcher.observe(controls, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
+  map.once('remove', () => watcher.disconnect());
+}
+
 /** A colour token of the page as it is now: MapLibre paints with values, not CSS variables. */
 export const token = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();

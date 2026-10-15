@@ -198,7 +198,7 @@ export function QuickFilters({ filters, counts, onChange }: { filters: Filters; 
           {CAMPUSES.map((campus) => {
             const on = filters.campus === campus.id;
             return (
-              <button key={campus.id} type="button" className="quick-chip" aria-pressed={on} title={campus.name[locale]} style={lineVars(campus.line)} onClick={() => onChange({ ...filters, campus: on ? null : campus.id })}>
+              <button key={campus.id} type="button" className="quick-chip" aria-pressed={on} aria-label={`${campus.short} · ${campus.name[locale]}`} style={lineVars(campus.line)} onClick={() => onChange({ ...filters, campus: on ? null : campus.id })}>
                 <i aria-hidden="true" />
                 {campus.short}
               </button>
