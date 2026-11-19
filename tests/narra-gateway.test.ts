@@ -4,6 +4,7 @@ import {
   sanitizeMobileLinks,
   staggerWindowMinute,
   type InboundEvent,
+  type RecallTurnResult,
   type RoomContext,
 } from '@manyfold/narra-agent-kit';
 import { isNarraGatewayEnabled, kickNarraGateway } from '@manyfold/narra-agent-kit/worker';
@@ -22,6 +23,7 @@ import {
   LCF_AGENT_SPEC,
   LCF_MATRIX_ID,
   queryRecentOpenPlaceUpdates,
+  resolveMemoryLocationHint,
 } from '../src/worker/narra/gateway';
 import type { Env } from '../src/worker/types';
 import { createD1 } from './d1';
@@ -923,5 +925,82 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       emptyMem,
     );
     expect(followUpReply).toContain('Bloomsbury Dumpling House');
+  });
+
+  it('9. resolves UCL automatically from note_abcd1234 user memory on "附近有什麼川菜推薦？"', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+
+    const noteMem: RecallTurnResult = {
+      userMemories: [
+        {
+          id: 'mem_note_skip',
+          scope: 'user',
+          agentId: LCF_AGENT_ID,
+          userId: '@alice:matrix.netmind.chat',
+          originChatType: 'dm',
+          kind: 'preference',
+          key: 'note_00001111',
+          value: '我不吃香菜',
+          createdAt: '2026-11-19T11:50:00Z',
+          updatedAt: '2026-11-19T11:50:00Z',
+        },
+        {
+          id: 'mem_note_ucl',
+          scope: 'user',
+          agentId: LCF_AGENT_ID,
+          userId: '@alice:matrix.netmind.chat',
+          originChatType: 'dm',
+          kind: 'preference',
+          key: 'note_abcd1234',
+          value: '我平常都在 UCL 附近活動，最愛吃川菜',
+          createdAt: '2026-11-19T12:00:00Z',
+          updatedAt: '2026-11-19T12:00:00Z',
+        },
+      ],
+      roomMemories: [],
+      promptSafeLines: [],
+    };
+
+    const hinted = resolveMemoryLocationHint(noteMem, 'zh-Hant', []);
+    expect(hinted?.label).toBe('UCL');
+    expect(hinted?.campus?.id).toBe('ucl');
+
+    const exactNoteHint = resolveMemoryLocationHint(
+      {
+        userMemories: [
+          {
+            id: 'mem_note_exact',
+            scope: 'user',
+            agentId: LCF_AGENT_ID,
+            userId: '@alice:matrix.netmind.chat',
+            originChatType: 'dm',
+            kind: 'preference',
+            key: 'note',
+            value: '常在 Soho 活動',
+            createdAt: '2026-11-19T12:00:00Z',
+            updatedAt: '2026-11-19T12:00:00Z',
+          },
+        ],
+        roomMemories: [],
+        promptSafeLines: [],
+      },
+      'zh-Hant',
+      [],
+    );
+    expect(exactNoteHint?.label).toBe('Soho');
+
+    const reply = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', text: '附近有什麼川菜推薦？' }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      noteMem,
+    );
+    expect(reply).toBeTruthy();
+    expect(reply).toContain('UCL');
+    expect(reply).toContain('Soho Sichuan House');
+    expect(reply).toContain('https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001');
+    expect(findRating(reply!)).toBeNull();
   });
 });

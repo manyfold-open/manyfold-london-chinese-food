@@ -460,7 +460,7 @@ const CATEGORY_KEYWORDS: ReadonlyArray<{ category: string; patterns: string[] }>
   { category: 'takeaway', patterns: ['takeaway', '外賣', '外卖'] },
 ];
 
-interface ResolvedLocation {
+export interface ResolvedLocation {
   label: string;
   point?: { lat: number; lng: number };
   km?: number;
@@ -1109,10 +1109,21 @@ function hasA2ACredential(env: Env): boolean {
   return Boolean((env.MANYFOLD_A2A_URL ?? '').trim() && (env.MANYFOLD_A2A_TOKEN ?? '').trim());
 }
 
-function resolveMemoryLocationHint(memories: RecallTurnResult, lang: LangCode, entries: readonly IndexEntry[]): ResolvedLocation | null {
+export function resolveMemoryLocationHint(
+  memories: RecallTurnResult,
+  lang: LangCode,
+  entries: readonly IndexEntry[],
+): ResolvedLocation | null {
   const all = [...memories.userMemories, ...memories.roomMemories];
   for (const m of all) {
-    if (m.key === 'campus' || m.key === 'default_area' || m.key === 'area' || m.key === 'postcode') {
+    if (
+      m.key === 'campus' ||
+      m.key === 'default_area' ||
+      m.key === 'area' ||
+      m.key === 'postcode' ||
+      m.key === 'note' ||
+      m.key.startsWith('note_')
+    ) {
       const resolved = extractLocation(m.value, lang, entries);
       if (resolved) return resolved;
     }
