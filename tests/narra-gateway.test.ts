@@ -8,6 +8,7 @@ import {
   type InboundEvent,
   type RecallTurnResult,
   type RoomContext,
+  type TriageDecision,
 } from '@manyfold/narra-agent-kit';
 import { isNarraGatewayEnabled, kickNarraGateway } from '@manyfold/narra-agent-kit/worker';
 import { findRating } from '../src/shared/rating-guard.ts';
@@ -1417,5 +1418,93 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(aiPrompts).toHaveLength(1);
     expect(aiPrompts[0]).toContain('by the way / 順便');
     expect(aiPrompts[0]).toContain('NOT weekend markets');
+  });
+
+  it('14. silences meeting-room chatter during active_session while keeping tube and closing-hours follow-ups working', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const nowMs = Date.now();
+
+    const firstQueryText = 'Covent Garden 附近有什麼川菜？';
+    const firstReplyText = '🍜 為你查到 1 間營業中選擇（Covent Garden 一帶）：\n• Soho Sichuan House / 蘇豪川菜館';
+    const activeCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-f9388b28:matrix.netmind.chat', displayName: 'Spotted London', isAgent: true },
+      ],
+      activeSession: { active: true, lastAgentReplyAtMs: nowMs - 10_000, expiresAtMs: nowMs + 170_000 },
+      recentHistory: [
+        {
+          eventId: '$ev_cg_sichuan_1',
+          senderId: '@alice:matrix.netmind.chat',
+          senderName: 'Alice',
+          isAgent: false,
+          text: firstQueryText,
+          timestampMs: nowMs - 20_000,
+        },
+        {
+          eventId: '$ev_cg_lcf_1',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: firstReplyText,
+          timestampMs: nowMs - 10_000,
+        },
+      ],
+    };
+
+    const meetingEvent = makeEvent({
+      eventId: '$ev_meeting_chatter',
+      text: '對了大家晚點要訂幾點的會議室？',
+      timestampMs: nowMs,
+    });
+    const meetingDecision = await routeEvent(meetingEvent, activeCtx, LCF_AGENT_SPEC);
+    expect(meetingDecision.shouldReply).toBe(false);
+    expect(meetingDecision.reason).toBe('active_session_chatter');
+
+    const activeSessionDecision: TriageDecision = {
+      shouldReply: true,
+      tier: 0,
+      reason: 'active_session',
+      confidence: 0.95,
+      detectedLang: 'zh-Hant',
+      shouldQuote: true,
+    };
+    const meetingReply = await fastRespondLcf(env, meetingEvent, activeSessionDecision, emptyMem, activeCtx);
+    expect(meetingReply).toBe('[NO_REPLY]');
+
+    const tubeEvent = makeEvent({
+      eventId: '$ev_cg_tube_followup',
+      text: '有沒有離地鐵站近一點的？',
+      timestampMs: nowMs + 1_000,
+    });
+    const tubeDecision = await routeEvent(tubeEvent, activeCtx, LCF_AGENT_SPEC);
+    expect(tubeDecision.shouldReply).toBe(true);
+    expect(tubeDecision.reason).toBe('active_session');
+    const tubeReply = await fastRespondLcf(env, tubeEvent, tubeDecision, emptyMem, activeCtx);
+    expect(tubeReply).toBeTruthy();
+    expect(tubeReply).not.toBe('[NO_REPLY]');
+    expect(tubeReply).toContain('Soho Sichuan House');
+    expect(tubeReply).toContain('Covent Garden');
+
+    const hoursEvent = makeEvent({
+      eventId: '$ev_cg_hours_followup',
+      text: '他們幾點關門？',
+      timestampMs: nowMs + 2_000,
+    });
+    const hoursDecision = await routeEvent(hoursEvent, activeCtx, LCF_AGENT_SPEC);
+    expect(hoursDecision.shouldReply).toBe(true);
+    expect(hoursDecision.reason).toBe('active_session');
+    const hoursReply = await fastRespondLcf(env, hoursEvent, hoursDecision, emptyMem, activeCtx);
+    expect(hoursReply).toBeTruthy();
+    expect(hoursReply).not.toBe('[NO_REPLY]');
+    expect(hoursReply).toContain('Soho Sichuan House');
+    expect(hoursReply).toContain('Covent Garden');
   });
 });
