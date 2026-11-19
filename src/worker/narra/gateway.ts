@@ -12,13 +12,15 @@
  * - Zero external calls when `NARRA_GATEWAY_ENABLED` is not `'on'`.
  */
 
-import type {
-  AgentSpec,
-  AgentUpdateItem,
-  InboundEvent,
-  LangCode,
-  RecallTurnResult,
-  TriageDecision,
+import {
+  stripAgentMentions,
+  toZhHant,
+  type AgentSpec,
+  type AgentUpdateItem,
+  type InboundEvent,
+  type LangCode,
+  type RecallTurnResult,
+  type TriageDecision,
 } from '@manyfold/narra-agent-kit';
 import {
   isNarraGatewayEnabled,
@@ -295,13 +297,26 @@ export const placeUrl = (env: Pick<Env, 'PUBLIC_URL'>, lang: LangCode, id: strin
 export const contributeUrl = (env: Pick<Env, 'PUBLIC_URL'>, lang: LangCode): string =>
   `${publicBaseOf(env)}/${siteLangOf(lang)}/contribute`;
 
-const stripMentions = (text: string): string =>
-  (text ?? '')
-    .replace(/\[@[^\]\n]{1,80}\]\(@[^)\s]+\)/g, ' ')
-    .replace(/@[A-Za-z0-9._=\-/+]+:[A-Za-z0-9.-]+(?::\d{1,5})?/g, ' ')
-    .replace(/(?:^|\s)@[A-Za-z0-9._\-\u3400-\u9FFF]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const MENTION_NAMES: readonly string[] = [
+  LCF_AGENT_SPEC.name,
+  ...(LCF_AGENT_SPEC.aliases ?? []),
+  '倫敦中餐地圖',
+  '伦敦中餐地图',
+  '問一籤',
+  '問一簽',
+  '问一签',
+  '塔羅大師',
+  '塔罗大师',
+  'AI in 5',
+  'Spotted London',
+  'Manyfold Data',
+  'Penny',
+  'Quidpaw',
+];
+
+const stripMentions = (text: string): string => stripAgentMentions(text, MENTION_NAMES);
+
+const localizeZh = (text: string, lang: LangCode): string => (lang === 'zh-Hant' ? toZhHant(text) : text);
 
 const GREETING_RE =
   /^(?:你好|妳好|您好|嗨|哈囉|哈喽|早安|早|午安|晚安|你是誰|你是谁|謝謝|谢谢|感謝|感谢|hi|hello|hey|good\s*(?:morning|afternoon|evening)|thanks|thank\s+you|who\s+are\s+you)[!！。.?？~～\s]*$/i;
@@ -910,7 +925,8 @@ export function formatPlaceUpdatesMessage(
 
   const lines = [header];
   for (const p of updates.slice(0, 3)) {
-    const title = [p.nameEn, p.nameZh].filter(Boolean).join(' / ');
+    const nameZh = p.nameZh ? localizeZh(p.nameZh, lang) : p.nameZh;
+    const title = [p.nameEn, nameZh].filter(Boolean).join(' / ');
     const tags = [
       ...p.cuisines.slice(0, 2).map((c) => labelFor(CUISINE_TEXT, c, lang)),
       p.postcode ?? '',
@@ -951,7 +967,8 @@ function formatPlaceLine(
   lang: LangCode,
   extra?: { distKm?: number; note?: string },
 ): string[] {
-  const name = [entry.n, entry.z].filter(Boolean).join(' / ') || entry.id;
+  const nameZh = entry.z ? localizeZh(entry.z, lang) : entry.z;
+  const name = [entry.n, nameZh].filter(Boolean).join(' / ') || entry.id;
   const cuisineBits = entry.k.slice(0, 2).map((c) => labelFor(CUISINE_TEXT, c, lang));
   const categoryLabel = labelFor(CATEGORY_TEXT, entry.c, lang);
   const metaParts: string[] = [
@@ -977,7 +994,8 @@ function formatPlaceLine(
           : entry.t,
     );
   }
-  const suffix = extra?.note ? ` · ${extra.note}` : '';
+  const note = extra?.note ? localizeZh(extra.note, lang) : '';
+  const suffix = note ? ` · ${note}` : '';
   return [
     `- ${name} (${metaParts.filter(Boolean).join(' · ')})${suffix}`,
     placeUrl(env, lang, entry.id, entry.s),
@@ -990,12 +1008,14 @@ function formatPricePence(pence: number | null): string {
 
 function formatPlaceDetail(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: LangCode): string {
   const nameEn = typeof doc.place.name_en === 'string' ? doc.place.name_en : null;
-  const nameZh = typeof doc.place.name_zh === 'string' ? doc.place.name_zh : null;
+  const rawNameZh = typeof doc.place.name_zh === 'string' ? doc.place.name_zh : null;
+  const nameZh = rawNameZh ? localizeZh(rawNameZh, lang) : null;
   const title = [nameEn, nameZh].filter(Boolean).join(' / ') || doc.id;
   const cuisines = Array.isArray(doc.place.cuisines)
     ? (doc.place.cuisines as string[]).map((c) => labelFor(CUISINE_TEXT, c, lang)).join(' / ')
     : labelFor(CATEGORY_TEXT, String(doc.place.category ?? 'restaurant'), lang);
-  const address = [doc.place.address, doc.place.postcode].filter((v) => typeof v === 'string' && v).join(', ');
+  const rawAddress = [doc.place.address, doc.place.postcode].filter((v) => typeof v === 'string' && v).join(', ');
+  const address = localizeZh(rawAddress, lang);
   const lines = [`🍜 ${title} (${cuisines})`];
   if (address) {
     lines.push(
@@ -1012,7 +1032,10 @@ function formatPlaceDetail(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: La
     if (items.length > 0) {
       const checkedDate = (firstMenu.verified_at ?? firstMenu.observed_at ?? '').slice(0, 10);
       const itemStr = items
-        .map((i) => `${[i.name_zh, i.name_en].filter(Boolean).join(' ')} ${formatPricePence(i.price_pence ?? null)}`.trim())
+        .map((i) => {
+          const itemZh = i.name_zh ? localizeZh(i.name_zh, lang) : i.name_zh;
+          return `${[itemZh, i.name_en].filter(Boolean).join(' ')} ${formatPricePence(i.price_pence ?? null)}`.trim();
+        })
         .join('；');
       if (lang === 'zh-Hant') {
         lines.push(`菜單記錄於 ${checkedDate}：${itemStr}`);
@@ -1027,8 +1050,8 @@ function formatPlaceDetail(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: La
   // Strictly enforce no-ratings invariant on any review excerpt!
   const safeReview = doc.reviews.find((r) => r.excerpt && !findRating(r.excerpt));
   if (safeReview) {
-    const snippet = safeReview.excerpt.slice(0, 120).trim();
-    const who = safeReview.author || safeReview.publication || '';
+    const snippet = localizeZh(safeReview.excerpt.slice(0, 120).trim(), lang);
+    const who = localizeZh(safeReview.author || safeReview.publication || '', lang);
     if (who) {
       lines.push(`"${snippet}" — ${who}`);
     }
@@ -1155,13 +1178,15 @@ export async function fastRespondLcf(
       }
       ranked = ranked.slice(0, limit);
 
-      const dishLabel = lang === 'en' ? primaryDish.en : `${primaryDish.zh} (${primaryDish.en})`;
+      const dishLabel =
+        lang === 'en' ? primaryDish.en : `${localizeZh(primaryDish.zh, lang)} (${primaryDish.en})`;
+      const locationLabel = location ? localizeZh(location.label, lang) : '';
       const header =
         lang === 'zh-Hant'
-          ? `🍜 倫敦可以吃到「${dishLabel}」的營業中店家${location ? `（依距離 ${location.label} 排序）` : ''}：`
+          ? `🍜 倫敦可以吃到「${dishLabel}」的營業中店家${location ? `（依距離 ${locationLabel} 排序）` : ''}：`
           : lang === 'zh-Hans'
-            ? `🍜 伦敦可以吃到「${dishLabel}」的营业中店家${location ? `（按距离 ${location.label} 排序）` : ''}：`
-            : `🍜 Open places serving ${dishLabel}${location ? ` (nearest to ${location.label})` : ''}:`;
+            ? `🍜 伦敦可以吃到「${dishLabel}」的营业中店家${location ? `（按距离 ${locationLabel} 排序）` : ''}：`
+            : `🍜 Open places serving ${dishLabel}${location ? ` (nearest to ${locationLabel})` : ''}:`;
 
       const lines = [header];
       for (const item of ranked) {
@@ -1177,13 +1202,20 @@ export async function fastRespondLcf(
 
   // 3. Direct place name lookup (if user named a specific restaurant/shop in D1)
   const nameQuery = cleanedText
+    .replace(/^(?:請問|请问|幫我查|帮我查|想問|想问)\s*/u, '')
     .replace(/(?:where is|tell me about|menu of|address of|在哪里|在哪裡|怎麼去|怎么去|菜單|菜单|地址)/gi, '')
+    .replace(/(?:^[的\s?？!！。.,，、:：]+|[的\s?？!！。.,，、:：]+$)/g, '')
     .trim();
   if (nameQuery.length >= 2) {
+    const normalizedQuery = toZhHant(nameQuery);
     const nameMatches = allEntries.filter(
       (e) =>
         (e.n && e.n.toLowerCase().includes(nameQuery.toLowerCase())) ||
-        (e.z && e.z.includes(nameQuery)) ||
+        (e.z &&
+          (e.z.includes(nameQuery) ||
+            toZhHant(e.z).includes(nameQuery) ||
+            e.z.includes(normalizedQuery) ||
+            toZhHant(e.z).includes(normalizedQuery))) ||
         (nameQuery.length >= 4 && matchesText(e, nameQuery)),
     );
     if (nameMatches.length === 1) {
@@ -1238,12 +1270,13 @@ export async function fastRespondLcf(
 
     if (matches.length > 0) {
       const picked = matches.slice(0, limit);
+      const locationLabel = location ? localizeZh(location.label, lang) : '';
       const header =
         lang === 'zh-Hant'
-          ? `🍜 為你查到 ${picked.length} 間營業中選擇${location ? `（${location.label} 一帶）` : ''}：`
+          ? `🍜 為你查到 ${picked.length} 間營業中選擇${location ? `（${locationLabel} 一帶）` : ''}：`
           : lang === 'zh-Hans'
-            ? `🍜 为你查到 ${picked.length} 家营业中选择${location ? `（${location.label} 一带）` : ''}：`
-            : `🍜 Found ${picked.length} open place${picked.length === 1 ? '' : 's'}${location ? ` near ${location.label}` : ''}:`;
+            ? `🍜 为你查到 ${picked.length} 家营业中选择${location ? `（${locationLabel} 一带）` : ''}：`
+            : `🍜 Found ${picked.length} open place${picked.length === 1 ? '' : 's'}${location ? ` near ${locationLabel}` : ''}:`;
 
       const lines = [header];
       for (const m of picked) {
