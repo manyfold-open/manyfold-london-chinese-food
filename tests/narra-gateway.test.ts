@@ -803,6 +803,34 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     );
     expect(mentionOnly).toContain('倫敦中餐地圖小幫手');
 
+    // @AI Tarot and @AI Fortune Stick mentions strip cleanly and multi-mention restaurant queries route properly
+    const multiLcfCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-tarot:matrix.netmind.chat', displayName: 'AI Tarot', isAgent: true },
+        { matrixId: '@agent-fortune:matrix.netmind.chat', displayName: 'AI Fortune Stick', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+    const multiRes = await routeEvent(
+      makeEvent({ text: '@AI Tarot @London Chinese Food 倫敦有哪些川菜餐廳或餐館？' }),
+      multiLcfCtx,
+      LCF_AGENT_SPEC,
+    );
+    expect(multiRes.shouldReply).toBe(true);
+    expect(multiRes.reason).toBe('multi_mention_domain_match');
+
+    const bareMultiMention = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@AI Tarot @AI Fortune Stick @London Chinese Food' }),
+      { shouldReply: true, tier: 0, reason: 'mention', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+    );
+    expect(bareMultiMention).toContain('倫敦中餐地圖小幫手');
+
     // zh-Hans preserves Simplified 锦里
     const listHans = await fastRespondLcf(
       env,
