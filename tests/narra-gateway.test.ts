@@ -15,6 +15,7 @@ import workerDefault, {
   NarraRoomCoordinator,
 } from '../src/worker/index';
 import {
+  formatPlaceUpdatesMessage,
   createLcfGatewayConfig,
   fastRespondLcf,
   LCF_AGENT_ID,
@@ -701,5 +702,120 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     );
     expect(sentTexts[0]).not.toMatch(/\[[^\]]+\]\(https?:\/\//);
     expect(sentTexts[0]).toContain('https://app.manyfold.ai/london-chinese-food/en/guides');
+  });
+
+  it('7. converts Simplified place/dish names like 锦里 -> 錦里 in zh-Hant and strips multi-word/sibling @mentions', async () => {
+    const db = createD1();
+    await ensureSchema(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:30:00Z';
+
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/jinli', 'Jinli Soho W1D 6JJ', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000099',
+          'rec_lcf_00000000000000000099',
+          'W1D 6JJ|jinli',
+          JSON.stringify({
+            name_en: 'Jinli',
+            name_zh: '锦里',
+            category: 'restaurant',
+            cuisines: ['sichuan'],
+            address: '4 Leicester Street',
+            postcode: 'W1D 6JJ',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5112,
+            lng: -0.1305,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, parent_id, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'menu', ?, ?, ?, 'verified', ?, 'https://example.com/jinli/menu', '担担面 £9.80', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_menu_0000000000000099',
+          'rec_lcf_00000000000000000099',
+          'rec_lcf_00000000000000000099',
+          'menu|jinli|main',
+          JSON.stringify({
+            owner: 'rec_lcf_00000000000000000099',
+            menu: 'main',
+            source_kind: 'website',
+            items: [
+              { name_zh: '担担面', name_en: 'Dan dan noodles', price_pence: 980 },
+              { name_zh: '水煮鱼', name_en: 'Sichuan boiled fish', price_pence: 1850 },
+            ],
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000099', now);
+
+    const env = makeEnv(db);
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+
+    // Area + cuisine query in zh-Hant with multi-word & sibling mentions
+    const listHant = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@London Chinese Food @AI in 5 @問一籤 倫敦中國城有什麼川菜嗎？' }),
+      { shouldReply: true, tier: 1, reason: 'mention', confidence: 0.95, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+    );
+    expect(listHant).toBeTruthy();
+    expect(listHant).toContain('Jinli / 錦里');
+    expect(listHant).not.toContain('锦里');
+
+    // Direct Traditional Chinese lookup of 錦里 against Simplified D1 record 锦里
+    const detailHant = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@倫敦中餐地圖 @Manyfold Data @Spotted London 請問錦里在哪裡？' }),
+      { shouldReply: true, tier: 0, reason: 'mention', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+    );
+    expect(detailHant).toBeTruthy();
+    expect(detailHant).toContain('Jinli / 錦里');
+    expect(detailHant).toContain('擔擔麵');
+    expect(detailHant).toContain('水煮魚');
+    expect(detailHant).not.toContain('锦里');
+    expect(detailHant).not.toContain('担担面');
+    expect(detailHant).not.toContain('水煮鱼');
+
+    // Bare mention of multi-word name falls back cleanly to greeting instead of treating "Chinese Food" as query
+    const mentionOnly = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@London Chinese Food @塔羅大師 @Penny @Quidpaw' }),
+      { shouldReply: true, tier: 0, reason: 'mention', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+    );
+    expect(mentionOnly).toContain('倫敦中餐地圖小幫手');
+
+    // zh-Hans preserves Simplified 锦里
+    const listHans = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@伦敦中餐地图 伦敦中国城有什么川菜？' }),
+      { shouldReply: true, tier: 1, reason: 'mention', confidence: 0.95, detectedLang: 'zh-Hans', shouldQuote: true },
+      emptyMem,
+    );
+    expect(listHans).toContain('Jinli / 锦里');
+
+    // Broadcast updates in zh-Hant also convert 锦里 -> 錦里
+    const updates = await queryRecentOpenPlaceUpdates(env, '2026-11-18T00:00:00Z', 3);
+    const updateTextHant = formatPlaceUpdatesMessage(env, updates, 'zh-Hant');
+    expect(updateTextHant).toContain('Jinli / 錦里');
+    expect(updateTextHant).not.toContain('锦里');
   });
 });
