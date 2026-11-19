@@ -205,13 +205,18 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     'pop up',
     '快閃',
     '快闪',
+    '展覽',
+    '展览',
+    'exhibition',
     'split bill',
     'split the bill',
     '分帳',
     '分账',
     'aa制',
     'hackathon',
+    'hackathons',
     '黑客松',
+    '駭客松',
     'visa',
     '簽證',
     '签证',
@@ -331,6 +336,9 @@ const COMPOUND_RE = /^\[internal hint\]\s*process compound\b/i;
 
 const WHATS_NEW_RE =
   /(?:最近有什麼新|最近有什么新|新開|新开|新增|新店|what(?:'s| is)\s+new|new\s+places|newly\s+(?:added|verified))/i;
+
+const FOOD_FOLLOWUP_RE =
+  /(?:哪[間家個]|哪一[間家個]|地址|菜單|菜单|價格|价格|人均|幾點|几点|開門|开门|怎麼去|怎么去|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend)\b)/i;
 
 /* ───────── area, campus, station, cuisine, dish matching ───────── */
 
@@ -1124,11 +1132,16 @@ export async function fastRespondLcf(
 ): Promise<string | null> {
   const lang = decision.detectedLang;
   const cleanedText = stripMentions(event.text);
+  const isUnmentionedGroup =
+    event.chatType === 'group' && decision.reason !== 'explicit_mention' && decision.reason !== 'reply_to_self';
 
   if (event.kind === 'image' || event.kind === 'compound' || COMPOUND_RE.test(event.text)) {
     return compoundReply(lang);
   }
   if (!cleanedText || GREETING_RE.test(cleanedText)) {
+    if (isUnmentionedGroup && decision.reason === 'active_session') {
+      return '[NO_REPLY]';
+    }
     return greetingReply(lang);
   }
 
@@ -1160,9 +1173,9 @@ export async function fastRespondLcf(
   const explicitLocation = extractLocation(cleanedText, lang, allEntries);
   const location = explicitLocation ?? resolveMemoryLocationHint(memories, lang, allEntries);
 
-  // Off-topic guard on explicit mentions / DMs
+  // Off-topic guard on explicit mentions / DMs / unmentioned group turns
   if (hasAntiHit && dishes.length === 0 && cuisines.length === 0 && categories.length === 0 && !explicitLocation) {
-    return isMultiMention ? '[NO_REPLY]' : offTopicRedirect(lang);
+    return isMultiMention || isUnmentionedGroup ? '[NO_REPLY]' : offTopicRedirect(lang);
   }
 
   // 2. Dish query ("where can I eat 小籠包 / har gow / biang biang noodles near UCL?")
@@ -1207,6 +1220,7 @@ export async function fastRespondLcf(
   }
 
   // 3. Direct place name lookup (if user named a specific restaurant/shop in D1)
+  let hasNameMatches = false;
   const nameQuery = cleanedText
     .replace(/^(?:請問|请问|幫我查|帮我查|想問|想问)\s*/u, '')
     .replace(/(?:where is|tell me about|menu of|address of|在哪里|在哪裡|怎麼去|怎么去|菜單|菜单|地址)/gi, '')
@@ -1224,6 +1238,7 @@ export async function fastRespondLcf(
             toZhHant(e.z).includes(normalizedQuery))) ||
         (nameQuery.length >= 4 && matchesText(e, nameQuery)),
     );
+    hasNameMatches = nameMatches.length > 0;
     if (nameMatches.length === 1) {
       const doc = await loadPlaceDocOrSynthesize(env.DB, nameMatches[0]!.id);
       if (doc) return formatPlaceDetail(env, doc, lang);
@@ -1241,6 +1256,21 @@ export async function fastRespondLcf(
       }
       return lines.join('\n');
     }
+  }
+
+  // Unmentioned active-session turns with zero food signals and no food follow-up cue stay silent.
+  if (
+    isUnmentionedGroup &&
+    decision.reason === 'active_session' &&
+    dishes.length === 0 &&
+    cuisines.length === 0 &&
+    categories.length === 0 &&
+    !explicitLocation &&
+    !WHATS_NEW_RE.test(cleanedText) &&
+    !hasNameMatches &&
+    !FOOD_FOLLOWUP_RE.test(cleanedText)
+  ) {
+    return '[NO_REPLY]';
   }
 
   // 4. Location + optional cuisine/category query

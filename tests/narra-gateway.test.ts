@@ -846,4 +846,82 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(updateTextHant).toContain('Jinli / 錦里');
     expect(updateTextHant).not.toContain('锦里');
   });
+
+  it('8. returns [NO_REPLY] for unmentioned group active_session off-topic, casual chatter, and closings', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db, {
+      MANYFOLD_A2A_URL: 'https://a2a.lcf.test/rpc',
+      MANYFOLD_A2A_TOKEN: 'a2a_secret_lcf',
+    });
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const roomMem = {
+      userMemories: [],
+      roomMemories: [
+        {
+          id: 'mem_lcf_1',
+          scope: 'room' as const,
+          agentId: LCF_AGENT_ID,
+          roomId: '!grp1:matrix.netmind.chat',
+          kind: 'fact' as const,
+          key: 'default_area',
+          value: 'Soho',
+          createdAt: '2026-11-19T12:00:00Z',
+          updatedAt: '2026-11-19T12:00:00Z',
+        },
+      ],
+      promptSafeLines: [],
+    };
+    const activeDecision = {
+      shouldReply: true,
+      tier: 0 as const,
+      reason: 'active_session',
+      confidence: 0.95,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: true,
+    };
+
+    // Anti-keywords include pop-up/exhibition/hackathon variants
+    for (const kw of ['黑客松', '駭客松', 'hackathon', 'hackathons', '快閃', '快闪', '展覽', '展览', 'pop-up', 'popup', 'exhibition']) {
+      expect(LCF_AGENT_SPEC.antiKeywords).toContain(kw);
+    }
+
+    // Off-topic pop-up / exhibition turn in unmentioned active_session -> [NO_REPLY]
+    const offTopicReply = await fastRespondLcf(
+      env,
+      makeEvent({ text: '這週末倫敦有什麼免費快閃活動或展覽？' }),
+      activeDecision,
+      emptyMem,
+    );
+    expect(offTopicReply).toBe('[NO_REPLY]');
+
+    // Casual chatter with zero food signals (even with room default_area memory & A2A configured) -> [NO_REPLY]
+    const chatterReply = await fastRespondLcf(
+      env,
+      makeEvent({ text: '今天天氣真不錯，晚上想早點休息' }),
+      activeDecision,
+      roomMem,
+    );
+    expect(chatterReply).toBe('[NO_REPLY]');
+
+    // Casual closings in unmentioned active_session -> [NO_REPLY], whereas explicit mention still greets
+    expect(await fastRespondLcf(env, makeEvent({ text: '謝謝' }), activeDecision, emptyMem)).toBe('[NO_REPLY]');
+    expect(await fastRespondLcf(env, makeEvent({ text: '晚安' }), activeDecision, emptyMem)).toBe('[NO_REPLY]');
+    const explicitThanks = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@lcf-guide 謝謝' }),
+      { ...activeDecision, reason: 'explicit_mention' },
+      emptyMem,
+    );
+    expect(explicitThanks).toContain('倫敦中餐地圖小幫手');
+
+    // Genuine food follow-up in active_session still responds from D1
+    const followUpReply = await fastRespondLcf(
+      env,
+      makeEvent({ text: 'UCL 附近呢？' }),
+      activeDecision,
+      emptyMem,
+    );
+    expect(followUpReply).toContain('Bloomsbury Dumpling House');
+  });
 });
