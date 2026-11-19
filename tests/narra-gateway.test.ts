@@ -16,6 +16,7 @@ import workerDefault, {
   NarraRoomCoordinator,
 } from '../src/worker/index';
 import {
+  extractLocation,
   formatPlaceUpdatesMessage,
   createLcfGatewayConfig,
   fastRespondLcf,
@@ -1002,5 +1003,109 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(reply).toContain('Soho Sichuan House');
     expect(reply).toContain('https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001');
     expect(findRating(reply!)).toBeNull();
+  });
+
+  it('10. resolves Soho on implicit eating prompt and returns [NO_REPLY] on unmentioned group bottom fallback', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const implicitPrompt = '好餓喔，等下在 Soho 附近有沒有推薦吃的？';
+    const loc = extractLocation(implicitPrompt, 'zh-Hant', []);
+    expect(loc?.label).toBe('Soho');
+    expect(loc?.point).toEqual({ lat: 51.5136, lng: -0.1365 });
+    expect(loc?.km).toBe(1.0);
+    expect(extractLocation('蘇豪附近有什麼吃的？', 'zh-Hant', [])?.label).toBe('Soho');
+
+    const decision = await routeEvent(makeEvent({ text: implicitPrompt }), groupCtx, LCF_AGENT_SPEC);
+    expect(decision.shouldReply).toBe(true);
+    expect(decision.tier).toBe(1);
+    expect(decision.detectedLang).toBe('zh-Hant');
+
+    const reply = await fastRespondLcf(env, makeEvent({ text: implicitPrompt }), decision, emptyMem);
+    expect(reply).toBeTruthy();
+    expect(reply).not.toBe('[NO_REPLY]');
+    expect(reply).toContain('Soho');
+    expect(reply).toContain('Soho Sichuan House');
+    expect(reply).not.toContain('Closed Canary Tea');
+    expect(reply).toContain('https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001');
+    expect(findRating(reply!)).toBeNull();
+
+    // Past-tense anecdote in Soho is suppressed by router
+    const anecdoteDecision = await routeEvent(
+      makeEvent({ text: '昨晚在 Soho 吃火鍋吃超飽' }),
+      groupCtx,
+      LCF_AGENT_SPEC,
+    );
+    expect(anecdoteDecision.shouldReply).toBe(false);
+
+    // Unmentioned group bottom fallback returns [NO_REPLY] when zero places match (both without and with A2A)
+    const emptyDb = createD1();
+    await ensureSchema(emptyDb);
+    const emptyEnvNoA2a = makeEnv(emptyDb);
+    const emptyEnvWithA2a = makeEnv(emptyDb, {
+      MANYFOLD_A2A_URL: 'https://a2a.lcf.test/rpc',
+      MANYFOLD_A2A_TOKEN: 'a2a_secret_lcf',
+    });
+    const unmentionedDecision = {
+      shouldReply: true,
+      tier: 1 as const,
+      reason: 'domain_match',
+      confidence: 0.72,
+      detectedLang: 'zh-Hant' as const,
+      shouldQuote: true,
+    };
+
+    expect(
+      await fastRespondLcf(
+        emptyEnvNoA2a,
+        makeEvent({ text: implicitPrompt }),
+        unmentionedDecision,
+        emptyMem,
+      ),
+    ).toBe('[NO_REPLY]');
+    expect(
+      await fastRespondLcf(
+        emptyEnvNoA2a,
+        makeEvent({ text: '倫敦哪裡有好吃的？' }),
+        unmentionedDecision,
+        emptyMem,
+      ),
+    ).toBe('[NO_REPLY]');
+    expect(
+      await fastRespondLcf(
+        emptyEnvWithA2a,
+        makeEvent({ text: implicitPrompt }),
+        unmentionedDecision,
+        emptyMem,
+      ),
+    ).toBe('[NO_REPLY]');
+
+    // Explicit mention on the same empty DB still returns helpful prompt (or null for A2A)
+    const explicitEmptyReply = await fastRespondLcf(
+      emptyEnvNoA2a,
+      makeEvent({ text: `@lcf-guide ${implicitPrompt}` }),
+      { ...unmentionedDecision, tier: 0, reason: 'explicit_mention' },
+      emptyMem,
+    );
+    expect(explicitEmptyReply).toContain('倫敦中餐地圖目前還沒有找到符合條件的營業中店家');
+    expect(
+      await fastRespondLcf(
+        emptyEnvWithA2a,
+        makeEvent({ text: `@lcf-guide ${implicitPrompt}` }),
+        { ...unmentionedDecision, tier: 0, reason: 'explicit_mention' },
+        emptyMem,
+      ),
+    ).toBeNull();
   });
 });
