@@ -164,6 +164,8 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     /(?:chinese|dim\s*sum|hot\s*pot|bubble\s*tea|sichuan|cantonese).{0,24}(?:london|soho|chinatown|ucl|lse|kcl|soas|imperial)/i,
     /倫敦.{0,12}(?:吃|餐廳|中餐|麵|飯|茶|點心|火鍋|燒烤|奶茶)/,
     /伦敦.{0,12}(?:吃|餐厅|中餐|面|饭|茶|点心|火锅|烧烤|奶茶)/,
+    /(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦|中國城|中国城).{0,24}(?:吃的|好吃|推薦吃|推荐吃|吃什麼|吃什么|餐廳|餐厅|吃飯|吃饭|where\s+to\s+eat|food|lunch|dinner)/i,
+    /(?:吃的|好吃|推薦吃|推荐吃|吃什麼|吃什么|餐廳|餐厅|吃飯|吃饭|where\s+to\s+eat|good\s+food).{0,24}(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦|中國城|中国城)/i,
   ],
   antiKeywords: [
     'tarot',
@@ -478,7 +480,7 @@ function matchKeywordToken(lowerText: string, needle: string): boolean {
   );
 }
 
-function extractLocation(text: string, lang: LangCode, entries: readonly IndexEntry[]): ResolvedLocation | null {
+export function extractLocation(text: string, lang: LangCode, entries: readonly IndexEntry[]): ResolvedLocation | null {
   const lower = text.toLowerCase();
 
   // 1. Full UK postcode ("W1D 6JW")
@@ -1331,6 +1333,11 @@ export async function fastRespondLcf(
       }
       return lines.join('\n');
     }
+  }
+
+  // Unmentioned group turns with zero matching places stay silent instead of triggering A2A or generic prompts.
+  if (isUnmentionedGroup) {
+    return '[NO_REPLY]';
   }
 
   // 5. Fallback: if Manyfold A2A is configured, delegate conversational / unindexed queries to A2A.

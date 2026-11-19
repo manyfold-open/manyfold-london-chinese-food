@@ -50,6 +50,10 @@
   "images": {
     "binding": "IMAGES"
   },
+  // Workers AI binding for semantic unmentioned group triage in @manyfold/narra-agent-kit.
+  "ai": {
+    "binding": "AI"
+  },
   // Decentralized Narra Messenger gateway Durable Objects (disabled by default via NARRA_GATEWAY_ENABLED: "off").
   "durable_objects": {
     "bindings": [
