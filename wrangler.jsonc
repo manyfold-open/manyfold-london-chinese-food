@@ -50,6 +50,19 @@
   "images": {
     "binding": "IMAGES"
   },
+  // Decentralized Narra Messenger gateway Durable Objects (disabled by default via NARRA_GATEWAY_ENABLED: "off").
+  "durable_objects": {
+    "bindings": [
+      { "name": "NARRA_SYNC_DO", "class_name": "NarraMatrixSync" },
+      { "name": "NARRA_ROOM_DO", "class_name": "NarraRoomCoordinator" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-narra-gateway",
+      "new_sqlite_classes": ["NarraMatrixSync", "NarraRoomCoordinator"]
+    }
+  ],
   "vars": {
     // The site's public address, mount included: canonical links, the sitemap, agents' links,
     // and the one host whose pages may be indexed.
@@ -60,7 +73,12 @@
     // Google Analytics 4 (stream "London Chinese Food"), on reader pages of the public host only.
     // Readers in the UK, the EEA and Switzerland are asked first (src/worker/analytics.ts).
     // Remove it and no Google code reaches any page.
-    "GA_MEASUREMENT_ID": "G-K4MY5B6BRX"
+    "GA_MEASUREMENT_ID": "G-K4MY5B6BRX",
+    // Narra Messenger gateway (off until NARRA_GATEWAY_ENABLED="on" and NARRA_AGENT_TOKEN secret is set).
+    "NARRA_GATEWAY_ENABLED": "off",
+    "NARRA_SYNC": "off",
+    "NARRA_AGENT_ID": "agt_agq657lc2b6qhffpaymugpmzsy",
+    "NARRA_MATRIX_ID": "@agent-74f30ae5:matrix.netmind.chat"
   },
   // Secrets, set with `npx wrangler secret put <NAME>`:
   //   ADMIN_PASSWORD     opens /api/admin/* and /settings

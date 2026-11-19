@@ -31,6 +31,12 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import {
+  BaseNarraMatrixSync,
+  BaseNarraRoomCoordinator,
+  getNarraGatewayStatus,
+  kickNarraGateway,
+} from '@manyfold/narra-agent-kit/worker';
 import { KINDS, normName, type Kind } from '../shared/kinds';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
 import type { Locale } from '../shared/i18n';
@@ -92,6 +98,7 @@ import {
   type Token,
 } from './tokens';
 import { HttpError, type Env } from './types';
+import { lcfGatewayConfig } from './narra/gateway';
 import { closeWork, dismiss, handOut, HANDOUT_MAX, importLeads, isWorkType, menuPages, openLeads, reopenWork, reviewLeads, updateLeads, workAdmin } from './work';
 
 const SERVICE = 'manyfold-london-chinese-food';
@@ -781,6 +788,8 @@ app.post('/api/admin/docs/rebuild', async (c) => {
   return c.json(place ? { rebuilt: 1 } : await refreshDocs(c.env.DB, now, { max: 200, whole: true }));
 });
 
+app.get('/api/admin/gateway/status', async (c) => c.json(await getNarraGatewayStatus(c.env, lcfGatewayConfig)));
+
 app.all('/api/*', () => {
   throw new HttpError(404, 'not_found', 'No such API route.');
 });
@@ -865,12 +874,31 @@ app.get('/en/*', page);
 // Anything else is a static file, or the app's page for a path it knows.
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
+export class NarraMatrixSync extends BaseNarraMatrixSync<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, lcfGatewayConfig);
+  }
+}
+
+export class NarraRoomCoordinator extends BaseNarraRoomCoordinator<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, lcfGatewayConfig);
+  }
+}
+
 export { app };
 
 export default {
   fetch: withMount<Env>(app.fetch),
   async scheduled(_controller, env, ctx) {
     const now = new Date();
-    ctx.waitUntil(ensureSchema(env.DB).then(() => runCron(env, now, firstRunOfDay(now))));
+    ctx.waitUntil(
+      Promise.all([
+        ensureSchema(env.DB).then(() => runCron(env, now, firstRunOfDay(now))),
+        kickNarraGateway(env, lcfGatewayConfig).catch((error) => {
+          console.error('narra gateway kick failed', error);
+        }),
+      ]),
+    );
   },
 } satisfies ExportedHandler<Env>;
