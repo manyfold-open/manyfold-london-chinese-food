@@ -61,7 +61,7 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '中餐小助手',
   ],
   domainDescription:
-    'London Chinese food guide: Chinese restaurants, takeaways, dim sum, hotpot, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings).',
+    'London Chinese food & dining guide: everyday London eating recommendations (near Soho, Chinatown, UCL, LSE, etc.), Chinese restaurants, takeaways, dim sum, hotpot, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings).',
   domainKeywords: [
     'chinese food',
     'chinese restaurant',
@@ -166,6 +166,8 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     /伦敦.{0,12}(?:吃|餐厅|中餐|面|饭|茶|点心|火锅|烧烤|奶茶)/,
     /(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦|中國城|中国城).{0,24}(?:吃的|好吃|推薦吃|推荐吃|吃什麼|吃什么|餐廳|餐厅|吃飯|吃饭|where\s+to\s+eat|food|lunch|dinner)/i,
     /(?:吃的|好吃|推薦吃|推荐吃|吃什麼|吃什么|餐廳|餐厅|吃飯|吃饭|where\s+to\s+eat|good\s+food).{0,24}(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦|中國城|中国城)/i,
+    /(?:好餓|好饿|餓了|饿了|推薦吃的|推荐吃的|吃什麼|吃什么|where\s+to\s+eat).{0,28}(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦|附近)/i,
+    /(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|london|倫敦|伦敦).{0,16}(?:附近)?(?:有沒有|有没有)?(?:推薦|推荐)?(?:吃的|好吃|餐廳|餐厅)/i,
   ],
   antiKeywords: [
     'tarot',
@@ -210,6 +212,14 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '展覽',
     '展览',
     'exhibition',
+    'sample sale',
+    '逛逛',
+    '逛街',
+    '好去處',
+    '好去处',
+    '哪裡好玩',
+    '哪里好玩',
+    '市集',
     'split bill',
     'split the bill',
     '分帳',
