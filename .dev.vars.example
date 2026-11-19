@@ -13,3 +13,10 @@ TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 # Local addresses: the site at the root of the dev server, so no mount.
 PUBLIC_URL=http://localhost:5173
 BASE_PATH=
+
+# Narra Messenger Gateway (off by default; set NARRA_GATEWAY_ENABLED=on and NARRA_AGENT_TOKEN to activate)
+NARRA_GATEWAY_ENABLED=off
+NARRA_SYNC=off
+NARRA_AGENT_TOKEN=
+MANYFOLD_A2A_URL=
+MANYFOLD_A2A_TOKEN=
