@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createWorkersAiTriageModel,
+  heuristicDomainScore,
   routeEvent,
   sanitizeMobileLinks,
   staggerWindowMinute,
@@ -1107,5 +1109,72 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
         emptyMem,
       ),
     ).toBeNull();
+  });
+
+  it('11. wins confidently on implicit London hunger/food queries while staying silent on London sightseeing/pop-up queries', async () => {
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    for (const kw of [
+      '逛逛',
+      '逛街',
+      '好去處',
+      '好去处',
+      '哪裡好玩',
+      '哪里好玩',
+      '市集',
+      '展覽',
+      '展览',
+      '快閃',
+      '快闪',
+      'pop-up',
+      'exhibition',
+      'sample sale',
+    ]) {
+      expect(LCF_AGENT_SPEC.antiKeywords, kw).toContain(kw);
+    }
+
+    const aiRunSpy = vi.fn(async () => ({ response: '{"score":0.1,"reason":"unexpected_ai_call"}' }));
+    const triageModel = createWorkersAiTriageModel({ run: aiRunSpy });
+
+    const hungryEvent = makeEvent({ text: '好餓喔，等下在 Soho 附近有沒有推薦吃的？' });
+    const hungryHeuristic = heuristicDomainScore(hungryEvent, LCF_AGENT_SPEC, groupCtx);
+    expect(hungryHeuristic).toBeGreaterThanOrEqual(0.78);
+
+    const hungryTriage = await triageModel.score({
+      event: hungryEvent,
+      context: groupCtx,
+      spec: LCF_AGENT_SPEC,
+      detectedLang: 'zh-Hant',
+    });
+    expect(hungryTriage.score).toBeGreaterThanOrEqual(0.9);
+    expect(hungryTriage.reason).toBe('domain_match');
+
+    const hungryDecision = await routeEvent(hungryEvent, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(hungryDecision.shouldReply).toBe(true);
+    expect(hungryDecision.confidence).toBeGreaterThanOrEqual(0.9);
+
+    const sightseeingEvent = makeEvent({ text: '這週末不知道帶朋友去倫敦哪裡逛逛比較特別' });
+    const sightseeingHeuristic = heuristicDomainScore(sightseeingEvent, LCF_AGENT_SPEC, groupCtx);
+    expect(sightseeingHeuristic).toBeLessThan(0.55);
+
+    const sightseeingTriage = await triageModel.score({
+      event: sightseeingEvent,
+      context: groupCtx,
+      spec: LCF_AGENT_SPEC,
+      detectedLang: 'zh-Hant',
+    });
+    expect(sightseeingTriage.score).toBeLessThan(0.55);
+
+    const sightseeingDecision = await routeEvent(sightseeingEvent, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(sightseeingDecision.shouldReply).toBe(false);
+    expect(aiRunSpy).not.toHaveBeenCalled();
   });
 });
