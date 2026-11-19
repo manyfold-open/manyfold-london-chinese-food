@@ -20,6 +20,7 @@ import {
   type InboundEvent,
   type LangCode,
   type RecallTurnResult,
+  type RoomContext,
   type TriageDecision,
 } from '@manyfold/narra-agent-kit';
 import {
@@ -28,7 +29,7 @@ import {
   type NarraGatewayConfig,
 } from '@manyfold/narra-agent-kit/worker';
 import { DISH_VOCAB, type DishEntry } from '../../../kinds/dish-vocab.ts';
-import { CAMPUSES, placesNear, walkMinutes, type Campus } from '../../shared/campuses.ts';
+import { CAMPUSES, nearestStation, placesNear, walkMinutes, type Campus } from '../../shared/campuses.ts';
 import { dishKeyOf, normDish } from '../../shared/dish.ts';
 import { findPostcode, type RecordData } from '../../shared/kinds.ts';
 import { buildPlace, slugify, type DocRecord, type IndexEntry, type PlaceDoc } from '../../shared/place-doc.ts';
@@ -61,7 +62,7 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '中餐小助手',
   ],
   domainDescription:
-    'London Chinese food & dining guide: everyday London eating recommendations (near Soho, Chinatown, UCL, LSE, etc.), Chinese restaurants, takeaways, dim sum, hotpot, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings).',
+    'London Chinese food & dining guide: everyday London eating recommendations (near Soho, Chinatown, UCL, LSE, etc.), Chinese restaurants, takeaways, dim sum, hotpot, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings) — NOT weekend markets, pop-ups, exhibitions, or general sightseeing.',
   domainKeywords: [
     'chinese food',
     'chinese restaurant',
@@ -125,6 +126,8 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '烤鸭',
     '拉麵',
     '拉面',
+    '麵館',
+    '面馆',
     '牛肉麵',
     '牛肉面',
     '麻辣燙',
@@ -350,7 +353,9 @@ const WHATS_NEW_RE =
   /(?:最近有什麼新|最近有什么新|新開|新开|新增|新店|what(?:'s| is)\s+new|new\s+places|newly\s+(?:added|verified))/i;
 
 const FOOD_FOLLOWUP_RE =
-  /(?:哪[間家個]|哪一[間家個]|地址|菜單|菜单|價格|价格|人均|幾點|几点|開門|开门|怎麼去|怎么去|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend)\b)/i;
+  /(?:哪[間家個]|哪一[間家個]|地址|菜單|菜单|價格|价格|人均|幾點|几点|開門|开门|怎麼去|怎么去|怎麼走|怎么走|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|地鐵|地铁|站近|近一點|近一点|步行|走路|最近|離.{0,5}站|离.{0,5}站|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend|tube|stations?|walk(?:ing)?|nearest|nearby)\b)/i;
+
+const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stations?|closer|nearest)\b/i;
 
 /* ───────── area, campus, station, cuisine, dish matching ───────── */
 
@@ -1143,6 +1148,156 @@ export function resolveMemoryLocationHint(
   return null;
 }
 
+function hasAntiKeywordHit(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (LCF_AGENT_SPEC.antiKeywords ?? []).some((kw) => {
+    if (kw instanceof RegExp) return kw.test(text);
+    return matchKeywordToken(lower, kw);
+  });
+}
+
+function nearestStationForEntry(entry: IndexEntry): { name: string; km: number } | null {
+  if (entry.la === null || entry.lo === null) return null;
+  const hit = nearestStation({ lat: entry.la, lng: entry.lo });
+  return hit ? { name: hit.name, km: hit.km } : null;
+}
+
+function formatNearestStationNote(
+  station: { name: string; km: number } | null,
+  lang: LangCode,
+): string | undefined {
+  if (!station) return undefined;
+  const mins = walkMinutes(station.km);
+  if (lang === 'zh-Hant') return `近 ${station.name} 站約 ${mins} min`;
+  if (lang === 'zh-Hans') return `近 ${station.name} 站约 ${mins} min`;
+  return `near ${station.name} (~${mins} min walk)`;
+}
+
+function resolveActiveSessionHints(
+  event: InboundEvent,
+  context: RoomContext | undefined,
+  lang: LangCode,
+  entries: readonly IndexEntry[],
+  needLocation: boolean,
+  needTopic: boolean,
+): {
+  location: ResolvedLocation | null;
+  dishes: DishEntry[];
+  cuisines: string[];
+  categories: string[];
+} {
+  const empty = { location: null, dishes: [], cuisines: [], categories: [] };
+  if (!context?.recentHistory?.length || (!needLocation && !needTopic)) {
+    return empty;
+  }
+
+  const recentHumanTurns = context.recentHistory
+    .filter((t) => t.eventId !== event.eventId && !t.isAgent && t.text.trim())
+    .slice(-8)
+    .reverse();
+  const orderedTurns = event.senderId
+    ? [
+        ...recentHumanTurns.filter((t) => t.senderId === event.senderId),
+        ...recentHumanTurns.filter((t) => t.senderId !== event.senderId),
+      ]
+    : recentHumanTurns;
+
+  let location: ResolvedLocation | null = null;
+  let dishes: DishEntry[] = [];
+  let cuisines: string[] = [];
+  let categories: string[] = [];
+
+  for (const turn of orderedTurns) {
+    const turnText = stripMentions(turn.text);
+    if (!turnText) continue;
+
+    const turnDishes = extractDishes(turnText);
+    const turnCuisines = extractCuisines(turnText);
+    const turnCategories = extractCategories(turnText);
+    const hasTopic = turnDishes.length > 0 || turnCuisines.length > 0 || turnCategories.length > 0;
+
+    // Ignore purely off-topic turns (markets/exhibitions/tarot) when inheriting active food context.
+    if (!hasTopic && hasAntiKeywordHit(turnText)) continue;
+
+    if (needLocation && !location) {
+      location = extractLocation(turnText, lang, entries);
+    }
+    if (needTopic && dishes.length === 0 && cuisines.length === 0 && categories.length === 0 && hasTopic) {
+      dishes = turnDishes;
+      cuisines = turnCuisines;
+      categories = turnCategories;
+    }
+    if ((!needLocation || location) && (!needTopic || dishes.length > 0 || cuisines.length > 0 || categories.length > 0)) {
+      break;
+    }
+  }
+
+  return { location, dishes, cuisines, categories };
+}
+
+async function respondForDishQuery(
+  env: Env,
+  db: D1Database,
+  primaryDish: DishEntry,
+  openEntries: readonly IndexEntry[],
+  location: ResolvedLocation | null,
+  lang: LangCode,
+  limit: number,
+  wantsNearestTube: boolean,
+): Promise<string | null> {
+  const servedAt = await findPlacesServingDish(db, primaryDish, openEntries);
+  if (servedAt.length === 0) return null;
+
+  let ranked = servedAt.map((item) => ({
+    ...item,
+    distKm:
+      location?.point && item.entry.la !== null && item.entry.lo !== null
+        ? distanceKm(location.point, { lat: item.entry.la, lng: item.entry.lo })
+        : undefined,
+    station: wantsNearestTube ? nearestStationForEntry(item.entry) : null,
+  }));
+
+  if (wantsNearestTube) {
+    if (location?.point) {
+      const localRadius = Math.max(location.km ?? 1.5, 3.5);
+      const local = ranked.filter((item) => item.distKm !== undefined && item.distKm <= localRadius);
+      if (local.length > 0) ranked = local;
+    }
+    ranked.sort(
+      (a, b) =>
+        (a.station?.km ?? Number.POSITIVE_INFINITY) - (b.station?.km ?? Number.POSITIVE_INFINITY) ||
+        (a.distKm ?? Number.POSITIVE_INFINITY) - (b.distKm ?? Number.POSITIVE_INFINITY),
+    );
+  } else if (location?.point) {
+    ranked.sort((a, b) => (a.distKm ?? 999) - (b.distKm ?? 999));
+  } else {
+    ranked.sort((a, b) => b.entry.r + b.entry.m - (a.entry.r + a.entry.m));
+  }
+  ranked = ranked.slice(0, limit);
+
+  const dishLabel =
+    lang === 'en' ? primaryDish.en : `${localizeZh(primaryDish.zh, lang)} (${primaryDish.en})`;
+  const locationLabel = location ? localizeZh(location.label, lang) : '';
+  const header =
+    lang === 'zh-Hant'
+      ? `🍜 倫敦可以吃到「${dishLabel}」的營業中店家${location ? `（依距離 ${locationLabel} 排序）` : ''}：`
+      : lang === 'zh-Hans'
+        ? `🍜 伦敦可以吃到「${dishLabel}」的营业中店家${location ? `（按距离 ${locationLabel} 排序）` : ''}：`
+        : `🍜 Open places serving ${dishLabel}${location ? ` (nearest to ${locationLabel})` : ''}:`;
+
+  const lines = [header];
+  for (const item of ranked) {
+    const dishNote =
+      item.via === 'menu' && item.pricePence !== null
+        ? `${item.itemName ?? ''} ${formatPricePence(item.pricePence)}`.trim()
+        : undefined;
+    const stationNote = wantsNearestTube ? formatNearestStationNote(item.station, lang) : undefined;
+    const note = [dishNote, stationNote].filter(Boolean).join(' · ') || undefined;
+    lines.push(...formatPlaceLine(env, item.entry, lang, { distKm: item.distKm, note }));
+  }
+  return lines.join('\n');
+}
+
 /**
  * Fast D1-backed responder for London Chinese Food (`lcf-guide`).
  * Returns `null` when Manyfold A2A should handle the turn.
@@ -1152,6 +1307,7 @@ export async function fastRespondLcf(
   event: InboundEvent,
   decision: TriageDecision,
   memories: RecallTurnResult,
+  context?: RoomContext,
 ): Promise<string | null> {
   const lang = decision.detectedLang;
   const cleanedText = stripMentions(event.text);
@@ -1169,10 +1325,7 @@ export async function fastRespondLcf(
   }
 
   const isMultiMention = decision.reason === 'multi_mention_domain_match';
-  const hasAntiHit = (LCF_AGENT_SPEC.antiKeywords ?? []).some((kw) => {
-    if (kw instanceof RegExp) return kw.test(cleanedText);
-    return matchKeywordToken(cleanedText.toLowerCase(), kw);
-  });
+  const hasAntiHit = hasAntiKeywordHit(cleanedText);
 
   const limit = event.isVoice ? 2 : event.chatType === 'group' ? 3 : 5;
 
@@ -1190,11 +1343,24 @@ export async function fastRespondLcf(
 
   const allEntries = await loadPublicEntries(env.DB);
   const openEntries = allEntries.filter((e) => e.t === 'open');
-  const dishes = extractDishes(cleanedText);
-  const cuisines = extractCuisines(cleanedText);
-  const categories = extractCategories(cleanedText);
+  let dishes = extractDishes(cleanedText);
+  let cuisines = extractCuisines(cleanedText);
+  let categories = extractCategories(cleanedText);
   const explicitLocation = extractLocation(cleanedText, lang, allEntries);
-  const location = explicitLocation ?? resolveMemoryLocationHint(memories, lang, allEntries);
+  const wantsNearestTube = TUBE_NEAREST_RE.test(cleanedText);
+
+  const activeHints =
+    decision.reason === 'active_session'
+      ? resolveActiveSessionHints(
+          event,
+          context,
+          lang,
+          allEntries,
+          !explicitLocation,
+          dishes.length === 0 && cuisines.length === 0 && categories.length === 0,
+        )
+      : { location: null, dishes: [], cuisines: [], categories: [] };
+  const location = explicitLocation ?? activeHints.location ?? resolveMemoryLocationHint(memories, lang, allEntries);
 
   // Off-topic guard on explicit mentions / DMs / unmentioned group turns
   if (hasAntiHit && dishes.length === 0 && cuisines.length === 0 && categories.length === 0 && !explicitLocation) {
@@ -1203,43 +1369,17 @@ export async function fastRespondLcf(
 
   // 2. Dish query ("where can I eat 小籠包 / har gow / biang biang noodles near UCL?")
   if (dishes.length > 0) {
-    const primaryDish = dishes[0]!;
-    const servedAt = await findPlacesServingDish(env.DB, primaryDish, openEntries);
-    if (servedAt.length > 0) {
-      let ranked = servedAt.map((item) => ({
-        ...item,
-        distKm:
-          location?.point && item.entry.la !== null && item.entry.lo !== null
-            ? distanceKm(location.point, { lat: item.entry.la, lng: item.entry.lo })
-            : undefined,
-      }));
-      if (location?.point) {
-        ranked.sort((a, b) => (a.distKm ?? 999) - (b.distKm ?? 999));
-      } else {
-        ranked.sort((a, b) => b.entry.r + b.entry.m - (a.entry.r + a.entry.m));
-      }
-      ranked = ranked.slice(0, limit);
-
-      const dishLabel =
-        lang === 'en' ? primaryDish.en : `${localizeZh(primaryDish.zh, lang)} (${primaryDish.en})`;
-      const locationLabel = location ? localizeZh(location.label, lang) : '';
-      const header =
-        lang === 'zh-Hant'
-          ? `🍜 倫敦可以吃到「${dishLabel}」的營業中店家${location ? `（依距離 ${locationLabel} 排序）` : ''}：`
-          : lang === 'zh-Hans'
-            ? `🍜 伦敦可以吃到「${dishLabel}」的营业中店家${location ? `（按距离 ${locationLabel} 排序）` : ''}：`
-            : `🍜 Open places serving ${dishLabel}${location ? ` (nearest to ${locationLabel})` : ''}:`;
-
-      const lines = [header];
-      for (const item of ranked) {
-        const note =
-          item.via === 'menu' && item.pricePence !== null
-            ? `${item.itemName ?? ''} ${formatPricePence(item.pricePence)}`.trim()
-            : undefined;
-        lines.push(...formatPlaceLine(env, item.entry, lang, { distKm: item.distKm, note }));
-      }
-      return lines.join('\n');
-    }
+    const dishReply = await respondForDishQuery(
+      env,
+      env.DB,
+      dishes[0]!,
+      openEntries,
+      location,
+      lang,
+      limit,
+      wantsNearestTube,
+    );
+    if (dishReply) return dishReply;
   }
 
   // 3. Direct place name lookup (if user named a specific restaurant/shop in D1)
@@ -1296,9 +1436,34 @@ export async function fastRespondLcf(
     return '[NO_REPLY]';
   }
 
+  // Inherit prior turn's dish/cuisine/category for active-session follow-ups (e.g. "有沒有離地鐵站近一點的？").
+  if (
+    decision.reason === 'active_session' &&
+    dishes.length === 0 &&
+    cuisines.length === 0 &&
+    categories.length === 0
+  ) {
+    dishes = activeHints.dishes;
+    cuisines = activeHints.cuisines;
+    categories = activeHints.categories;
+    if (dishes.length > 0) {
+      const dishReply = await respondForDishQuery(
+        env,
+        env.DB,
+        dishes[0]!,
+        openEntries,
+        location,
+        lang,
+        limit,
+        wantsNearestTube,
+      );
+      if (dishReply) return dishReply;
+    }
+  }
+
   // 4. Location + optional cuisine/category query
   if (location || cuisines.length > 0 || categories.length > 0) {
-    let matches: Array<{ entry: IndexEntry; distKm?: number }> = [];
+    let matches: Array<{ entry: IndexEntry; distKm?: number; station?: { name: string; km: number } | null }> = [];
 
     if (location?.point) {
       const radius = location.km ?? 1.5;
@@ -1328,6 +1493,15 @@ export async function fastRespondLcf(
     }
 
     if (matches.length > 0) {
+      if (wantsNearestTube) {
+        matches = matches
+          .map((m) => ({ ...m, station: nearestStationForEntry(m.entry) }))
+          .sort(
+            (a, b) =>
+              (a.station?.km ?? Number.POSITIVE_INFINITY) - (b.station?.km ?? Number.POSITIVE_INFINITY) ||
+              (a.distKm ?? Number.POSITIVE_INFINITY) - (b.distKm ?? Number.POSITIVE_INFINITY),
+          );
+      }
       const picked = matches.slice(0, limit);
       const locationLabel = location ? localizeZh(location.label, lang) : '';
       const header =
@@ -1339,7 +1513,8 @@ export async function fastRespondLcf(
 
       const lines = [header];
       for (const m of picked) {
-        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm }));
+        const note = wantsNearestTube ? formatNearestStationNote(m.station ?? null, lang) : undefined;
+        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note }));
       }
       return lines.join('\n');
     }

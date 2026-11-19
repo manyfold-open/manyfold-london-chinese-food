@@ -1177,4 +1177,245 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(sightseeingDecision.shouldReply).toBe(false);
     expect(aiRunSpy).not.toHaveBeenCalled();
   });
+
+  it('12. inherits UCL + noodles on unmentioned active_session tube follow-ups and sorts by nearest Tube station', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:45:00Z';
+
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/gordon-noodles', 'Gordon Square Noodles WC1H 0PD', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000101',
+          'rec_lcf_00000000000000000101',
+          'WC1H 0PD|gordon square noodles',
+          JSON.stringify({
+            name_en: 'Gordon Square Noodles',
+            name_zh: '戈登广场面馆',
+            category: 'restaurant',
+            cuisines: ['noodles', 'lanzhou'],
+            address: '10 Gordon Square',
+            postcode: 'WC1H 0PD',
+            outcode: 'WC1H',
+            borough_code: 'E09000007',
+            lat: 51.5246,
+            lng: -0.1318,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/warren-ramen', 'Warren Street Ramen W1T 5BW', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000102',
+          'rec_lcf_00000000000000000102',
+          'W1T 5BW|warren street ramen',
+          JSON.stringify({
+            name_en: 'Warren Street Ramen',
+            name_zh: '华伦街拉面',
+            category: 'restaurant',
+            cuisines: ['noodles'],
+            address: '2 Warren Street',
+            postcode: 'W1T 5BW',
+            outcode: 'W1T',
+            borough_code: 'E09000007',
+            lat: 51.52495,
+            lng: -0.1385,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/closed-ucl-noodles', 'Closed UCL Noodles', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000103',
+          'rec_lcf_00000000000000000103',
+          'W1T 5BX|closed ucl noodles',
+          JSON.stringify({
+            name_en: 'Closed UCL Noodles',
+            name_zh: '已关闭拉面馆',
+            category: 'restaurant',
+            cuisines: ['noodles'],
+            address: '5 Warren Street',
+            postcode: 'W1T 5BX',
+            outcode: 'W1T',
+            borough_code: 'E09000007',
+            lat: 51.52495,
+            lng: -0.1383,
+            trading: 'closed',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000101', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000102', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000103', now);
+
+    const env = makeEnv(db);
+    const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const nowMs = Date.now();
+
+    const firstQueryText = '倫敦 UCL 附近有推薦的拉麵或麵館嗎？';
+    const firstEvent = makeEvent({ eventId: '$ev_ucl_noodles_1', text: firstQueryText, timestampMs: nowMs - 20_000 });
+    const baseCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-f9388b28:matrix.netmind.chat', displayName: 'Spotted London', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const firstDecision = await routeEvent(firstEvent, baseCtx, LCF_AGENT_SPEC);
+    expect(firstDecision.shouldReply).toBe(true);
+    expect(firstDecision.detectedLang).toBe('zh-Hant');
+
+    const firstReply = await fastRespondLcf(env, firstEvent, firstDecision, emptyMem, baseCtx);
+    expect(firstReply).toBeTruthy();
+    expect(firstReply).toContain('Gordon Square Noodles / 戈登廣場麵館');
+    expect(firstReply).toContain('Warren Street Ramen / 華倫街拉麵');
+    expect(firstReply).not.toContain('Closed UCL Noodles');
+    expect(firstReply).not.toContain('Bloomsbury Dumpling House');
+    // First turn sorts by distance to UCL campus: Gordon Square Noodles is closer to UCL than Warren Street Ramen.
+    expect(firstReply!.indexOf('Gordon Square Noodles')).toBeLessThan(firstReply!.indexOf('Warren Street Ramen'));
+
+    const followUpEvent = makeEvent({
+      eventId: '$ev_ucl_noodles_2',
+      text: '有沒有離地鐵站近一點的？',
+      timestampMs: nowMs,
+    });
+    const activeCtx: RoomContext = {
+      ...baseCtx,
+      activeSession: { active: true, lastAgentReplyAtMs: nowMs - 10_000, expiresAtMs: nowMs + 170_000 },
+      recentHistory: [
+        {
+          eventId: '$ev_ucl_noodles_1',
+          senderId: '@alice:matrix.netmind.chat',
+          senderName: 'Alice',
+          isAgent: false,
+          text: firstQueryText,
+          timestampMs: nowMs - 20_000,
+        },
+        {
+          eventId: '$ev_lcf_reply_1',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: firstReply!,
+          timestampMs: nowMs - 10_000,
+        },
+        {
+          eventId: '$ev_ucl_noodles_2',
+          senderId: '@alice:matrix.netmind.chat',
+          senderName: 'Alice',
+          isAgent: false,
+          text: followUpEvent.text,
+          timestampMs: nowMs,
+        },
+      ],
+    };
+
+    const followUpDecision = await routeEvent(followUpEvent, activeCtx, LCF_AGENT_SPEC);
+    expect(followUpDecision.shouldReply).toBe(true);
+    expect(followUpDecision.reason).toBe('active_session');
+
+    const followUpReply = await fastRespondLcf(env, followUpEvent, followUpDecision, emptyMem, activeCtx);
+    expect(followUpReply).toBeTruthy();
+    expect(followUpReply).not.toBe('[NO_REPLY]');
+    expect(followUpReply).toContain('UCL');
+    expect(followUpReply).toContain('Warren Street Ramen / 華倫街拉麵');
+    expect(followUpReply).toContain('Gordon Square Noodles / 戈登廣場麵館');
+    expect(followUpReply).toContain('近 Warren Street 站約 1 min');
+    expect(followUpReply).not.toContain('Closed UCL Noodles');
+    expect(followUpReply).not.toContain('Bloomsbury Dumpling House');
+    expect(followUpReply).not.toContain('约');
+    expect(findRating(followUpReply!)).toBeNull();
+    // Follow-up sorts by nearest Tube station distance ascending: Warren Street Ramen comes first!
+    expect(followUpReply!.indexOf('Warren Street Ramen')).toBeLessThan(followUpReply!.indexOf('Gordon Square Noodles'));
+
+    // Also verifies English & zh-Hans dish follow-up + tube sorting and that casual chatter still stays [NO_REPLY]
+    const enDishFollowUp = await fastRespondLcf(
+      env,
+      makeEvent({ eventId: '$ev_en_tube', text: 'Any closer to a tube station?' }),
+      { ...followUpDecision, detectedLang: 'en' },
+      emptyMem,
+      {
+        ...activeCtx,
+        recentHistory: [
+          {
+            eventId: '$ev_en_dish_1',
+            senderId: '@alice:matrix.netmind.chat',
+            isAgent: false,
+            text: 'Where can I get Xiao long bao near UCL?',
+            timestampMs: nowMs - 20_000,
+          },
+        ],
+      },
+    );
+    expect(enDishFollowUp).toContain('Bloomsbury Dumpling House');
+    expect(enDishFollowUp).toMatch(/near [A-Za-z' .&-]+ \(~\d+ min walk\)/);
+
+    const chatterWithHistory = await fastRespondLcf(
+      env,
+      makeEvent({ eventId: '$ev_chatter', text: '今天天氣真不錯，先休息了' }),
+      followUpDecision,
+      emptyMem,
+      activeCtx,
+    );
+    expect(chatterWithHistory).toBe('[NO_REPLY]');
+  });
+
+  it('13. yields gracefully on primary market + secondary 順便 dim sum queries alongside narra-agent-kit AI rule', async () => {
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-f9388b28:matrix.netmind.chat', displayName: 'Spotted London', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const marketByTheWay = makeEvent({ text: 'Soho 這週末有什麼好逛的市集順便吃點心？' });
+    // Deterministic heuristic stays below silence threshold because 市集 is in antiKeywords
+    expect(heuristicDomainScore(marketByTheWay, LCF_AGENT_SPEC, groupCtx)).toBeLessThan(0.55);
+
+    const aiPrompts: string[] = [];
+    const triageModel = createWorkersAiTriageModel({
+      run: vi.fn(async (_model: string, input: { messages: Array<{ role: string; content: string }> }) => {
+        aiPrompts.push(input.messages.map((m) => m.content).join('\n'));
+        return { response: '{"score":0.1,"reason":"primary_market_secondary_food"}' };
+      }),
+    });
+
+    const decision = await routeEvent(marketByTheWay, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(decision.shouldReply).toBe(false);
+    expect(aiPrompts).toHaveLength(1);
+    expect(aiPrompts[0]).toContain('by the way / 順便');
+    expect(aiPrompts[0]).toContain('NOT weekend markets');
+  });
 });
