@@ -353,7 +353,7 @@ const WHATS_NEW_RE =
   /(?:最近有什麼新|最近有什么新|新開|新开|新增|新店|what(?:'s| is)\s+new|new\s+places|newly\s+(?:added|verified))/i;
 
 const FOOD_FOLLOWUP_RE =
-  /(?:哪[間家個]|哪一[間家個]|地址|菜單|菜单|價格|价格|人均|幾點|几点|開門|开门|怎麼去|怎么去|怎麼走|怎么走|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|地鐵|地铁|站近|近一點|近一点|步行|走路|最近|離.{0,5}站|离.{0,5}站|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend|tube|stations?|walk(?:ing)?|nearest|nearby)\b)/i;
+  /(?:哪[間家個]|哪一[間家個]|地址|菜單|菜单|價格|价格|人均|(?:開到|开到|營業到|营业到)\s*(?:幾點|几点)|幾點(?:開門|开门|關門|关门|營業|营业|打烊)|几点(?:开门|关门|营业|打烊)|開門|开门|怎麼去|怎么去|怎麼走|怎么走|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|地鐵|地铁|站近|近一點|近一点|步行|走路|最近|離.{0,5}站|离.{0,5}站|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend|tube|stations?|walk(?:ing)?|nearest|nearby)\b)/i;
 
 const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stations?|closer|nearest)\b/i;
 
@@ -1419,6 +1419,19 @@ export async function fastRespondLcf(
       }
       return lines.join('\n');
     }
+  }
+
+  // Unmentioned active-session office/meeting chatter stays silent even if generic cues overlap.
+  if (
+    isUnmentionedGroup &&
+    decision.reason === 'active_session' &&
+    dishes.length === 0 &&
+    cuisines.length === 0 &&
+    categories.length === 0 &&
+    !explicitLocation &&
+    /(?:會議室|会议室|開會|开会|meeting\s+room|late\s+to\s+the\s+office|對了\s*大家|对了\s*大家)/i.test(cleanedText)
+  ) {
+    return '[NO_REPLY]';
   }
 
   // Unmentioned active-session turns with zero food signals and no food follow-up cue stay silent.
