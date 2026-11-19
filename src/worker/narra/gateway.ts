@@ -39,7 +39,7 @@ import type { Env } from '../types';
 
 export const LCF_AGENT_ID = 'lcf-guide';
 export const LCF_MANYFOLD_AGENT_ID = 'agt_agq657lc2b6qhffpaymugpmzsy';
-export const LCF_MATRIX_ID = '@agent-74f30ae5:matrix.netmind.chat';
+export const LCF_MATRIX_ID = '@agent-b2b526f3:matrix.netmind.chat';
 const DEFAULT_PUBLIC_URL = 'https://app.manyfold.ai/london-chinese-food';
 const DEFAULT_NARRA_API = 'https://api.netmind.chat';
 

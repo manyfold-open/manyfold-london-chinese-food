@@ -74,11 +74,11 @@
     // Readers in the UK, the EEA and Switzerland are asked first (src/worker/analytics.ts).
     // Remove it and no Google code reaches any page.
     "GA_MEASUREMENT_ID": "G-K4MY5B6BRX",
-    // Narra Messenger gateway (off until NARRA_GATEWAY_ENABLED="on" and NARRA_AGENT_TOKEN secret is set).
-    "NARRA_GATEWAY_ENABLED": "off",
-    "NARRA_SYNC": "off",
+    // Narra Messenger gateway (enabled with bound Direct Matrix identity).
+    "NARRA_GATEWAY_ENABLED": "on",
+    "NARRA_SYNC": "on",
     "NARRA_AGENT_ID": "agt_agq657lc2b6qhffpaymugpmzsy",
-    "NARRA_MATRIX_ID": "@agent-74f30ae5:matrix.netmind.chat"
+    "NARRA_MATRIX_ID": "@agent-b2b526f3:matrix.netmind.chat"
   },
   // Secrets, set with `npx wrangler secret put <NAME>`:
   //   ADMIN_PASSWORD     opens /api/admin/* and /settings
