@@ -2352,4 +2352,107 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     );
     expect(unmentionedColdComp).toBe('[NO_REPLY]');
   });
+
+  it('20. excludes grocery and bubble-tea shops from generic location-only food queries while preserving explicit grocery searches', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:59:00Z';
+
+    // Seed a Chinese grocery + bubble-tea shop right on UCL campus (closer than Bloomsbury Dumpling House)
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/yohome-ucl', 'YOHOME UCL WC1E 6BT', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000501',
+          'rec_lcf_00000000000000000501',
+          'WC1E 6BT|yohome ucl',
+          JSON.stringify({
+            name_en: 'YOHOME UCL',
+            name_zh: '优家超市 UCL',
+            category: 'grocery',
+            cuisines: ['groceries', 'bubble-tea'],
+            address: '100 Gower Street',
+            postcode: 'WC1E 6BT',
+            outcode: 'WC1E',
+            borough_code: 'E09000007',
+            lat: 51.5246,
+            lng: -0.134,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/ucl-boba', 'UCL Milk Tea Bar WC1E 6BU', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000502',
+          'rec_lcf_00000000000000000502',
+          'WC1E 6BU|ucl milk tea bar',
+          JSON.stringify({
+            name_en: 'UCL Milk Tea Bar',
+            name_zh: 'UCL 奶茶吧',
+            category: 'tea-drinks',
+            cuisines: ['bubble-tea'],
+            address: '102 Gower Street',
+            postcode: 'WC1E 6BU',
+            outcode: 'WC1E',
+            borough_code: 'E09000007',
+            lat: 51.52462,
+            lng: -0.13405,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000501', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000502', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const dmDecision: TriageDecision = {
+      shouldReply: true,
+      tier: 0,
+      reason: 'dm',
+      confidence: 1,
+      detectedLang: 'zh-Hant',
+      shouldQuote: false,
+    };
+
+    // Generic location-only food query excludes grocery & bubble-tea shops when savory restaurants exist nearby
+    const genericUclReply = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', eventId: '$ev_ucl_generic_food', text: 'UCL 附近有什麼好吃的？' }),
+      dmDecision,
+      emptyMem,
+    );
+    expect(genericUclReply).toBeTruthy();
+    expect(genericUclReply).toContain('Bloomsbury Dumpling House');
+    expect(genericUclReply).not.toContain('YOHOME UCL');
+    expect(genericUclReply).not.toContain('UCL Milk Tea Bar');
+    expect(findRating(genericUclReply!)).toBeNull();
+
+    // Explicit grocery search ("UCL 附近中超") still returns YOHOME UCL
+    const groceryUclReply = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', eventId: '$ev_ucl_grocery', text: 'UCL 附近中超' }),
+      dmDecision,
+      emptyMem,
+    );
+    expect(groceryUclReply).toBeTruthy();
+    expect(groceryUclReply).toContain('YOHOME UCL');
+    expect(groceryUclReply).not.toContain('Bloomsbury Dumpling House');
+    expect(findRating(groceryUclReply!)).toBeNull();
+  });
 });
