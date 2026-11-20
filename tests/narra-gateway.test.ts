@@ -2837,4 +2837,36 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       expect(findRating(reply!)).toBeNull();
     }
   });
+
+  it('24. deterministically scores direct present-tense food/dessert cravings ("我想吃冰淇淋", "我想吃烧烤") as domain_match (>= 0.9) without LLM triage', async () => {
+    expect(LCF_AGENT_SPEC.domainDescription).toContain('Chinese BBQ skewers, desserts, tong sui, ice cream');
+
+    const groupCtx: RoomContext = {
+      roomId: '!grp_craving:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const triageModel = createWorkersAiTriageModel(null);
+
+    for (const text of ['我想吃冰淇淋', '我想吃烧烤']) {
+      const event = makeEvent({ eventId: `$ev_craving_${text.length}`, text });
+      const scored = await triageModel.score({
+        event,
+        context: groupCtx,
+        spec: LCF_AGENT_SPEC,
+        detectedLang: 'zh-Hans',
+      });
+      expect(scored.reason, text).toBe('domain_match');
+      expect(scored.score, text).toBeGreaterThanOrEqual(0.9);
+
+      const decision = await routeEvent(event, groupCtx, LCF_AGENT_SPEC, { triageModel });
+      expect(decision.shouldReply, text).toBe(true);
+      expect(decision.confidence, text).toBeGreaterThanOrEqual(0.9);
+    }
+  });
 });

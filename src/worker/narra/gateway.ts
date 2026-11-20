@@ -62,7 +62,7 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '中餐小助手',
   ],
   domainDescription:
-    'London Chinese food & dining guide: everyday London eating recommendations (near Soho, Chinatown, UCL, LSE, etc.), Chinese restaurants, takeaways, dim sum, hotpot, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings) — NOT weekend markets, pop-ups, exhibitions, or general sightseeing.',
+    'London Chinese food & dining guide: everyday London eating recommendations (near Soho, Chinatown, UCL, LSE, etc.), Chinese restaurants, takeaways, dim sum, hotpot, Chinese BBQ skewers, desserts, tong sui, ice cream, bubble tea, Chinese bakeries and Chinese groceries in London with menus, prices, and reviewer excerpts (no star ratings or quality rankings) — NOT weekend markets, pop-ups, exhibitions, or general sightseeing.',
   domainKeywords: [
     'chinese food',
     'chinese restaurant',
@@ -243,6 +243,7 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     /(?:吃的|好吃|推薦吃|推荐吃|吃什麼|吃什么|餐廳|餐厅|吃飯|吃饭|拉麵|拉面|麵館|面馆|火鍋|火锅|點心|点心|奶茶|川菜|粵菜|粤菜|燒臘|烧腊|燒烤|烧烤|烤串|烤魚|烤鱼|米線|米线|中餐|where\s+to\s+eat|good\s+food).{0,24}(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|king'?s\s*cross|euston|holborn|covent\s*garden|camden|angel|stratford|paddington|waterloo|london\s*bridge|borough|bank|old\s*street|brixton|south\s*kensington|kensington|greenwich|hammersmith|notting\s*hill|wembley|london|倫敦|伦敦|中國城|中国城)/i,
     /(?:好餓|好饿|餓了|饿了|推薦吃的|推荐吃的|吃什麼|吃什么|吃飯|吃饭|燒烤|烧烤|烤串|烤魚|烤鱼|米線|米线|where\s+to\s+eat).{0,28}(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|king'?s\s*cross|euston|holborn|covent\s*garden|camden|angel|stratford|paddington|waterloo|london\s*bridge|borough|bank|old\s*street|brixton|south\s*kensington|kensington|greenwich|hammersmith|notting\s*hill|wembley|london|倫敦|伦敦|附近)/i,
     /(?:soho|chinatown|ucl|lse|kcl|imperial|canary\s*wharf|shoreditch|king'?s\s*cross|euston|holborn|covent\s*garden|camden|angel|stratford|paddington|waterloo|london\s*bridge|borough|bank|old\s*street|brixton|south\s*kensington|kensington|greenwich|hammersmith|notting\s*hill|wembley|london|倫敦|伦敦).{0,16}(?:附近)?(?:有沒有|有没有)?(?:推薦|推荐)?(?:吃的|好吃|餐廳|餐厅|吃飯|吃饭|燒烤|烧烤|烤串|烤魚|烤鱼|米線|米线)/i,
+    /(?:好想|我想|想)吃.{0,4}(?:冰淇淋|冰激凌|雪糕|燒烤|烧烤|火鍋|火锅|點心|点心|甜品|糖水|拉麵|拉面|川菜|烤鴨|烤鸭|小籠包|小笼包|螺螄粉|螺蛳粉)/,
   ],
   antiKeywords: [
     'tarot',
