@@ -19,14 +19,17 @@ import workerDefault, {
   NarraRoomCoordinator,
 } from '../src/worker/index';
 import {
-  extractLocation,
-  formatPlaceUpdatesMessage,
+  buildLcfExtraEnvelopeFields,
   createLcfGatewayConfig,
+  extractLocation,
   fastRespondLcf,
+  formatPlaceUpdatesMessage,
   greetingReply,
   LCF_AGENT_ID,
   LCF_AGENT_SPEC,
   LCF_MATRIX_ID,
+  lcfGatewayConfig,
+  lcfThinkingMessage,
   queryRecentOpenPlaceUpdates,
   resolveMemoryLocationHint,
   thanksReply,
@@ -1760,5 +1763,210 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       emptyMem,
     );
     expect(activeGroupThanks).toBe('[NO_REPLY]');
+  });
+
+  it('17. wires Phase 1-4 gateway config (thinkingMessage, enableA2AFailureReply, buildExtraEnvelopeFields) and quick meal-picker fast-path', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:55:00Z';
+
+    // Add a 3rd open spot with opening hours to exercise multi-spot selection & hours prefetch
+    await db
+      .prepare(
+        `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+         VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/holborn-noodle', 'Holborn Noodle Bar WC1V 7AA', ?, 'tok_1', ?, ?, ?)`,
+      )
+      .bind(
+        'rec_01m4fc98epc5fkgpz83w426dzk',
+        'rec_01m4fc98epc5fkgpz83w426dzk',
+        'WC1V 7AA|holborn noodle bar',
+        JSON.stringify({
+          name_en: 'Holborn Noodle Bar',
+          name_zh: '霍本拉面馆',
+          category: 'restaurant',
+          cuisines: ['noodles', 'cantonese'],
+          address: '88 High Holborn',
+          postcode: 'WC1V 7AA',
+          outcode: 'WC1V',
+          borough_code: 'E09000007',
+          lat: 51.5176,
+          lng: -0.1198,
+          hours: '11:30-22:00',
+          trading: 'open',
+        }),
+        ts,
+        ts,
+        ts,
+        ts,
+      )
+      .run();
+    await rebuildPlace(db, 'rec_01m4fc98epc5fkgpz83w426dzk', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+
+    // 1. Gateway config Phase 1-4 wiring
+    const cfg = createLcfGatewayConfig();
+    expect(cfg.enableA2AFailureReply).toBe(true);
+    expect(lcfGatewayConfig.enableA2AFailureReply).toBe(true);
+    expect(cfg.thinkingMessage).toBe(lcfThinkingMessage);
+    expect(cfg.buildExtraEnvelopeFields).toBe(buildLcfExtraEnvelopeFields);
+
+    const dummyEv = makeEvent({ text: 'test' });
+    const dummyDec: TriageDecision = {
+      shouldReply: true,
+      tier: 0,
+      reason: 'dm',
+      confidence: 1,
+      detectedLang: 'zh-Hant',
+      shouldQuote: false,
+    };
+    expect(cfg.thinkingMessage!('zh-Hant', dummyEv, dummyDec)).toBe(
+      '🍜 正在幫你查倫敦中餐與最新資訊，稍等一下…',
+    );
+    expect(cfg.thinkingMessage!('zh-Hans', dummyEv, dummyDec)).toBe(
+      '🍜 正在帮你查伦敦中餐与最新信息，稍等一下…',
+    );
+    expect(cfg.thinkingMessage!('en', dummyEv, dummyDec)).toBe(
+      '🍜 Looking up London Chinese food details for you, one moment…',
+    );
+
+    // 2. buildExtraEnvelopeFields extracts rec_... IDs from recent self reply & replyToTarget
+    const prefetchCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [
+        {
+          eventId: '$self_1',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: [
+            '🍜 為你查到 2 間營業中選擇：',
+            '- Bloomsbury Dumpling House',
+            'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000002/bloomsbury-dumpling-house',
+            '- Holborn Noodle Bar',
+            'https://app.manyfold.ai/london-chinese-food/zh/place/rec_01m4fc98epc5fkgpz83w426dzk/holborn-noodle-bar',
+          ].join('\n'),
+          timestampMs: Date.now() - 10_000,
+        },
+      ],
+    };
+    const extra = await buildLcfExtraEnvelopeFields(
+      env,
+      makeEvent({ text: '這兩間哪間適合帶長輩去？' }),
+      dummyDec,
+      emptyMem,
+      prefetchCtx,
+    );
+    expect(extra).not.toBeNull();
+    expect(extra!.d1_prefetched_records).toBeTruthy();
+    expect(extra!.d1_prefetched_records.length).toBeLessThanOrEqual(1_400);
+    expect(extra!.d1_prefetched_records).toContain('Bloomsbury Dumpling House');
+    expect(extra!.d1_prefetched_records).toContain('WC1E 6BT');
+    expect(extra!.d1_prefetched_records).toContain('£8.50');
+    expect(extra!.d1_prefetched_records).toContain('Holborn Noodle Bar');
+    expect(extra!.d1_prefetched_records).toContain('WC1V 7AA');
+    expect(extra!.d1_prefetched_records).toContain('11:30-22:00');
+    expect(extra!.d1_prefetched_records).not.toContain('4.5/5');
+    expect(findRating(extra!.d1_prefetched_records)).toBeNull();
+
+    // replyToTarget takes priority
+    const replyExtra = await buildLcfExtraEnvelopeFields(
+      env,
+      makeEvent({ text: '這間附近好停車嗎？' }),
+      { ...dummyDec, detectedLang: 'en' },
+      emptyMem,
+      {
+        ...prefetchCtx,
+        recentHistory: [],
+        replyToTarget: {
+          eventId: '$self_reply_target',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isSelf: true,
+          isAgent: true,
+          text: 'https://app.manyfold.ai/london-chinese-food/en/place/rec_lcf_00000000000000000001/soho-sichuan-house',
+        },
+      },
+    );
+    expect(replyExtra?.d1_prefetched_records).toContain('Soho Sichuan House');
+    expect(replyExtra?.d1_prefetched_records).toContain('W1D 6JW');
+
+    // Empty history returns null
+    expect(
+      await buildLcfExtraEnvelopeFields(
+        env,
+        dummyEv,
+        dummyDec,
+        emptyMem,
+        { ...prefetchCtx, recentHistory: [] },
+      ),
+    ).toBeNull();
+
+    // 3. Quick meal-picker fast-path ("今天中午吃什麼？" / "what should we eat for lunch")
+    const quickHant = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', eventId: '$ev_lunch_1', text: '今天中午吃什麼？' }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      emptyMem,
+    );
+    expect(quickHant).toBeTruthy();
+    expect(quickHant).toContain('幫你挑 2 間營業中倫敦中餐');
+    expect(quickHant).not.toContain('Closed Canary Tea');
+    expect(quickHant!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(2);
+    expect(quickHant).not.toMatch(/\[[^\]]+\]\(https?:\/\//);
+    expect(findRating(quickHant!)).toBeNull();
+
+    // Deterministic for same eventId
+    const quickHantRepeat = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', eventId: '$ev_lunch_1', text: '今天中午吃什麼？' }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      emptyMem,
+    );
+    expect(quickHantRepeat).toBe(quickHant);
+
+    // English quick meal-picker with memory location hint
+    const quickEn = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'dm', eventId: '$ev_lunch_en', text: 'what should we eat for lunch?' }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'en', shouldQuote: false },
+      {
+        userMemories: [
+          {
+            id: 'mem_loc',
+            scope: 'user',
+            agentId: LCF_AGENT_ID,
+            userId: '@alice:matrix.netmind.chat',
+            kind: 'fact',
+            key: 'default_area',
+            value: 'Soho',
+            createdAt: ts,
+            updatedAt: ts,
+          },
+        ],
+        roomMemories: [],
+        promptSafeLines: [],
+      },
+    );
+    expect(quickEn).toContain('quick open London Chinese food picks near Soho');
+    expect(quickEn).not.toContain('Closed Canary Tea');
+    expect(quickEn!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/en\/place\//g)).toHaveLength(2);
+
+    // Unmentioned group silence guard remains untouched when anti-keywords hit
+    const antiMealReply = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'group', eventId: '$ev_anti_meal', text: '去快閃市集逛完晚上吃什麼？' }),
+      { shouldReply: true, tier: 1, reason: 'domain_match', confidence: 0.6, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+    );
+    expect(antiMealReply).toBe('[NO_REPLY]');
   });
 });

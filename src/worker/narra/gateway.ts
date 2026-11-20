@@ -368,6 +368,12 @@ const FOOD_FOLLOWUP_RE =
 
 const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stations?|closer|nearest)\b/i;
 
+const QUICK_MEAL_PICK_RE =
+  /(?:(?:今天|今晚|今早|中午|午餐|午飯|午饭|晚上|晚餐|晚飯|晚饭|宵夜|夜宵|等下|待會|待会|不知道|要).{0,6}(?:吃什麼|吃什么|吃啥|吃哪[間家個]|吃哪[间家个])|(?:隨便|随便|幫我|帮我|隨機|随机).{0,4}(?:推薦|推荐|挑|選|选)(?:一|兩|两|幾|几)?(?:間|家|個|个)?|\b(?:what\s+(?:should\s+(?:we|i)|to)\s+eat(?:\s+for\s+(?:lunch|dinner|supper|tonight))?|what'?s\s+for\s+(?:lunch|dinner)|pick\s+(?:me\s+|us\s+)?(?:a\s+)?(?:place|spot|somewhere)(?:\s+for\s+(?:lunch|dinner))?|surprise\s+me(?:\s+for\s+(?:lunch|dinner))?)\b)/i;
+
+const PLACE_ID_RE = /\brec_[a-z0-9_]{4,}\b/gi;
+const MAX_PREFETCH_CHARS = 1_400;
+
 /* ───────── area, campus, station, cuisine, dish matching ───────── */
 
 const CAMPUS_ALIASES: Record<string, string[]> = {
@@ -1464,6 +1470,58 @@ export async function fastRespondLcf(
     return '[NO_REPLY]';
   }
 
+  // Quick meal-picker fast-path for spontaneous "what should we eat?" prompts with no dish/cuisine/place specified.
+  if (
+    dishes.length === 0 &&
+    cuisines.length === 0 &&
+    categories.length === 0 &&
+    !hasNameMatches &&
+    (!isUnmentionedGroup || !hasAntiHit) &&
+    QUICK_MEAL_PICK_RE.test(cleanedText) &&
+    openEntries.length > 0
+  ) {
+    let pool: Array<{ entry: IndexEntry; distKm?: number }> = [];
+    let usedLocationLabel = '';
+    if (location?.point) {
+      const nearby = placesNear(openEntries, location.point, location.km ?? 1.5);
+      const broadened = nearby.length >= 2 ? nearby : placesNear(openEntries, location.point, 3.5);
+      if (broadened.length > 0) {
+        pool = broadened.slice(0, 12).map((n) => ({ entry: n.entry, distKm: n.km }));
+        usedLocationLabel = localizeZh(location.label, lang);
+      }
+    } else if (location?.postcode) {
+      const filtered = queryPlaces(openEntries, {
+        postcode: location.postcode,
+        openOnly: true,
+        sort: 'recent',
+      });
+      if (filtered.length > 0) {
+        pool = filtered.slice(0, 12).map((entry) => ({ entry }));
+        usedLocationLabel = localizeZh(location.label, lang);
+      }
+    }
+    if (pool.length === 0) {
+      pool = [...openEntries]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((entry) => ({ entry }));
+    }
+
+    const picked = pickQuickMealSpots(pool, event.eventId || cleanedText, 2);
+    if (picked.length > 0) {
+      const header =
+        lang === 'zh-Hant'
+          ? `🍜 幫你挑 ${picked.length} 間營業中倫敦中餐${usedLocationLabel ? `（${usedLocationLabel} 一帶）` : ''}：`
+          : lang === 'zh-Hans'
+            ? `🍜 帮你挑 ${picked.length} 家营业中伦敦中餐${usedLocationLabel ? `（${usedLocationLabel} 一带）` : ''}：`
+            : `🍜 Here ${picked.length === 1 ? 'is 1 quick open London Chinese food pick' : `are ${picked.length} quick open London Chinese food picks`}${usedLocationLabel ? ` near ${usedLocationLabel}` : ''}:`;
+      const lines = [header];
+      for (const item of picked) {
+        lines.push(...formatPlaceLine(env, item.entry, lang, { distKm: item.distKm }));
+      }
+      return lines.join('\n');
+    }
+  }
+
   // Unmentioned active-session turns with zero food signals and no food follow-up cue stay silent.
   if (
     isUnmentionedGroup &&
@@ -1594,6 +1652,137 @@ export async function fastRespondLcf(
   return 'Which London area (postcode, Tube station, university like UCL/LSE, or Chinatown) or Chinese dish are you looking for?';
 }
 
+function hashSeed(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function pickQuickMealSpots<T>(pool: readonly T[], seedInput: string, count = 2): T[] {
+  if (pool.length <= count) return [...pool];
+  const seed = hashSeed(seedInput);
+  const first = seed % pool.length;
+  if (count <= 1) return [pool[first]!];
+  const step = 1 + ((seed >>> 8) % (pool.length - 1));
+  const second = (first + step) % pool.length;
+  return [pool[first]!, pool[second]!];
+}
+
+function extractRecentPlaceIds(context?: RoomContext, limit = 4): string[] {
+  if (!context) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const collect = (text?: string) => {
+    if (!text) return;
+    for (const match of text.matchAll(PLACE_ID_RE)) {
+      const id = match[0];
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      if (ids.length >= limit) return;
+    }
+  };
+
+  if (context.replyToTarget?.text) {
+    collect(context.replyToTarget.text);
+  }
+  if (ids.length < limit && context.recentHistory?.length) {
+    const selfTurns = [...context.recentHistory]
+      .reverse()
+      .filter((t) => t.isSelf || t.senderId === LCF_MATRIX_ID);
+    for (const turn of selfTurns.slice(0, 4)) {
+      collect(turn.text);
+      if (ids.length >= limit) break;
+    }
+  }
+  return ids;
+}
+
+function formatPrefetchedPlaceDoc(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: LangCode): string {
+  const nameEn =
+    typeof doc.place.name_en === 'string' && !findRating(doc.place.name_en) ? doc.place.name_en : null;
+  const rawNameZh =
+    typeof doc.place.name_zh === 'string' && !findRating(doc.place.name_zh) ? doc.place.name_zh : null;
+  const nameZh = rawNameZh ? localizeZh(rawNameZh, lang) : null;
+  const name = [nameEn, nameZh].filter(Boolean).join(' / ') || doc.id;
+  const cuisines =
+    Array.isArray(doc.place.cuisines) && doc.place.cuisines.length > 0
+      ? (doc.place.cuisines as string[]).slice(0, 3).map((c) => labelFor(CUISINE_TEXT, c, lang)).join(', ')
+      : labelFor(CATEGORY_TEXT, String(doc.place.category ?? 'restaurant'), lang);
+  const address = [doc.place.address, doc.place.postcode]
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    .join(', ');
+  const trading = typeof doc.place.trading === 'string' ? doc.place.trading : 'open';
+  const rawHours =
+    typeof doc.place.hours === 'string'
+      ? doc.place.hours.trim()
+      : typeof doc.place.opening_hours === 'string'
+        ? doc.place.opening_hours.trim()
+        : '';
+
+  const parts: string[] = [`[${doc.id}] ${name} (${cuisines}; ${trading})`];
+  if (address) parts.push(`Address: ${address}`);
+  if (rawHours) parts.push(`Hours: ${rawHours}`);
+
+  const highlights: string[] = [];
+  const firstMenu = doc.menus[0];
+  if (firstMenu) {
+    const items = firstMenu.sections
+      .flatMap((s) => s.items)
+      .filter((i) => i.name_en || i.name_zh)
+      .slice(0, 3)
+      .map((i) => {
+        const itemZh = i.name_zh ? localizeZh(i.name_zh, lang) : i.name_zh;
+        return `${[itemZh, i.name_en].filter(Boolean).join(' ')} ${formatPricePence(i.price_pence ?? null)}`.trim();
+      });
+    if (items.length > 0) highlights.push(`Menu: ${items.join(', ')}`);
+  }
+  const safeReview = doc.reviews.find((r) => r.excerpt && !findRating(r.excerpt));
+  if (safeReview) {
+    const snippet = localizeZh(safeReview.excerpt.replace(/\s+/g, ' ').trim().slice(0, 100), lang);
+    highlights.push(`Note: "${snippet}"`);
+  }
+  if (highlights.length > 0) parts.push(highlights.join(' | '));
+  parts.push(placeUrl(env, lang, doc.id, doc.slug));
+  return parts.join(' · ');
+}
+
+export async function buildLcfExtraEnvelopeFields(
+  env: Env,
+  _event: InboundEvent,
+  decision: TriageDecision,
+  _memories: RecallTurnResult,
+  context: RoomContext,
+): Promise<Record<string, string> | null> {
+  if (!env.DB) return null;
+  const ids = extractRecentPlaceIds(context, 4);
+  if (ids.length === 0) return null;
+
+  await ensureSchema(env.DB);
+  const docs = await Promise.all(ids.map((id) => loadPlaceDocOrSynthesize(env.DB, id).catch(() => null)));
+  const lines = docs
+    .filter((d): d is PlaceDoc => d !== null)
+    .map((d) => formatPrefetchedPlaceDoc(env, d, decision.detectedLang));
+  if (lines.length === 0) return null;
+
+  const combined = lines.join('\n');
+  const trimmed =
+    combined.length <= MAX_PREFETCH_CHARS
+      ? combined
+      : `${combined.slice(0, MAX_PREFETCH_CHARS - 1).trimEnd()}…`;
+  return { d1_prefetched_records: trimmed };
+}
+
+export const lcfThinkingMessage = (lang: LangCode): string =>
+  lang === 'zh-Hant'
+    ? '🍜 正在幫你查倫敦中餐與最新資訊，稍等一下…'
+    : lang === 'zh-Hans'
+      ? '🍜 正在帮你查伦敦中餐与最新信息，稍等一下…'
+      : '🍜 Looking up London Chinese food details for you, one moment…';
+
 export async function resolveLcfA2ACredential(env: Env): Promise<NarraA2ACredentialResult | null> {
   const url = (env.MANYFOLD_A2A_URL ?? '').trim();
   const token = (env.MANYFOLD_A2A_TOKEN ?? '').trim();
@@ -1611,6 +1800,9 @@ export function createLcfGatewayConfig(
     fetchUpdates: (env, sinceIso) => fetchLcfUpdates(env, sinceIso, overrides.fetchImpl),
     fastRespond: fastRespondLcf,
     resolveA2ACredential: resolveLcfA2ACredential,
+    buildExtraEnvelopeFields: buildLcfExtraEnvelopeFields,
+    thinkingMessage: lcfThinkingMessage,
+    enableA2AFailureReply: true,
     ...overrides,
   };
 }
