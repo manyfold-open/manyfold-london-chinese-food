@@ -1679,6 +1679,17 @@ export async function fastRespondLcf(
     }
 
     if (matches.length > 0) {
+      if (
+        dishes.length === 0 &&
+        cuisines.length === 0 &&
+        categories.length === 0 &&
+        !NON_MEAL_QUERY_RE.test(cleanedText)
+      ) {
+        const mealMatches = matches.filter((m) => !isNonMealEntry(m.entry));
+        if (mealMatches.length > 0) {
+          matches = mealMatches;
+        }
+      }
       if (wantsNearestTube) {
         matches = matches
           .map((m) => ({ ...m, station: nearestStationForEntry(m.entry) }))
@@ -1748,6 +1759,9 @@ function hashSeed(input: string): number {
 
 const NON_MEAL_TOKEN_RE =
   /(?:^|[-_\s/])(?:bubble[-_\s]?tea|boba|tea[-_\s]?drinks?|tea|drinks?|grocery|groceries|supermarket|bakery|desserts?|pastry|tong[-_\s]?sui)(?:$|[-_\s/])|奶茶|茶飲|茶饮|甜品|糖水|超市|中超|烘焙/i;
+
+const NON_MEAL_QUERY_RE =
+  /\b(?:grocery|groceries|supermarket|bubble\s*tea|boba|milk\s*tea|bakery|pastry|desserts?|tong\s*sui)\b|中超|超市|食材|奶茶|波霸|茶飲|茶饮|烘焙|麵包|面包|甜品|糖水|蛋糕|蛋撻|蛋挞/i;
 
 function isNonMealEntry(entry: Pick<IndexEntry, 'c' | 'k'>): boolean {
   const category = (entry.c ?? '').trim();
