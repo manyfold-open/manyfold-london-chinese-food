@@ -162,6 +162,28 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '台灣菜',
     '台湾菜',
     '糖水',
+    '冰淇淋',
+    '冰激凌',
+    '雪糕',
+    '甜品',
+    '甜點',
+    '甜点',
+    '刨冰',
+    '蛋撻',
+    '蛋挞',
+    '芋圓',
+    '芋圆',
+    '雞蛋仔',
+    '鸡蛋仔',
+    '雙皮奶',
+    '双皮奶',
+    '楊枝甘露',
+    '杨枝甘露',
+    '中式甜品',
+    '中式烘焙',
+    '麵包店',
+    '面包店',
+    '冰沙',
     '燒烤',
     '烧烤',
     '烤串',
@@ -573,8 +595,32 @@ const CUISINE_KEYWORDS: ReadonlyArray<{ cuisine: string; patterns: string[] }> =
   { cuisine: 'noodles', patterns: ['noodle', 'noodles', 'ramen', '麵館', '面馆', '拉麵', '拉面', '牛肉麵', '牛肉面', '粉麵', '粉面'] },
   { cuisine: 'dumplings', patterns: ['dumpling', 'dumplings', '餃子', '饺子', '水餃', '水饺', '鍋貼', '锅贴', '包子'] },
   { cuisine: 'bubble-tea', patterns: ['bubble tea', 'boba', 'milk tea', '奶茶', '波霸', '珍珠奶茶'] },
-  { cuisine: 'desserts', patterns: ['tong sui', 'dessert', 'desserts', '糖水', '甜品'] },
-  { cuisine: 'bakery', patterns: ['bakery', 'pastry', '烘焙', '中式麵包', '中式面包', '蛋撻', '蛋挞'] },
+  {
+    cuisine: 'desserts',
+    patterns: [
+      'tong sui',
+      'dessert',
+      'desserts',
+      '糖水',
+      '甜品',
+      '甜點',
+      '甜点',
+      '冰淇淋',
+      '冰激凌',
+      '雪糕',
+      '刨冰',
+      '雙皮奶',
+      '双皮奶',
+      '楊枝甘露',
+      '杨枝甘露',
+      '芋圓',
+      '芋圆',
+      '雞蛋仔',
+      '鸡蛋仔',
+      '冰沙',
+    ],
+  },
+  { cuisine: 'bakery', patterns: ['bakery', 'pastry', '烘焙', '中式烘焙', '中式麵包', '中式面包', '麵包店', '面包店', '蛋撻', '蛋挞'] },
   { cuisine: 'vegetarian', patterns: ['vegetarian', 'vegan', '素食', '素菜'] },
   { cuisine: 'groceries', patterns: ['grocery', 'supermarket', 'groceries', '中超', '中國超市', '中国超市', '華人超市', '华人超市'] },
 ];
@@ -1693,28 +1739,35 @@ export async function fastRespondLcf(
 
     if (location?.point) {
       const radius = location.km ?? 1.5;
-      const nearby = placesNear(openEntries, location.point, radius).filter(
-        (n) =>
-          (!cuisines.length || cuisines.some((c) => n.entry.k.includes(c))) &&
-          (!categories.length || categories.includes(n.entry.c)),
-      );
-      const broadened =
-        nearby.length > 0
-          ? nearby
-          : placesNear(openEntries, location.point, 3.5).filter(
-              (n) =>
-                (!cuisines.length || cuisines.some((c) => n.entry.k.includes(c))) &&
-                (!categories.length || categories.includes(n.entry.c)),
-            );
+      const filterNearby = (list: ReturnType<typeof placesNear>, useCategories: boolean) =>
+        list.filter(
+          (n) =>
+            (!cuisines.length || cuisines.some((c) => n.entry.k.includes(c))) &&
+            (!useCategories || !categories.length || categories.includes(n.entry.c)),
+        );
+      const nearby = filterNearby(placesNear(openEntries, location.point, radius), true);
+      let broadened =
+        nearby.length > 0 ? nearby : filterNearby(placesNear(openEntries, location.point, 3.5), true);
+      if (broadened.length === 0 && cuisines.length > 0 && categories.length > 0) {
+        broadened = filterNearby(placesNear(openEntries, location.point, 3.5), false);
+      }
       matches = broadened.map((n) => ({ entry: n.entry, distKm: n.km }));
     } else {
-      const filtered = queryPlaces(openEntries, {
+      let filtered = queryPlaces(openEntries, {
         ...(location?.postcode ? { postcode: location.postcode } : {}),
         ...(cuisines.length ? { cuisines } : {}),
         ...(categories.length ? { categories } : {}),
         openOnly: true,
         sort: 'recent',
       });
+      if (filtered.length === 0 && cuisines.length > 0 && categories.length > 0) {
+        filtered = queryPlaces(openEntries, {
+          ...(location?.postcode ? { postcode: location.postcode } : {}),
+          cuisines,
+          openOnly: true,
+          sort: 'recent',
+        });
+      }
       matches = filtered.map((entry) => ({ entry }));
     }
 
@@ -1801,7 +1854,7 @@ const NON_MEAL_TOKEN_RE =
   /(?:^|[-_\s/])(?:bubble[-_\s]?tea|boba|tea[-_\s]?drinks?|tea|drinks?|grocery|groceries|supermarket|bakery|desserts?|pastry|tong[-_\s]?sui)(?:$|[-_\s/])|奶茶|茶飲|茶饮|甜品|糖水|超市|中超|烘焙/i;
 
 const NON_MEAL_QUERY_RE =
-  /\b(?:grocery|groceries|supermarket|bubble\s*tea|boba|milk\s*tea|bakery|pastry|desserts?|tong\s*sui)\b|中超|超市|食材|奶茶|波霸|茶飲|茶饮|烘焙|麵包|面包|甜品|糖水|蛋糕|蛋撻|蛋挞/i;
+  /\b(?:grocery|groceries|supermarket|bubble\s*tea|boba|milk\s*tea|bakery|pastry|desserts?|tong\s*sui|ice\s*cream|gelato|shaved\s*ice)\b|中超|超市|食材|奶茶|波霸|茶飲|茶饮|烘焙|麵包|面包|甜品|甜點|甜点|糖水|蛋糕|蛋撻|蛋挞|冰淇淋|冰激凌|雪糕|刨冰|雙皮奶|双皮奶|楊枝甘露|杨枝甘露|芋圓|芋圆|雞蛋仔|鸡蛋仔|冰沙/i;
 
 function isNonMealEntry(entry: Pick<IndexEntry, 'c' | 'k'>): boolean {
   const category = (entry.c ?? '').trim();

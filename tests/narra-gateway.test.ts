@@ -2736,4 +2736,105 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(afterNoUrl!.d1_prefetched_records).toContain('Bloomsbury Dumpling House');
     expect(afterNoUrl!.d1_prefetched_records).not.toContain('Old Skewer BBQ');
   });
+
+  it('23. routes dessert / ice cream prompts ("我想吃冰淇淋", "好想吃糖水甜品，伦敦哪里有？") and returns dessert spots in zh-Hans without non-meal exclusion', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-20T12:00:00Z');
+    const ts = '2026-11-20T11:59:30Z';
+
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-desserts', 'Chinatown Tong Sui Lab W1D 6DE', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000801',
+          'rec_lcf_00000000000000000801',
+          'W1D 6DE|chinatown tong sui lab',
+          JSON.stringify({
+            name_en: 'Chinatown Tong Sui Lab',
+            name_zh: '唐人街糖水甜品屋',
+            category: 'bakery-dessert',
+            cuisines: ['desserts'],
+            address: '22 Newport Court',
+            postcode: 'W1D 6DE',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5119,
+            lng: -0.1287,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-gelato', 'Soho Matcha Ice Cream W1D 6DF', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000802',
+          'rec_lcf_00000000000000000802',
+          'W1D 6DF|soho matcha ice cream',
+          JSON.stringify({
+            name_en: 'Soho Matcha Ice Cream',
+            name_zh: '苏豪抹茶冰淇淋',
+            category: 'bakery-dessert',
+            cuisines: ['desserts', 'bakery'],
+            address: '30 Wardour Street',
+            postcode: 'W1D 6DF',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5128,
+            lng: -0.1321,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000801', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000802', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const groupCtx: RoomContext = {
+      roomId: '!grp_desserts:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    const cases: Array<{ text: string; userLanguageHint?: 'zh-Hans' }> = [
+      { text: '我想吃冰淇淋', userLanguageHint: 'zh-Hans' },
+      { text: '好想吃糖水甜品，伦敦哪里有？' },
+    ];
+
+    for (const { text, userLanguageHint } of cases) {
+      const ctx: RoomContext = userLanguageHint ? { ...groupCtx, userLanguageHint } : groupCtx;
+      const ev = makeEvent({ eventId: `$ev_dessert_${text.length}`, text });
+      expect(heuristicDomainScore(ev, LCF_AGENT_SPEC, ctx), text).toBeGreaterThanOrEqual(0.55);
+      const dec = await routeEvent(ev, ctx, LCF_AGENT_SPEC);
+      expect(dec.shouldReply, text).toBe(true);
+      expect(dec.detectedLang, text).toBe('zh-Hans');
+
+      const reply = await fastRespondLcf(env, ev, dec, emptyMem, ctx);
+      expect(reply, text).toBeTruthy();
+      expect(reply, text).not.toBe('[NO_REPLY]');
+      expect(reply, text).toContain('Chinatown Tong Sui Lab / 唐人街糖水甜品屋');
+      expect(reply, text).toContain('Soho Matcha Ice Cream / 苏豪抹茶冰淇淋');
+      expect(reply, text).toContain('糖水甜品');
+      expect(reply, text).not.toContain('Soho Sichuan House');
+      expect(findRating(reply!)).toBeNull();
+    }
+  });
 });
