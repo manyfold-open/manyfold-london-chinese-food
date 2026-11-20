@@ -1484,9 +1484,13 @@ export async function fastRespondLcf(
     let usedLocationLabel = '';
     if (location?.point) {
       const nearby = placesNear(openEntries, location.point, location.km ?? 1.5);
-      const broadened = nearby.length >= 2 ? nearby : placesNear(openEntries, location.point, 3.5);
+      const nearbyMeals = nearby.filter((n) => !isNonMealEntry(n.entry));
+      const broadened =
+        nearbyMeals.length >= 2 ? nearbyMeals : placesNear(openEntries, location.point, 3.5);
       if (broadened.length > 0) {
-        pool = broadened.slice(0, 12).map((n) => ({ entry: n.entry, distKm: n.km }));
+        const mealBroadened = broadened.filter((n) => !isNonMealEntry(n.entry));
+        const source = mealBroadened.length > 0 ? mealBroadened : broadened;
+        pool = source.slice(0, 12).map((n) => ({ entry: n.entry, distKm: n.km }));
         usedLocationLabel = localizeZh(location.label, lang);
       }
     } else if (location?.postcode) {
@@ -1496,7 +1500,9 @@ export async function fastRespondLcf(
         sort: 'recent',
       });
       if (filtered.length > 0) {
-        pool = filtered.slice(0, 12).map((entry) => ({ entry }));
+        const mealFiltered = filtered.filter((entry) => !isNonMealEntry(entry));
+        const source = mealFiltered.length > 0 ? mealFiltered : filtered;
+        pool = source.slice(0, 12).map((entry) => ({ entry }));
         usedLocationLabel = localizeZh(location.label, lang);
       }
     }
@@ -1661,14 +1667,31 @@ function hashSeed(input: string): number {
   return h >>> 0;
 }
 
-function pickQuickMealSpots<T>(pool: readonly T[], seedInput: string, count = 2): T[] {
-  if (pool.length <= count) return [...pool];
+const NON_MEAL_TOKEN_RE =
+  /(?:^|[-_\s/])(?:bubble[-_\s]?tea|boba|tea[-_\s]?drinks?|tea|drinks?|grocery|groceries|supermarket|bakery|desserts?|pastry|tong[-_\s]?sui)(?:$|[-_\s/])|奶茶|茶飲|茶饮|甜品|糖水|超市|中超|烘焙/i;
+
+function isNonMealEntry(entry: Pick<IndexEntry, 'c' | 'k'>): boolean {
+  const category = (entry.c ?? '').trim();
+  if (category && NON_MEAL_TOKEN_RE.test(category)) return true;
+  const cuisines = Array.isArray(entry.k) ? entry.k.map((k) => k.trim()).filter(Boolean) : [];
+  if (cuisines.length > 0 && cuisines.every((k) => NON_MEAL_TOKEN_RE.test(k))) return true;
+  return false;
+}
+
+export function pickQuickMealSpots<T extends { entry: Pick<IndexEntry, 'c' | 'k'> }>(
+  pool: readonly T[],
+  seedInput: string,
+  count = 2,
+): T[] {
+  const mealPool = pool.filter((item) => !isNonMealEntry(item.entry));
+  const candidates = mealPool.length > 0 ? mealPool : pool;
+  if (candidates.length <= count) return [...candidates];
   const seed = hashSeed(seedInput);
-  const first = seed % pool.length;
-  if (count <= 1) return [pool[first]!];
-  const step = 1 + ((seed >>> 8) % (pool.length - 1));
-  const second = (first + step) % pool.length;
-  return [pool[first]!, pool[second]!];
+  const first = seed % candidates.length;
+  if (count <= 1) return [candidates[first]!];
+  const step = 1 + ((seed >>> 8) % (candidates.length - 1));
+  const second = (first + step) % candidates.length;
+  return [candidates[first]!, candidates[second]!];
 }
 
 function extractRecentPlaceIds(context?: RoomContext, limit = 4): string[] {

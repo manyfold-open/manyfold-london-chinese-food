@@ -30,6 +30,7 @@ import {
   LCF_MATRIX_ID,
   lcfGatewayConfig,
   lcfThinkingMessage,
+  pickQuickMealSpots,
   queryRecentOpenPlaceUpdates,
   resolveMemoryLocationHint,
   thanksReply,
@@ -1968,5 +1969,143 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       emptyMem,
     );
     expect(antiMealReply).toBe('[NO_REPLY]');
+  });
+
+  it('18. excludes bubble tea, bakery, dessert, and grocery shops from pickQuickMealSpots & "今天中午吃什麼？" when restaurants exist', async () => {
+    const mealPool = [
+      { id: 'boba-1', entry: { c: 'tea-drinks', k: ['bubble-tea'] } },
+      { id: 'boba-2', entry: { c: 'restaurant', k: ['bubble_tea', 'tea'] } },
+      { id: 'boba-zh', entry: { c: '奶茶', k: ['奶茶'] } },
+      { id: 'bakery-1', entry: { c: 'bakery-dessert', k: ['bakery', 'desserts'] } },
+      { id: 'dessert-zh', entry: { c: 'restaurant', k: ['甜品', '烘焙'] } },
+      { id: 'grocery-1', entry: { c: 'grocery', k: ['groceries', 'supermarket'] } },
+      { id: 'grocery-zh', entry: { c: '超市', k: ['超市'] } },
+      { id: 'savory-1', entry: { c: 'restaurant', k: ['sichuan'] } },
+      { id: 'savory-2', entry: { c: 'restaurant', k: ['hong-kong-cafe'] } },
+      { id: 'savory-3', entry: { c: 'takeaway', k: ['cantonese', 'roast-meats'] } },
+    ];
+
+    for (let i = 0; i < 20; i++) {
+      const picked = pickQuickMealSpots(mealPool, `$seed_${i}`, 2);
+      expect(picked).toHaveLength(2);
+      for (const p of picked) {
+        expect(p.id.startsWith('savory-'), `seed ${i} picked non-meal ${p.id}`).toBe(true);
+      }
+    }
+
+    // Falls back gracefully when only non-meal shops exist
+    const bobaOnly = mealPool.filter((item) => !item.id.startsWith('savory-'));
+    expect(pickQuickMealSpots(bobaOnly, '$seed_fallback', 2)).toHaveLength(2);
+
+    // End-to-end D1 check: add open bubble tea, bakery, and grocery right in Soho alongside savory restaurants
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:58:00Z';
+
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-boba', 'Soho Bubble Tea Lab W1D 6AB', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000301',
+          'rec_lcf_00000000000000000301',
+          'W1D 6AB|soho bubble tea lab',
+          JSON.stringify({
+            name_en: 'Soho Bubble Tea Lab',
+            name_zh: '苏豪奶茶研究所',
+            category: 'tea-drinks',
+            cuisines: ['bubble-tea', 'tea'],
+            address: '15 Wardour Street',
+            postcode: 'W1D 6AB',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5136,
+            lng: -0.1364,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-bakery', 'Chinatown Bun Bakery W1D 6AC', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000302',
+          'rec_lcf_00000000000000000302',
+          'W1D 6AC|chinatown bun bakery',
+          JSON.stringify({
+            name_en: 'Chinatown Bun Bakery',
+            name_zh: '唐人街烘焙坊',
+            category: 'bakery-dessert',
+            cuisines: ['bakery', 'desserts'],
+            address: '18 Wardour Street',
+            postcode: 'W1D 6AC',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5135,
+            lng: -0.1362,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-grocery', 'Loon Fung Supermarket W1D 6AD', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000303',
+          'rec_lcf_00000000000000000303',
+          'W1D 6AD|loon fung supermarket',
+          JSON.stringify({
+            name_en: 'Loon Fung Supermarket',
+            name_zh: '龙凤行超市',
+            category: 'grocery',
+            cuisines: ['groceries'],
+            address: '42 Gerrard Street',
+            postcode: 'W1D 6AD',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5114,
+            lng: -0.131,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000301', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000302', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000303', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    for (const eventId of ['$ev_lunch_a', '$ev_lunch_b', '$ev_lunch_c', '$ev_lunch_d', '$ev_lunch_e']) {
+      const reply = await fastRespondLcf(
+        env,
+        makeEvent({ chatType: 'dm', eventId, text: '今天中午吃什麼？' }),
+        { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+        emptyMem,
+      );
+      expect(reply).toBeTruthy();
+      expect(reply).toContain('幫你挑 2 間營業中倫敦中餐');
+      expect(reply).not.toContain('Soho Bubble Tea Lab');
+      expect(reply).not.toContain('Chinatown Bun Bakery');
+      expect(reply).not.toContain('Loon Fung Supermarket');
+      expect(reply).toContain('Soho Sichuan House');
+      expect(reply).toContain('Bloomsbury Dumpling House');
+    }
   });
 });
