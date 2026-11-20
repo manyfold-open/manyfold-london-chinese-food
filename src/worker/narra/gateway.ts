@@ -353,7 +353,10 @@ const stripMentions = (text: string): string => stripAgentMentions(text, MENTION
 const localizeZh = (text: string, lang: LangCode): string => (lang === 'zh-Hant' ? toZhHant(text) : text);
 
 const GREETING_RE =
-  /^(?:你好|妳好|您好|嗨|哈囉|哈喽|早安|早|午安|晚安|你是誰|你是谁|謝謝|谢谢|感謝|感谢|hi|hello|hey|good\s*(?:morning|afternoon|evening)|thanks|thank\s+you|who\s+are\s+you)[!！。.?？~～\s]*$/i;
+  /^(?:你好|妳好|您好|嗨|哈囉|哈喽|早安|早|午安|晚安|你是誰|你是谁|(?:請問|请问)?你(?:能|可以)(?:幫我|帮我)?(?:查|做)(?:什麼|什么|哪些)(?:呢|嗎|吗)?|hi|hello|hey|good\s*(?:morning|afternoon|evening)|who\s+are\s+you|what\s+can\s+you\s+(?:do|help(?:\s+(?:me\s+)?with)?|recommend|find))[!！。.?？~～\s]*$/i;
+
+const THANKS_RE =
+  /^(?:(?:好的|ok|okay)[,，!！.\s]*)?(?:(?:非常|真的|太|很)?(?:謝謝|谢谢|謝啦|谢啦|感謝|感谢|多謝|多谢)(?:你|您)?(?:啦|喔|哦|呀)?|thanks?(?:\s+(?:a\s+lot|so\s+much))?|thank\s+you(?:\s+(?:so\s+much|very\s+much))?|thx|tysm|cheers)[!！。.?？~～\s]*$/i;
 
 const COMPOUND_RE = /^\[internal hint\]\s*process compound\b/i;
 
@@ -1100,7 +1103,7 @@ function formatPlaceDetail(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: La
   return lines.join('\n');
 }
 
-function greetingReply(lang: LangCode): string {
+export function greetingReply(lang: LangCode): string {
   if (lang === 'zh-Hant') {
     return '嗨！我是倫敦中餐地圖小幫手，想在倫敦哪一帶吃什麼或找哪種菜系，直接問我就好 🍜';
   }
@@ -1108,6 +1111,16 @@ function greetingReply(lang: LangCode): string {
     return '嗨！我是伦敦中餐地图小助手，想在伦敦哪一带吃什么或找哪种菜系，直接问我就行 🍜';
   }
   return "Hi! I'm the London Chinese Food guide — tell me an area, station, or dish you're craving and I'll look it up 🍜";
+}
+
+export function thanksReply(lang: LangCode): string {
+  if (lang === 'zh-Hant') {
+    return '不客氣！祝你用餐愉快 🍜 之後想在倫敦哪一區找中餐或特定菜色，隨時跟我說！';
+  }
+  if (lang === 'zh-Hans') {
+    return '不客气！祝你用餐愉快 🍜 之后想在伦敦哪一区找中餐或特定菜色，随时跟我说！';
+  }
+  return "You're welcome! Enjoy your meal 🍜 Ask anytime if you want more Chinese food picks around London.";
 }
 
 function compoundReply(lang: LangCode): string {
@@ -1331,6 +1344,12 @@ export async function fastRespondLcf(
     }
     return greetingReply(lang);
   }
+  if (THANKS_RE.test(cleanedText)) {
+    if (isUnmentionedGroup && decision.reason === 'active_session') {
+      return '[NO_REPLY]';
+    }
+    return thanksReply(lang);
+  }
 
   const isMultiMention = decision.reason === 'multi_mention_domain_match';
   const hasAntiHit = hasAntiKeywordHit(cleanedText);
@@ -1356,9 +1375,12 @@ export async function fastRespondLcf(
   let categories = extractCategories(cleanedText);
   const explicitLocation = extractLocation(cleanedText, lang, allEntries);
   const wantsNearestTube = TUBE_NEAREST_RE.test(cleanedText);
+  const isDmFollowup =
+    (decision.reason === 'dm' || event.chatType === 'dm') &&
+    (FOOD_FOLLOWUP_RE.test(cleanedText) || wantsNearestTube);
 
   const activeHints =
-    decision.reason === 'active_session'
+    decision.reason === 'active_session' || isDmFollowup
       ? resolveActiveSessionHints(
           event,
           context,
@@ -1457,9 +1479,9 @@ export async function fastRespondLcf(
     return '[NO_REPLY]';
   }
 
-  // Inherit prior turn's dish/cuisine/category for active-session follow-ups (e.g. "有沒有離地鐵站近一點的？").
+  // Inherit prior turn's dish/cuisine/category for active-session or DM follow-ups (e.g. "有沒有離地鐵站近一點的？").
   if (
-    decision.reason === 'active_session' &&
+    (decision.reason === 'active_session' || (isDmFollowup && (!explicitLocation || wantsNearestTube))) &&
     dishes.length === 0 &&
     cuisines.length === 0 &&
     categories.length === 0
