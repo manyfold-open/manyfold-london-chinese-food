@@ -1844,14 +1844,15 @@ function extractRecentPlaceIds(context?: RoomContext, limit = 4): string[] {
 
   if (context.replyToTarget?.text) {
     collect(context.replyToTarget.text);
+    if (ids.length > 0) return ids;
   }
-  if (ids.length < limit && context.recentHistory?.length) {
+  if (context.recentHistory?.length) {
     const selfTurns = [...context.recentHistory]
       .reverse()
       .filter((t) => t.isSelf || t.senderId === LCF_MATRIX_ID);
     for (const turn of selfTurns.slice(0, 4)) {
       collect(turn.text);
-      if (ids.length >= limit) break;
+      if (ids.length > 0) break;
     }
   }
   return ids;

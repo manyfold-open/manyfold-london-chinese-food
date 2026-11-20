@@ -2587,4 +2587,153 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(dualReply!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(1);
     expect(findRating(dualReply!)).toBeNull();
   });
+
+  it('22. scopes buildLcfExtraEnvelopeFields prefetch to latest self reply with place URLs (and replyToTarget) without mixing older self turns', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:59:30Z';
+
+    await db
+      .prepare(
+        `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+         VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/old-bbq', 'Old BBQ Spot N1C 4AB', ?, 'tok_1', ?, ?, ?)`,
+      )
+      .bind(
+        'rec_lcf_00000000000000000701',
+        'rec_lcf_00000000000000000701',
+        'N1C 4AB|old bbq spot',
+        JSON.stringify({
+          name_en: 'Old Skewer BBQ',
+          name_zh: '老牌烧烤串串',
+          category: 'restaurant',
+          cuisines: ['bbq'],
+          address: '15 Granary Square',
+          postcode: 'N1C 4AB',
+          outcode: 'N1C',
+          borough_code: 'E09000007',
+          lat: 51.5352,
+          lng: -0.1255,
+          trading: 'open',
+        }),
+        ts,
+        ts,
+        ts,
+        ts,
+      )
+      .run();
+    await rebuildPlace(db, 'rec_lcf_00000000000000000701', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const dec: TriageDecision = {
+      shouldReply: true,
+      tier: 0,
+      reason: 'dm',
+      confidence: 1,
+      detectedLang: 'zh-Hans',
+      shouldQuote: false,
+    };
+    const nowMs = Date.now();
+    const olderBbqTurn = {
+      eventId: '$self_old_bbq',
+      senderId: LCF_MATRIX_ID,
+      senderName: 'London Chinese Food',
+      isAgent: true,
+      isSelf: true,
+      text: [
+        '🍜 为你查到 1 家营业中选择：',
+        '- Old Skewer BBQ / 老牌烧烤串串',
+        'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000701/old-skewer-bbq',
+      ].join('\n'),
+      timestampMs: nowMs - 3_600_000,
+    };
+    const latestSpotsTurn = {
+      eventId: '$self_latest_spots',
+      senderId: LCF_MATRIX_ID,
+      senderName: 'London Chinese Food',
+      isAgent: true,
+      isSelf: true,
+      text: [
+        '🍜 为你查到 2 家营业中选择：',
+        '- Soho Sichuan House / 苏豪川菜馆',
+        'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001/soho-sichuan-house',
+        '- Bloomsbury Dumpling House / 布鲁姆斯伯里小笼包',
+        'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000002/bloomsbury-dumpling-house',
+      ].join('\n'),
+      timestampMs: nowMs - 30_000,
+    };
+
+    // 1. Latest self reply has 2 (< limit 4) place URLs -> stop immediately; older BBQ turn MUST be excluded
+    const latestOnly = await buildLcfExtraEnvelopeFields(
+      env,
+      makeEvent({ chatType: 'dm', text: '这几家哪家最适合带不吃辣的同事？' }),
+      dec,
+      emptyMem,
+      {
+        roomId: '!dm_scope:matrix.netmind.chat',
+        chatType: 'dm',
+        members: [],
+        recentHistory: [olderBbqTurn, latestSpotsTurn],
+      },
+    );
+    expect(latestOnly).not.toBeNull();
+    expect(latestOnly!.d1_prefetched_records).toContain('Soho Sichuan House');
+    expect(latestOnly!.d1_prefetched_records).toContain('Bloomsbury Dumpling House');
+    expect(latestOnly!.d1_prefetched_records).not.toContain('Old Skewer BBQ');
+    expect(latestOnly!.d1_prefetched_records).not.toContain('rec_lcf_00000000000000000701');
+
+    // 2. replyToTarget with place URL takes priority AND does NOT mix in recentHistory places
+    const replyScoped = await buildLcfExtraEnvelopeFields(
+      env,
+      makeEvent({ chatType: 'group', text: '这家适合聚餐吗？' }),
+      dec,
+      emptyMem,
+      {
+        roomId: '!grp_scope:matrix.netmind.chat',
+        chatType: 'group',
+        members: [],
+        recentHistory: [olderBbqTurn, latestSpotsTurn],
+        replyToTarget: {
+          eventId: '$self_old_bbq',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: olderBbqTurn.text,
+        },
+      },
+    );
+    expect(replyScoped).not.toBeNull();
+    expect(replyScoped!.d1_prefetched_records).toContain('Old Skewer BBQ');
+    expect(replyScoped!.d1_prefetched_records).not.toContain('Soho Sichuan House');
+    expect(replyScoped!.d1_prefetched_records).not.toContain('Bloomsbury Dumpling House');
+
+    // 3. If the very latest self turn has no URLs, fall back to the most recent self turn with URLs and stop there
+    const nonUrlLatestSelfTurn = {
+      eventId: '$self_no_url',
+      senderId: LCF_MATRIX_ID,
+      senderName: 'London Chinese Food',
+      isAgent: true,
+      isSelf: true,
+      text: '不客气！还有想了解哪家的菜色吗？',
+      timestampMs: nowMs - 10_000,
+    };
+    const afterNoUrl = await buildLcfExtraEnvelopeFields(
+      env,
+      makeEvent({ chatType: 'dm', text: '刚才那两家哪家不辣？' }),
+      dec,
+      emptyMem,
+      {
+        roomId: '!dm_scope:matrix.netmind.chat',
+        chatType: 'dm',
+        members: [],
+        recentHistory: [olderBbqTurn, latestSpotsTurn, nonUrlLatestSelfTurn],
+      },
+    );
+    expect(afterNoUrl).not.toBeNull();
+    expect(afterNoUrl!.d1_prefetched_records).toContain('Soho Sichuan House');
+    expect(afterNoUrl!.d1_prefetched_records).toContain('Bloomsbury Dumpling House');
+    expect(afterNoUrl!.d1_prefetched_records).not.toContain('Old Skewer BBQ');
+  });
 });
