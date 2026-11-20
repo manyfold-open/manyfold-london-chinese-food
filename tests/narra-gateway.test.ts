@@ -2455,4 +2455,122 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(groceryUclReply).not.toContain('Bloomsbury Dumpling House');
     expect(findRating(groceryUclReply!)).toBeNull();
   });
+
+  it("21. matches standalone Chinese BBQ queries in zh-Hans and returns 1 King's Cross pick on dual-@ food+outing co-mention", async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:59:30Z';
+
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/kx-bbq', 'Kings Cross Skewer House N1C 4AB', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000601',
+          'rec_lcf_00000000000000000601',
+          'N1C 4AB|kings cross skewer house',
+          JSON.stringify({
+            name_en: "King's Cross Skewer House",
+            name_zh: '国王十字烧烤串串',
+            category: 'restaurant',
+            cuisines: ['bbq', 'dongbei'],
+            address: '15 Granary Square',
+            postcode: 'N1C 4AB',
+            outcode: 'N1C',
+            borough_code: 'E09000007',
+            lat: 51.5352,
+            lng: -0.1255,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/kx-noodles', 'Pancras Noodle Bar N1C 4AG', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000602',
+          'rec_lcf_00000000000000000602',
+          'N1C 4AG|pancras noodle bar',
+          JSON.stringify({
+            name_en: 'Pancras Noodle Bar',
+            name_zh: '潘克拉斯面馆',
+            category: 'restaurant',
+            cuisines: ['noodles', 'sichuan'],
+            address: '8 Pancras Square',
+            postcode: 'N1C 4AG',
+            outcode: 'N1C',
+            borough_code: 'E09000007',
+            lat: 51.5335,
+            lng: -0.1252,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000601', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000602', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-f9388b28:matrix.netmind.chat', displayName: 'Spotted London', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    // 1. Standalone Chinese BBQ prompts match bbq in zh-Hans
+    for (const bbqText of ['我想吃烧烤', '怎么没人给我推荐烧烤', '伦敦哪里可以撸串吃烤肉？']) {
+      const ev = makeEvent({ eventId: `$ev_bbq_${bbqText.length}`, text: bbqText });
+      expect(heuristicDomainScore(ev, LCF_AGENT_SPEC, groupCtx), bbqText).toBeGreaterThanOrEqual(0.55);
+      const dec = await routeEvent(ev, groupCtx, LCF_AGENT_SPEC);
+      expect(dec.shouldReply, bbqText).toBe(true);
+      expect(dec.detectedLang, bbqText).toBe('zh-Hans');
+
+      const reply = await fastRespondLcf(env, ev, dec, emptyMem, groupCtx);
+      expect(reply, bbqText).toBeTruthy();
+      expect(reply, bbqText).not.toBe('[NO_REPLY]');
+      expect(reply, bbqText).toContain("King's Cross Skewer House / 国王十字烧烤串串");
+      expect(reply, bbqText).toContain('烧烤串串');
+      expect(reply, bbqText).not.toContain('Soho Sichuan House');
+      expect(findRating(reply!)).toBeNull();
+    }
+
+    // 2. Dual-@ "@London Chinese Food @Spotted London 週末想去 King's Cross 吃飯加逛逛，各推 1 個"
+    const dualPrompt = "@London Chinese Food @Spotted London 週末想去 King's Cross 吃飯加逛逛，各推 1 個";
+    const aiRunSpy = vi.fn(async () => ({ response: '{"score":0.1,"reason":"unexpected_ai_call"}' }));
+    const triageModel = createWorkersAiTriageModel({ run: aiRunSpy });
+    const dualEvent = makeEvent({
+      eventId: '$ev_dual_kx',
+      text: dualPrompt,
+      mentions: [LCF_MATRIX_ID, '@agent-f9388b28:matrix.netmind.chat'],
+    });
+    const dualDecision = await routeEvent(dualEvent, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(dualDecision.shouldReply).toBe(true);
+    expect(dualDecision.reason).toBe('multi_mention_domain_match');
+    expect(dualDecision.detectedLang).toBe('zh-Hant');
+    expect(aiRunSpy).not.toHaveBeenCalled();
+
+    const dualReply = await fastRespondLcf(env, dualEvent, dualDecision, emptyMem, groupCtx);
+    expect(dualReply).toBeTruthy();
+    expect(dualReply).not.toBe('[NO_REPLY]');
+    expect(dualReply).toContain("為你查到 1 間營業中選擇（King's Cross 一帶）");
+    expect(dualReply!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(1);
+    expect(findRating(dualReply!)).toBeNull();
+  });
 });
