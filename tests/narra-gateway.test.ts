@@ -1507,4 +1507,86 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(hoursReply).toContain('Soho Sichuan House');
     expect(hoursReply).toContain('Covent Garden');
   });
+
+  it('15. handles H1 anti-hit past anecdote silence, H3 primary Soho ramen + secondary AI news, and bare @London Chinese Food greeting', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+        { matrixId: '@agent-3add8bb6:matrix.netmind.chat', displayName: 'AI in 5', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    for (const kw of ['openai', 'anthropic', 'claude', 'gemini', 'deepseek', 'llm', '大模型', '新模型']) {
+      expect(LCF_AGENT_SPEC.antiKeywords, kw).toContain(kw);
+    }
+
+    const aiRunSpy = vi.fn(async () => ({ response: '{"score":0.1,"reason":"unexpected_ai_call"}' }));
+    const triageModel = createWorkersAiTriageModel({ run: aiRunSpy });
+
+    // H1: past-tense hotpot backdrop + 順便 AI model question -> silent/anti-hit
+    const h1Event = makeEvent({
+      eventId: '$ev_h1',
+      text: '剛在唐人街吃完火鍋超撐，順便問一下今天 OpenAI 或 Anthropic 有發新模型嗎？',
+    });
+    expect(heuristicDomainScore(h1Event, LCF_AGENT_SPEC, groupCtx)).toBeLessThan(0.55);
+    const h1HeuristicDecision = await routeEvent(h1Event, groupCtx, LCF_AGENT_SPEC);
+    expect(h1HeuristicDecision.shouldReply).toBe(false);
+
+    const h1Triage = await triageModel.score({
+      event: h1Event,
+      context: groupCtx,
+      spec: LCF_AGENT_SPEC,
+      detectedLang: 'zh-Hant',
+    });
+    expect(h1Triage.score).toBeLessThan(0.55);
+    expect(h1Triage.reason).toBe('triage_backdrop_only');
+    const h1Decision = await routeEvent(h1Event, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(h1Decision.shouldReply).toBe(false);
+    expect(aiRunSpy).not.toHaveBeenCalled();
+
+    // H3: primary Soho ramen request + secondary 順便 AI news -> replies with Soho noodles/places in zh-Hant
+    const h3Event = makeEvent({
+      eventId: '$ev_h3',
+      text: '幫我找 Soho 附近營業中的拉麵店，順便問一下今天 AI 有什麼大新聞？',
+    });
+    expect(heuristicDomainScore(h3Event, LCF_AGENT_SPEC, groupCtx)).toBeGreaterThanOrEqual(0.75);
+    const h3Triage = await triageModel.score({
+      event: h3Event,
+      context: groupCtx,
+      spec: LCF_AGENT_SPEC,
+      detectedLang: 'zh-Hant',
+    });
+    expect(h3Triage.score).toBeGreaterThanOrEqual(0.9);
+    expect(h3Triage.reason).toBe('domain_match');
+    const h3Decision = await routeEvent(h3Event, groupCtx, LCF_AGENT_SPEC, { triageModel });
+    expect(h3Decision.shouldReply).toBe(true);
+    expect(h3Decision.detectedLang).toBe('zh-Hant');
+    expect(aiRunSpy).not.toHaveBeenCalled();
+
+    const h3Reply = await fastRespondLcf(env, h3Event, h3Decision, emptyMem, groupCtx);
+    expect(h3Reply).toBeTruthy();
+    expect(h3Reply).not.toBe('[NO_REPLY]');
+    expect(h3Reply).toContain('Soho');
+    expect(h3Reply).toContain('Soho Sichuan House / 蘇豪川菜館');
+    expect(h3Reply).toContain('麵館');
+    expect(h3Reply).toContain('https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001');
+    expect(h3Reply).not.toMatch(/[苏馆面]/);
+    expect(findRating(h3Reply!)).toBeNull();
+
+    // Bare @London Chinese Food returns greeting
+    const bareMentionEv = makeEvent({ eventId: '$ev_bare_lcf', text: '@London Chinese Food' });
+    const bareMentionDecision = await routeEvent(bareMentionEv, groupCtx, LCF_AGENT_SPEC);
+    expect(bareMentionDecision.shouldReply).toBe(true);
+    expect(bareMentionDecision.reason).toBe('explicit_mention');
+    const bareGreeting = await fastRespondLcf(env, bareMentionEv, bareMentionDecision, emptyMem, groupCtx);
+    expect(bareGreeting).toContain("London Chinese Food guide");
+  });
 });
