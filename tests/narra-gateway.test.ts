@@ -2351,6 +2351,20 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       groupCtx,
     );
     expect(unmentionedColdComp).toBe('[NO_REPLY]');
+
+    // Simplified Chinese active-session follow-ups ("哪一间", "这几家", "哪一个") match FOOD_FOLLOWUP_RE
+    for (const zhHansFollowup of ['哪一间可以订位？', '这几家都开着吗？', '哪一个有包间？']) {
+      const followupRes = await fastRespondLcf(
+        envNoA2a,
+        makeEvent({ chatType: 'group', eventId: `$ev_zh_hans_fu_${zhHansFollowup.length}`, text: zhHansFollowup }),
+        { shouldReply: true, tier: 0, reason: 'active_session', confidence: 0.95, detectedLang: 'zh-Hans', shouldQuote: true },
+        emptyMem,
+        { ...priorListCtx, chatType: 'group' },
+      );
+      expect(followupRes, zhHansFollowup).toBeTruthy();
+      expect(followupRes, zhHansFollowup).not.toBe('[NO_REPLY]');
+      expect(followupRes, zhHansFollowup).toContain('Soho');
+    }
   });
 
   it('20. excludes grocery and bubble-tea shops from generic location-only food queries while preserving explicit grocery searches', async () => {
