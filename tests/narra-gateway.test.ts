@@ -23,11 +23,13 @@ import {
   formatPlaceUpdatesMessage,
   createLcfGatewayConfig,
   fastRespondLcf,
+  greetingReply,
   LCF_AGENT_ID,
   LCF_AGENT_SPEC,
   LCF_MATRIX_ID,
   queryRecentOpenPlaceUpdates,
   resolveMemoryLocationHint,
+  thanksReply,
 } from '../src/worker/narra/gateway';
 import type { Env } from '../src/worker/types';
 import { createD1 } from './d1';
@@ -910,16 +912,24 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     );
     expect(chatterReply).toBe('[NO_REPLY]');
 
-    // Casual closings in unmentioned active_session -> [NO_REPLY], whereas explicit mention still greets
+    // Casual closings in unmentioned active_session -> [NO_REPLY], whereas explicit mention responds warmly
     expect(await fastRespondLcf(env, makeEvent({ text: '謝謝' }), activeDecision, emptyMem)).toBe('[NO_REPLY]');
     expect(await fastRespondLcf(env, makeEvent({ text: '晚安' }), activeDecision, emptyMem)).toBe('[NO_REPLY]');
+    const explicitGoodnight = await fastRespondLcf(
+      env,
+      makeEvent({ text: '@lcf-guide 晚安' }),
+      { ...activeDecision, reason: 'explicit_mention' },
+      emptyMem,
+    );
+    expect(explicitGoodnight).toContain('倫敦中餐地圖小幫手');
     const explicitThanks = await fastRespondLcf(
       env,
       makeEvent({ text: '@lcf-guide 謝謝' }),
       { ...activeDecision, reason: 'explicit_mention' },
       emptyMem,
     );
-    expect(explicitThanks).toContain('倫敦中餐地圖小幫手');
+    expect(explicitThanks).toBe(thanksReply('zh-Hant'));
+    expect(explicitThanks).not.toContain('倫敦中餐地圖小幫手');
 
     // Genuine food follow-up in active_session still responds from D1
     const followUpReply = await fastRespondLcf(
@@ -1588,5 +1598,167 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(bareMentionDecision.reason).toBe('explicit_mention');
     const bareGreeting = await fastRespondLcf(env, bareMentionEv, bareMentionDecision, emptyMem, groupCtx);
     expect(bareGreeting).toContain("London Chinese Food guide");
+  });
+
+  it('16. handles 1v1 DM follow-up inheritance (UCL + Sichuan), polite thanksReply, capability queries, and active_session silence', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:50:00Z';
+
+    await db
+      .prepare(
+        `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+         VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/euston-sichuan', 'Euston Sichuan Bistro NW1 2BU', ?, 'tok_1', ?, ?, ?)`,
+      )
+      .bind(
+        'rec_lcf_00000000000000000201',
+        'rec_lcf_00000000000000000201',
+        'NW1 2BU|euston sichuan bistro',
+        JSON.stringify({
+          name_en: 'Euston Sichuan Bistro',
+          name_zh: '尤斯顿川菜小馆',
+          category: 'restaurant',
+          cuisines: ['sichuan'],
+          address: '8 Euston Square',
+          postcode: 'NW1 2BU',
+          outcode: 'NW1',
+          borough_code: 'E09000007',
+          lat: 51.5256,
+          lng: -0.1356,
+          trading: 'open',
+        }),
+        ts,
+        ts,
+        ts,
+        ts,
+      )
+      .run();
+    await rebuildPlace(db, 'rec_lcf_00000000000000000201', now);
+
+    const env = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+    const nowMs = Date.now();
+    const dmRoomId = '!dm_lcf_1:matrix.netmind.chat';
+
+    const dmBaseCtx: RoomContext = {
+      roomId: dmRoomId,
+      chatType: 'dm',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    // 1. Turn 1 in DM: multiline UCL + Sichuan query
+    const turn1Text = '我想找倫敦\nUCL 附近好吃的川菜';
+    const turn1Event = makeEvent({
+      roomId: dmRoomId,
+      chatType: 'dm',
+      eventId: '$ev_dm_sichuan_1',
+      text: turn1Text,
+      timestampMs: nowMs - 15_000,
+    });
+    const turn1Decision = await routeEvent(turn1Event, dmBaseCtx, LCF_AGENT_SPEC);
+    expect(turn1Decision.shouldReply).toBe(true);
+    expect(turn1Decision.reason).toBe('dm');
+    expect(turn1Decision.detectedLang).toBe('zh-Hant');
+
+    const turn1Reply = await fastRespondLcf(env, turn1Event, turn1Decision, emptyMem, dmBaseCtx);
+    expect(turn1Reply).toBeTruthy();
+    expect(turn1Reply).toContain('UCL 一帶');
+    expect(turn1Reply).toContain('Euston Sichuan Bistro / 尤斯頓川菜小館');
+    expect(turn1Reply).toContain('Soho Sichuan House / 蘇豪川菜館');
+    expect(turn1Reply).not.toContain('Bloomsbury Dumpling House');
+
+    // 2. Turn 2 in DM: nearest-tube follow-up retains BOTH Sichuan cuisine AND UCL location
+    const turn2Event = makeEvent({
+      roomId: dmRoomId,
+      chatType: 'dm',
+      eventId: '$ev_dm_sichuan_2',
+      text: '有沒有離地鐵站近一點的？',
+      timestampMs: nowMs,
+    });
+    const dmFollowupCtx: RoomContext = {
+      ...dmBaseCtx,
+      recentHistory: [
+        {
+          eventId: '$ev_dm_sichuan_1',
+          senderId: '@alice:matrix.netmind.chat',
+          senderName: 'Alice',
+          isAgent: false,
+          text: turn1Text,
+          timestampMs: nowMs - 15_000,
+        },
+        {
+          eventId: '$ev_dm_lcf_reply_1',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: turn1Reply!,
+          timestampMs: nowMs - 10_000,
+        },
+      ],
+    };
+    const turn2Decision = await routeEvent(turn2Event, dmFollowupCtx, LCF_AGENT_SPEC);
+    expect(turn2Decision.shouldReply).toBe(true);
+    expect(turn2Decision.reason).toBe('dm');
+    expect(turn2Decision.detectedLang).toBe('zh-Hant');
+
+    const turn2Reply = await fastRespondLcf(env, turn2Event, turn2Decision, emptyMem, dmFollowupCtx);
+    expect(turn2Reply).toBeTruthy();
+    expect(turn2Reply).toContain('UCL 一帶');
+    expect(turn2Reply).toContain('Euston Sichuan Bistro / 尤斯頓川菜小館');
+    expect(turn2Reply).toContain('Soho Sichuan House / 蘇豪川菜館');
+    expect(turn2Reply).not.toContain('Bloomsbury Dumpling House');
+    expect(turn2Reply).toMatch(/近 .+ 站約 \d+ min/);
+    expect(findRating(turn2Reply!)).toBeNull();
+
+    // 3. DM "謝謝！" returns thanksReply('zh-Hant'), NOT self-intro greetingReply
+    const thanksEv = makeEvent({
+      roomId: dmRoomId,
+      chatType: 'dm',
+      eventId: '$ev_dm_thanks',
+      text: '謝謝！',
+      timestampMs: nowMs + 1_000,
+    });
+    const thanksDec = await routeEvent(thanksEv, dmFollowupCtx, LCF_AGENT_SPEC);
+    expect(thanksDec.shouldReply).toBe(true);
+    expect(thanksDec.reason).toBe('dm');
+    const dmThanks = await fastRespondLcf(env, thanksEv, thanksDec, emptyMem, dmFollowupCtx);
+    expect(dmThanks).toBe(thanksReply('zh-Hant'));
+    expect(dmThanks).not.toBe(greetingReply('zh-Hant'));
+
+    // 4. DM "你能幫我查什麼？" returns greetingReply('zh-Hant')
+    const capEv = makeEvent({
+      roomId: dmRoomId,
+      chatType: 'dm',
+      eventId: '$ev_dm_cap',
+      text: '你能幫我查什麼？',
+      timestampMs: nowMs + 2_000,
+    });
+    const capDec = await routeEvent(capEv, dmBaseCtx, LCF_AGENT_SPEC);
+    expect(capDec.shouldReply).toBe(true);
+    expect(capDec.reason).toBe('dm');
+    const dmCap = await fastRespondLcf(env, capEv, capDec, emptyMem, dmBaseCtx);
+    expect(dmCap).toBe(greetingReply('zh-Hant'));
+
+    // 5. Unmentioned group active_session "謝謝" still returns [NO_REPLY]
+    const activeGroupThanks = await fastRespondLcf(
+      env,
+      makeEvent({ chatType: 'group', text: '謝謝' }),
+      {
+        shouldReply: true,
+        tier: 0,
+        reason: 'active_session',
+        confidence: 0.95,
+        detectedLang: 'zh-Hant',
+        shouldQuote: true,
+      },
+      emptyMem,
+    );
+    expect(activeGroupThanks).toBe('[NO_REPLY]');
   });
 });
