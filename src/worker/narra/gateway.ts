@@ -162,6 +162,16 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     '台灣菜',
     '台湾菜',
     '糖水',
+    '中午吃什麼',
+    '中午吃什么',
+    '午餐吃什麼',
+    '午餐吃什么',
+    '晚餐吃什麼',
+    '晚餐吃什么',
+    '晚上吃什麼',
+    '晚上吃什么',
+    '今天吃什麼',
+    '今天吃什么',
     'lcf',
     /london.{0,24}(?:chinese|dim\s*sum|hot\s*pot|bubble\s*tea|sichuan|cantonese)/i,
     /(?:chinese|dim\s*sum|hot\s*pot|bubble\s*tea|sichuan|cantonese).{0,24}(?:london|soho|chinatown|ucl|lse|kcl|soas|imperial)/i,
@@ -370,6 +380,48 @@ const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stat
 
 const QUICK_MEAL_PICK_RE =
   /(?:(?:今天|今晚|今早|中午|午餐|午飯|午饭|晚上|晚餐|晚飯|晚饭|宵夜|夜宵|等下|待會|待会|不知道|要).{0,6}(?:吃什麼|吃什么|吃啥|吃哪[間家個]|吃哪[间家个])|(?:隨便|随便|幫我|帮我|隨機|随机).{0,4}(?:推薦|推荐|挑|選|选)(?:一|兩|两|幾|几)?(?:間|家|個|个)?|\b(?:what\s+(?:should\s+(?:we|i)|to)\s+eat(?:\s+for\s+(?:lunch|dinner|supper|tonight))?|what'?s\s+for\s+(?:lunch|dinner)|pick\s+(?:me\s+|us\s+)?(?:a\s+)?(?:place|spot|somewhere)(?:\s+for\s+(?:lunch|dinner))?|surprise\s+me(?:\s+for\s+(?:lunch|dinner))?)\b)/i;
+
+const COMPARATIVE_ADVICE_RE =
+  /(?:最適合|最适合|比較適合|比较适合|哪一?[間家個个].{0,8}(?:適合|适合|比較好|比较好|推薦|推荐|不辣)|帶.{0,8}(?:朋友|小孩|孩子|長輩|长辈|父母|客戶|客户|同事)|包廂|包厢|約會|约会|適不適合|适不适合|\b(?:which\s+one\s+is\s+(?:best|better|most\s+suitable)|compare\s+(?:them|these)|kid[- ]?friendly|private\s+room|date\s+night|best\s+for)\b)/i;
+
+const REQUESTED_LIMIT_ZH_RE = /(?:各)?(?:推|推薦|推荐|給|给|挑|找|來|来)\s*([1-5一二兩两三四五])\s*[間家個个]/;
+const REQUESTED_LIMIT_EN_RE = /\b(?:just|only|pick|top)\s+([1-5]|one|two|three|four|five)\b/i;
+
+const REQUESTED_LIMIT_MAP: Record<string, number> = {
+  '1': 1,
+  '2': 2,
+  '3': 3,
+  '4': 4,
+  '5': 5,
+  一: 1,
+  二: 2,
+  兩: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+};
+
+export function parseRequestedLimit(text: string): number | null {
+  const input = (text ?? '').trim();
+  if (!input) return null;
+  const zhMatch = input.match(REQUESTED_LIMIT_ZH_RE);
+  if (zhMatch?.[1]) {
+    const val = REQUESTED_LIMIT_MAP[zhMatch[1]];
+    if (val) return Math.max(1, Math.min(5, val));
+  }
+  const enMatch = input.match(REQUESTED_LIMIT_EN_RE);
+  if (enMatch?.[1]) {
+    const val = REQUESTED_LIMIT_MAP[enMatch[1].toLowerCase()];
+    if (val) return Math.max(1, Math.min(5, val));
+  }
+  return null;
+}
 
 const PLACE_ID_RE = /\brec_[a-z0-9_]{4,}\b/gi;
 const MAX_PREFETCH_CHARS = 1_400;
@@ -1360,7 +1412,9 @@ export async function fastRespondLcf(
   const isMultiMention = decision.reason === 'multi_mention_domain_match';
   const hasAntiHit = hasAntiKeywordHit(cleanedText);
 
-  const limit = event.isVoice ? 2 : event.chatType === 'group' ? 3 : 5;
+  const baseLimit = event.isVoice ? 2 : event.chatType === 'group' ? 3 : 5;
+  const requestedLimit = parseRequestedLimit(cleanedText);
+  const limit = requestedLimit !== null ? Math.min(baseLimit, requestedLimit) : baseLimit;
 
   // 1. "What's new" queries -> recent verified open places (without marking broadcast watermark)
   if (WHATS_NEW_RE.test(cleanedText) && env.DB) {
@@ -1470,6 +1524,31 @@ export async function fastRespondLcf(
     return '[NO_REPLY]';
   }
 
+  // Comparative / situational advice follow-ups (e.g. "這幾間裡面哪一間最適合帶不吃辣的英國朋友去？")
+  // delegate to Manyfold A2A (with d1_prefetched_records) instead of re-dumping the exact same D1 list.
+  const isDirectOrDmTurn =
+    !isUnmentionedGroup || event.chatType === 'dm' || decision.reason === 'dm';
+  const isActiveFoodFollowup =
+    decision.reason === 'active_session' &&
+    !hasAntiHit &&
+    (extractRecentPlaceIds(context, 1).length > 0 ||
+      Boolean(activeHints.location) ||
+      activeHints.dishes.length > 0 ||
+      activeHints.cuisines.length > 0 ||
+      activeHints.categories.length > 0);
+  if (
+    hasA2ACredential(env) &&
+    (isDirectOrDmTurn || isActiveFoodFollowup) &&
+    dishes.length === 0 &&
+    cuisines.length === 0 &&
+    categories.length === 0 &&
+    !explicitLocation &&
+    !hasNameMatches &&
+    COMPARATIVE_ADVICE_RE.test(cleanedText)
+  ) {
+    return null;
+  }
+
   // Quick meal-picker fast-path for spontaneous "what should we eat?" prompts with no dish/cuisine/place specified.
   if (
     dishes.length === 0 &&
@@ -1512,7 +1591,7 @@ export async function fastRespondLcf(
         .map((entry) => ({ entry }));
     }
 
-    const picked = pickQuickMealSpots(pool, event.eventId || cleanedText, 2);
+    const picked = pickQuickMealSpots(pool, event.eventId || cleanedText, Math.min(limit, 2));
     if (picked.length > 0) {
       const header =
         lang === 'zh-Hant'

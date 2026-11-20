@@ -30,6 +30,7 @@ import {
   LCF_MATRIX_ID,
   lcfGatewayConfig,
   lcfThinkingMessage,
+  parseRequestedLimit,
   pickQuickMealSpots,
   queryRecentOpenPlaceUpdates,
   resolveMemoryLocationHint,
@@ -2107,5 +2108,248 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       expect(reply).toContain('Soho Sichuan House');
       expect(reply).toContain('Bloomsbury Dumpling House');
     }
+  });
+
+  it('19. routes meal-picker domainKeywords, bypasses comparative follow-ups to A2A, and caps results via parseRequestedLimit', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const now = new Date('2026-11-19T12:00:00Z');
+    const ts = '2026-11-19T11:59:00Z';
+
+    // Seed two open Soho dim-sum restaurants so default group limit (3) would return multiple spots
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-dimsum-1', 'Soho Dim Sum Club W1D 5AA', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000401',
+          'rec_lcf_00000000000000000401',
+          'W1D 5AA|soho dim sum club',
+          JSON.stringify({
+            name_en: 'Soho Dim Sum Club',
+            name_zh: '苏豪点心会',
+            category: 'restaurant',
+            cuisines: ['dim-sum', 'cantonese'],
+            address: '10 Wardour Street',
+            postcode: 'W1D 5AA',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5134,
+            lng: -0.1345,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+      db
+        .prepare(
+          `INSERT INTO records (id, kind, root_id, identity_key, status, data_json, source_url, evidence, observed_at, submitted_by, verified_at, created_at, updated_at)
+           VALUES (?, 'place', ?, ?, 'verified', ?, 'https://example.com/soho-dimsum-2', 'Wardour Tea House W1D 5AB', ?, 'tok_1', ?, ?, ?)`,
+        )
+        .bind(
+          'rec_lcf_00000000000000000402',
+          'rec_lcf_00000000000000000402',
+          'W1D 5AB|wardour tea house',
+          JSON.stringify({
+            name_en: 'Wardour Tea House',
+            name_zh: '华都茶楼',
+            category: 'restaurant',
+            cuisines: ['dim-sum', 'cantonese'],
+            address: '22 Wardour Street',
+            postcode: 'W1D 5AB',
+            outcode: 'W1D',
+            borough_code: 'E09000033',
+            lat: 51.5137,
+            lng: -0.1351,
+            trading: 'open',
+          }),
+          ts,
+          ts,
+          ts,
+          ts,
+        ),
+    ]);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000401', now);
+    await rebuildPlace(db, 'rec_lcf_00000000000000000402', now);
+
+    const groupCtx: RoomContext = {
+      roomId: '!grp1:matrix.netmind.chat',
+      chatType: 'group',
+      members: [
+        { matrixId: '@alice:matrix.netmind.chat', displayName: 'Alice', isAgent: false },
+        { matrixId: LCF_MATRIX_ID, displayName: 'London Chinese Food', isAgent: true },
+      ],
+      recentHistory: [],
+    };
+
+    // 1. Meal-picker phrases match domainKeywords and route cleanly in group chat
+    for (const phrase of [
+      '中午吃什麼',
+      '中午吃什么',
+      '午餐吃什麼',
+      '午餐吃什么',
+      '晚餐吃什麼',
+      '晚餐吃什么',
+      '晚上吃什麼',
+      '晚上吃什么',
+      '今天吃什麼',
+      '今天吃什么',
+    ]) {
+      expect(LCF_AGENT_SPEC.domainKeywords).toContain(phrase);
+    }
+    const lunchEvent = makeEvent({ eventId: '$ev_lunch_kw', text: '今天中午吃什麼？' });
+    expect(heuristicDomainScore(lunchEvent, LCF_AGENT_SPEC, groupCtx)).toBeGreaterThanOrEqual(0.55);
+    const lunchRoute = await routeEvent(lunchEvent, groupCtx, LCF_AGENT_SPEC);
+    expect(lunchRoute.shouldReply).toBe(true);
+    expect(lunchRoute.detectedLang).toBe('zh-Hant');
+
+    // 2. parseRequestedLimit extracts explicit Chinese & English limits and caps fastRespondLcf output
+    expect(parseRequestedLimit('週末先在 Soho 吃點心再逛展覽，各推 1 個')).toBe(1);
+    expect(parseRequestedLimit('幫我推薦 2 間')).toBe(2);
+    expect(parseRequestedLimit('挑三家就好')).toBe(3);
+    expect(parseRequestedLimit('just 1 dim sum spot in Soho')).toBe(1);
+    expect(parseRequestedLimit('pick two near UCL')).toBe(2);
+    expect(parseRequestedLimit('Soho 附近有什麼點心？')).toBeNull();
+
+    const envNoA2a = makeEnv(db);
+    const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+
+    const oneDimSum = await fastRespondLcf(
+      envNoA2a,
+      makeEvent({
+        eventId: '$ev_soho_dimsum_1',
+        text: '@London Chinese Food @Spotted London 週末先在 Soho 吃點心再逛展覽，各推 1 個',
+      }),
+      {
+        shouldReply: true,
+        tier: 0,
+        reason: 'explicit_mention',
+        confidence: 1,
+        detectedLang: 'zh-Hant',
+        shouldQuote: true,
+      },
+      emptyMem,
+      groupCtx,
+    );
+    expect(oneDimSum).toBeTruthy();
+    expect(oneDimSum).toContain('為你查到 1 間營業中選擇');
+    expect(oneDimSum!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(1);
+    expect(findRating(oneDimSum!)).toBeNull();
+
+    // Without explicit count, both Soho dim-sum spots are returned
+    const multiDimSum = await fastRespondLcf(
+      envNoA2a,
+      makeEvent({ eventId: '$ev_soho_dimsum_multi', text: '@London Chinese Food 週末想在 Soho 吃點心' }),
+      {
+        shouldReply: true,
+        tier: 0,
+        reason: 'explicit_mention',
+        confidence: 1,
+        detectedLang: 'zh-Hant',
+        shouldQuote: true,
+      },
+      emptyMem,
+      groupCtx,
+    );
+    expect(multiDimSum!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(2);
+
+    // 3. Comparative follow-up returns null when A2A credential is present so Manyfold A2A compares prefetched places
+    const envWithA2a = makeEnv(db, {
+      MANYFOLD_A2A_URL: 'https://a2a.lcf.test/rpc',
+      MANYFOLD_A2A_TOKEN: 'a2a_secret_lcf',
+    });
+    const nowMs = Date.now();
+    const priorListCtx: RoomContext = {
+      ...groupCtx,
+      chatType: 'dm',
+      recentHistory: [
+        {
+          eventId: '$prev_q',
+          senderId: '@alice:matrix.netmind.chat',
+          senderName: 'Alice',
+          isAgent: false,
+          text: 'Soho 附近有什麼川菜或點心？',
+          timestampMs: nowMs - 20_000,
+        },
+        {
+          eventId: '$prev_a',
+          senderId: LCF_MATRIX_ID,
+          senderName: 'London Chinese Food',
+          isAgent: true,
+          isSelf: true,
+          text: [
+            '🍜 為你查到 2 間營業中選擇（Soho 一帶）：',
+            '- Soho Sichuan House / 蘇豪川菜館',
+            'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001/soho-sichuan-house',
+            '- Soho Dim Sum Club / 蘇豪點心會',
+            'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000401/soho-dim-sum-club',
+          ].join('\n'),
+          timestampMs: nowMs - 10_000,
+        },
+      ],
+    };
+
+    const comparativeText = '這幾間裡面哪一間最適合帶不吃辣的英國朋友去？';
+    const dmComp = await fastRespondLcf(
+      envWithA2a,
+      makeEvent({ chatType: 'dm', eventId: '$ev_comp_dm', text: comparativeText }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      emptyMem,
+      priorListCtx,
+    );
+    expect(dmComp).toBeNull();
+
+    const mentionComp = await fastRespondLcf(
+      envWithA2a,
+      makeEvent({ chatType: 'group', eventId: '$ev_comp_mention', text: `@London Chinese Food ${comparativeText}` }),
+      { shouldReply: true, tier: 0, reason: 'explicit_mention', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+      { ...priorListCtx, chatType: 'group' },
+    );
+    expect(mentionComp).toBeNull();
+
+    const activeSessionComp = await fastRespondLcf(
+      envWithA2a,
+      makeEvent({ chatType: 'group', eventId: '$ev_comp_active', text: comparativeText }),
+      { shouldReply: true, tier: 0, reason: 'active_session', confidence: 0.95, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+      { ...priorListCtx, chatType: 'group' },
+    );
+    expect(activeSessionComp).toBeNull();
+
+    // Without A2A credential, comparative follow-up does NOT return null
+    const noA2aComp = await fastRespondLcf(
+      envNoA2a,
+      makeEvent({ chatType: 'dm', eventId: '$ev_comp_no_a2a', text: comparativeText }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      emptyMem,
+      priorListCtx,
+    );
+    expect(noA2aComp).not.toBeNull();
+
+    // With explicit new location + cuisine, D1 lookup still runs instead of bypassing to A2A
+    const explicitNewComp = await fastRespondLcf(
+      envWithA2a,
+      makeEvent({ chatType: 'dm', eventId: '$ev_comp_new_loc', text: 'Soho 哪一間點心最適合帶不吃辣的朋友去？' }),
+      { shouldReply: true, tier: 0, reason: 'dm', confidence: 1, detectedLang: 'zh-Hant', shouldQuote: false },
+      emptyMem,
+      priorListCtx,
+    );
+    expect(explicitNewComp).toBeTruthy();
+    expect(explicitNewComp).toContain('Soho Dim Sum Club');
+
+    // Cold unmentioned group domain_match stays [NO_REPLY] (never triggers A2A)
+    const unmentionedColdComp = await fastRespondLcf(
+      envWithA2a,
+      makeEvent({ chatType: 'group', eventId: '$ev_comp_cold', text: comparativeText }),
+      { shouldReply: true, tier: 1, reason: 'domain_match', confidence: 0.7, detectedLang: 'zh-Hant', shouldQuote: true },
+      emptyMem,
+      groupCtx,
+    );
+    expect(unmentionedColdComp).toBe('[NO_REPLY]');
   });
 });
