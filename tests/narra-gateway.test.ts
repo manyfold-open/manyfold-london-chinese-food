@@ -489,6 +489,14 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(hitHans.shouldReply).toBe(true);
     expect(hitHans.detectedLang).toBe('zh-Hans');
 
+    const dinner = makeEvent({ text: '晚上能吃啥' });
+    const run = vi.fn();
+    const env = { AI: { run } } as unknown as Env;
+    const triageModel = createLcfGatewayConfig().triageModel?.(env);
+    expect((await routeEvent(dinner, groupCtx(), LCF_AGENT_SPEC)).shouldReply).toBe(true);
+    expect((await routeEvent(dinner, groupCtx(), LCF_AGENT_SPEC, { triageModel })).shouldReply).toBe(true);
+    expect(run).not.toHaveBeenCalled();
+
     for (const offTopic of [
       'Draw a tarot card for my career please',
       '幫我求一籤看看今天運勢',
@@ -508,6 +516,12 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     await seedSamplePlaces(db);
     const env = makeEnv(db);
     const emptyMem = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+
+    const dinner = makeEvent({ text: '晚上能吃啥' });
+    const dinnerContext = { roomId: dinner.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    const dinnerDecision = await routeEvent(dinner, dinnerContext, LCF_AGENT_SPEC);
+    expect(await fastRespondLcf(env, dinner, dinnerDecision, emptyMem, dinnerContext))
+      .toBe('你在哪一帶？我幫你找附近的中餐。');
 
     // Greetings in all 3 scripts
     const hiHant = await fastRespondLcf(
@@ -2869,4 +2883,32 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       expect(decision.confidence, text).toBeGreaterThanOrEqual(0.9);
     }
   });
+});
+
+it('speaks only on its own topic in mixed group chatter', async () => {
+  const cases = [
+    '晚上能吃啥',
+    '我先去開個會',
+    '今晚倫敦有什麼市集',
+    '今天 AI 圈有啥新消息',
+    '能抽張塔羅看看工作嗎',
+    '幫我求一支籤',
+    '有英國簽證資料可以查嗎',
+    '晚餐 £80 我付的，四個人怎麼分',
+    'Boots 有折扣碼嗎',
+    '昨天吃火鍋超爽',
+  ];
+  const nowMs = Date.now();
+  const replies: string[] = [];
+  for (const text of cases) {
+    const event = makeEvent({ text, timestampMs: nowMs, chatType: 'group', mentions: [] });
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    if ((await routeEvent(event, context, LCF_AGENT_SPEC, { nowMs })).shouldReply) replies.push(text);
+  }
+  expect(replies).toEqual(["晚上能吃啥"]);
+
+  const text = '晚上能吃啥';
+  const directedEvent = makeEvent({ text: `@Ken ${text}`, timestampMs: nowMs, chatType: 'group', mentions: ['@ken:example.com'] });
+  const directedContext = { roomId: directedEvent.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+  expect((await routeEvent(directedEvent, directedContext, LCF_AGENT_SPEC, { nowMs })).shouldReply).toBe(false);
 });
