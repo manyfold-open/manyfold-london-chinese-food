@@ -13,6 +13,7 @@
  */
 
 import {
+  createWorkersAiTriageModel,
   stripAgentMentions,
   toZhHant,
   type AgentSpec,
@@ -45,6 +46,8 @@ export const LCF_MANYFOLD_AGENT_ID = 'agt_agq657lc2b6qhffpaymugpmzsy';
 export const LCF_MATRIX_ID = '@agent-b2b526f3:matrix.netmind.chat';
 const DEFAULT_PUBLIC_URL = 'https://app.manyfold.ai/london-chinese-food';
 const DEFAULT_NARRA_API = 'https://api.netmind.chat';
+
+const CASUAL_MEAL_QUESTION_RE = /^(?:今天|今晚|中午|午餐|晚上|晚餐)?[ \t]*(?:能|可以|要|該|该)?吃(?:啥|什麼|什么)[呀啊呢嗎吗]?[？?！!。]*$/;
 
 export const LCF_AGENT_SPEC: AgentSpec = {
   id: LCF_AGENT_ID,
@@ -224,6 +227,7 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     'chinese bbq',
     'bbq skewers',
     'skewers',
+    CASUAL_MEAL_QUESTION_RE,
     '中午吃什麼',
     '中午吃什么',
     '午餐吃什麼',
@@ -1152,11 +1156,15 @@ function formatPlaceLine(
   env: Pick<Env, 'PUBLIC_URL'>,
   entry: IndexEntry,
   lang: LangCode,
-  extra?: { distKm?: number; note?: string },
+  extra?: { distKm?: number; note?: string; requestedCuisines?: readonly string[] },
 ): string[] {
   const nameZh = entry.z ? localizeZh(entry.z, lang) : entry.z;
   const name = [entry.n, nameZh].filter(Boolean).join(' / ') || entry.id;
-  const cuisineBits = entry.k.slice(0, 2).map((c) => labelFor(CUISINE_TEXT, c, lang));
+  const requestedCuisines = extra?.requestedCuisines ?? [];
+  const matchingCuisines = requestedCuisines.filter((cuisine) => entry.k.includes(cuisine));
+  const cuisineBits = [...new Set([...matchingCuisines, ...entry.k])]
+    .slice(0, 2)
+    .map((cuisine) => labelFor(CUISINE_TEXT, cuisine, lang));
   const categoryLabel = labelFor(CATEGORY_TEXT, entry.c, lang);
   const metaParts: string[] = [
     cuisineBits.length > 0 ? cuisineBits.join(' / ') : categoryLabel,
@@ -1539,6 +1547,10 @@ export async function fastRespondLcf(
       : { location: null, dishes: [], cuisines: [], categories: [] };
   const location = explicitLocation ?? activeHints.location ?? resolveMemoryLocationHint(memories, lang, allEntries);
 
+  if (isUnmentionedGroup && !location && CASUAL_MEAL_QUESTION_RE.test(cleanedText)) {
+    return lang === 'zh-Hans' ? '你在哪一带？我帮你找附近的中餐。' : '你在哪一帶？我幫你找附近的中餐。';
+  }
+
   // Off-topic guard on explicit mentions / DMs / unmentioned group turns
   if (hasAntiHit && dishes.length === 0 && cuisines.length === 0 && categories.length === 0 && !explicitLocation) {
     return isMultiMention || isUnmentionedGroup ? '[NO_REPLY]' : offTopicRedirect(lang);
@@ -1805,7 +1817,7 @@ export async function fastRespondLcf(
       const lines = [header];
       for (const m of picked) {
         const note = wantsNearestTube ? formatNearestStationNote(m.station ?? null, lang) : undefined;
-        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note }));
+        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note, requestedCuisines: cuisines }));
       }
       return lines.join('\n');
     }
@@ -2008,6 +2020,17 @@ export function createLcfGatewayConfig(
 ): NarraGatewayConfig<Env> {
   return {
     spec: LCF_AGENT_SPEC,
+    triageModel: (env) => {
+      if (!env.AI || (env.NARRA_AI_TRIAGE ?? '').trim() === 'off') return undefined;
+      const model = createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL });
+      return {
+        ...model,
+        score: (input) =>
+          CASUAL_MEAL_QUESTION_RE.test(input.event.text.trim())
+            ? Promise.resolve({ score: 0.7, reason: 'domain_match' })
+            : model.score(input),
+      };
+    },
     fetchUpdates: (env, sinceIso) => fetchLcfUpdates(env, sinceIso, overrides.fetchImpl),
     fastRespond: fastRespondLcf,
     resolveA2ACredential: resolveLcfA2ACredential,
