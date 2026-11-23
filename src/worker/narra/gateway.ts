@@ -461,15 +461,15 @@ const MILD_FOOD_REQUEST_RE =
   /(?:不(?:太|要)?辣|不吃辣|怕辣|少辣|清淡|免辣|無辣|无辣|\b(?:not spicy|non[- ]spicy|no (?:chili|chilli|spice)|mild food|mild dishes?)\b)/i;
 
 function unverifiedSpiceNote(lang: LangCode): string {
-  if (lang === 'zh-Hant') return '這幾間符合地點或菜系，但我還沒核實哪些菜能做不辣。點餐前可以先問店家。';
-  if (lang === 'zh-Hans') return '这几家符合地点或菜系，但我还没核实哪些菜能做不辣。点餐前可以先问店家。';
-  return 'These match the location or cuisine. I haven’t verified which dishes can be made mild, so check with the restaurant before ordering.';
+  if (lang === 'zh-Hant') return '我還沒核實哪些菜能做不辣。點餐前可以先問店家。';
+  if (lang === 'zh-Hans') return '我还没核实哪些菜能做不辣。点餐前可以先问店家。';
+  return 'I haven’t verified which dishes can be made mild, so check with the restaurant before ordering.';
 }
 
 const COMPARATIVE_ADVICE_RE =
   /(?:最適合|最适合|比較適合|比较适合|哪一?[間家個个].{0,8}(?:適合|适合|比較好|比较好|推薦|推荐|不辣)|帶.{0,8}(?:朋友|小孩|孩子|長輩|长辈|父母|客戶|客户|同事)|包廂|包厢|約會|约会|適不適合|适不适合|\b(?:which\s+one\s+is\s+(?:best|better|most\s+suitable)|compare\s+(?:them|these)|kid[- ]?friendly|private\s+room|date\s+night|best\s+for)\b)/i;
 
-const REQUESTED_LIMIT_ZH_RE = /(?:各)?(?:推|推薦|推荐|給|给|挑|找|來|来)\s*([1-5一二兩两三四五])\s*[間家個个]/;
+const REQUESTED_LIMIT_ZH_RE = /(?:各)?(?:推|推薦|推荐|給|给|挑|找|來|来)\s*([1-5一二兩两三四五])\s*[間间家個个]/;
 const REQUESTED_LIMIT_EN_RE = /\b(?:just|only|pick|top)\s+([1-5]|one|two|three|four|five)\b/i;
 
 const REQUESTED_LIMIT_MAP: Record<string, number> = {
@@ -500,6 +500,7 @@ export function parseRequestedLimit(text: string): number | null {
     const val = REQUESTED_LIMIT_MAP[zhMatch[1]];
     if (val) return Math.max(1, Math.min(5, val));
   }
+  if (/(?:有沒有|有没有|有冇|有無|有无)\s*[一1]\s*[間间家]/.test(input)) return 1;
   const enMatch = input.match(REQUESTED_LIMIT_EN_RE);
   if (enMatch?.[1]) {
     const val = REQUESTED_LIMIT_MAP[enMatch[1].toLowerCase()];
