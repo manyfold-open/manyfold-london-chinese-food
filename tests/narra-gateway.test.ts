@@ -538,6 +538,14 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(mildReply).toContain('Soho');
     expect(mildReply).toContain('還沒核實哪些菜能做不辣');
 
+    const oneRestaurant = makeEvent({ text: '先不算錢了，倫敦 Soho 有沒有一間可以吃不辣點心的中餐？' });
+    const oneDecision = await routeEvent(oneRestaurant, dinnerContext, LCF_AGENT_SPEC);
+    expect(oneDecision.shouldReply).toBe(true);
+    const oneReply = await fastRespondLcf(env, oneRestaurant, oneDecision, emptyMem, dinnerContext);
+    expect(oneReply).toContain('為你查到 1 間');
+    expect(oneReply).toContain('還沒核實哪些菜能做不辣');
+    expect(oneReply!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(1);
+
     // Greetings in all 3 scripts
     const hiHant = await fastRespondLcf(
       env,
