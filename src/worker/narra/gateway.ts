@@ -49,7 +49,16 @@ const DEFAULT_NARRA_API = 'https://api.netmind.chat';
 
 const CASUAL_MEAL_QUESTION_RE = /^(?:今天|今晚|中午|午餐|晚上|晚餐)?[ \t]*(?:能|可以|要|該|该)?吃(?:啥|什麼|什么)[呀啊呢嗎吗]?[？?！!。]*$/;
 
+// Two explicit requests, with the exhibition anchored to the dinner area.
+const DINNER_AND_NEARBY_EXHIBITION_RE =
+  /先吃[^。！？?，,]{0,24}(?:中餐|中菜)[，,；;。]\s*(?:飯後|饭后|吃完)[^。！？?]{0,14}附近[^。！？?]{0,16}(?:展覽|展览|免費展|免费展)[^。！？?]{0,10}[？?]$/;
+
 export const LCF_AGENT_SPEC: AgentSpec = {
+  matchesIndependentGroupRequest: (text, context) =>
+    DINNER_AND_NEARBY_EXHIBITION_RE.test(text.trim()) &&
+    context.members.some((member) => member.isAgent &&
+      (member.matrixId === '@agent-f9388b28:matrix.netmind.chat' || member.displayName === 'Spotted London')),
+
   id: LCF_AGENT_ID,
   matrixId: LCF_MATRIX_ID,
   name: 'London Chinese Food',
