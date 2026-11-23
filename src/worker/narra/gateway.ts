@@ -1965,7 +1965,8 @@ function formatReferencedHours(env: Env, doc: PlaceDoc, lang: LangCode): string 
   const hours = [doc.place.hours, doc.place.opening_hours].find(
     (value): value is string => typeof value === 'string' && value.trim().length > 0,
   )?.trim();
-  const url = placeUrl(env, lang, doc.id, doc.slug);
+  const website = typeof doc.place.website === 'string' ? doc.place.website.trim() : '';
+  const url = /^https:\/\/[^\s]+$/i.test(website) ? website : placeUrl(env, lang, doc.id, doc.slug);
   if (lang === 'zh-Hant') {
     return `${name}。${hours ? `店家資料列的營業時間是 ${localizeZh(hours, lang)}。` : ''}你問的時段我還沒核實，出發前可以跟店家確認。\n${url}`;
   }

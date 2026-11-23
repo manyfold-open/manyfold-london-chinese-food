@@ -1832,6 +1832,7 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
           lat: 51.5176,
           lng: -0.1198,
           hours: '11:30-22:00',
+          website: 'https://example.com/holborn-noodle',
           trading: 'open',
         }),
         ts,
@@ -1911,6 +1912,7 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(hoursReply).toContain('Holborn Noodle Bar');
     expect(hoursReply).toContain('11:30-22:00');
     expect(hoursReply).toContain('你問的時段我還沒核實');
+    expect(hoursReply).toContain('https://example.com/holborn-noodle');
 
     const afterThanks: RoomContext = {
       ...singlePlaceCtx,
