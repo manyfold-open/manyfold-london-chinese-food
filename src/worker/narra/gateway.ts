@@ -14,6 +14,7 @@
 
 import {
   createWorkersAiTriageModel,
+  heuristicDomainScore,
   stripAgentMentions,
   toZhHant,
   type AgentSpec,
@@ -1548,7 +1549,7 @@ export async function fastRespondLcf(
   if (
     REFERENCED_HOURS_RE.test(cleanedText) &&
     !hasAntiHit &&
-    (decision.reason === 'active_session' || !isUnmentionedGroup)
+    (decision.reason === 'active_session' || decision.reason === 'recent_restaurant_hours' || !isUnmentionedGroup)
   ) {
     const ids = extractRecentPlaceIds(context, 2);
     if (ids.length === 1) {
@@ -2065,20 +2066,37 @@ export async function resolveLcfA2ACredential(env: Env): Promise<NarraA2ACredent
   return null;
 }
 
+function isRecentRestaurantHoursFollowup(event: InboundEvent, context: RoomContext): boolean {
+  const text = stripMentions(event.text);
+  if (event.chatType !== 'group' || !REFERENCED_HOURS_RE.test(text) || hasAntiKeywordHit(text)) return false;
+  const lastAgent = [...context.recentHistory].reverse().find(
+    (turn) => turn.timestampMs <= event.timestampMs && (turn.isAgent || turn.isSelf),
+  );
+  if (!lastAgent || event.timestampMs - lastAgent.timestampMs > 180_000) return false;
+  if (!lastAgent.isSelf && lastAgent.senderId !== LCF_MATRIX_ID) return false;
+  return new Set(Array.from(lastAgent.text.matchAll(PLACE_ID_RE), (match) => match[0])).size === 1;
+}
+
 export function createLcfGatewayConfig(
   overrides: Partial<NarraGatewayConfig<Env>> = {},
 ): NarraGatewayConfig<Env> {
   return {
     spec: LCF_AGENT_SPEC,
     triageModel: (env) => {
-      if (!env.AI || (env.NARRA_AI_TRIAGE ?? '').trim() === 'off') return undefined;
-      const model = createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL });
+      const model = env.AI && (env.NARRA_AI_TRIAGE ?? '').trim() !== 'off'
+        ? createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL })
+        : undefined;
       return {
         ...model,
-        score: (input) =>
-          CASUAL_MEAL_QUESTION_RE.test(input.event.text.trim())
-            ? Promise.resolve({ score: 0.7, reason: 'domain_match' })
-            : model.score(input),
+        score: async (input) => {
+          if (isRecentRestaurantHoursFollowup(input.event, input.context)) {
+            return { score: 0.95, reason: 'recent_restaurant_hours' };
+          }
+          if (model && CASUAL_MEAL_QUESTION_RE.test(input.event.text.trim())) {
+            return { score: 0.7, reason: 'domain_match' };
+          }
+          return model?.score(input) ?? { score: heuristicDomainScore(input.event, input.spec, input.context) };
+        },
       };
     },
     fetchUpdates: (env, sinceIso) => fetchLcfUpdates(env, sinceIso, overrides.fetchImpl),

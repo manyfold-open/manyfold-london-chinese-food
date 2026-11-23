@@ -1912,6 +1912,27 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(hoursReply).toContain('11:30-22:00');
     expect(hoursReply).toContain('你問的時段我還沒核實');
 
+    const afterThanks: RoomContext = {
+      ...singlePlaceCtx,
+      activeSession: { active: false },
+      recentHistory: [...singlePlaceCtx.recentHistory, {
+        eventId: '$thanks', senderId: followup.senderId, isAgent: false,
+        text: '好，謝啦，我先跟朋友確認一下。', timestampMs: followup.timestampMs - 1000,
+      }],
+    };
+    const triageModel = cfg.triageModel?.(env);
+    const afterThanksDecision = await routeEvent(followup, afterThanks, LCF_AGENT_SPEC, { triageModel });
+    expect(afterThanksDecision.reason).toBe('recent_restaurant_hours');
+    expect(await fastRespondLcf(env, followup, afterThanksDecision, emptyMem, afterThanks)).toBe(hoursReply);
+    const peerAfter: RoomContext = {
+      ...afterThanks,
+      recentHistory: [...afterThanks.recentHistory, {
+        eventId: '$other-agent', senderId: '@agent-other:matrix.netmind.chat', isAgent: true,
+        text: '我找到附近的週末展覽。', timestampMs: followup.timestampMs - 500,
+      }],
+    };
+    expect((await routeEvent(followup, peerAfter, LCF_AGENT_SPEC, { triageModel })).shouldReply).toBe(false);
+
     const extra = await buildLcfExtraEnvelopeFields(
       env,
       makeEvent({ text: '這兩間哪間適合帶長輩去？' }),
