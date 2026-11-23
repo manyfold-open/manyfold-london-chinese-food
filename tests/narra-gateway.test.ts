@@ -546,6 +546,22 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(oneReply).toContain('還沒核實哪些菜能做不辣');
     expect(oneReply!.match(/https:\/\/app\.manyfold\.ai\/london-chinese-food\/zh\/place\//g)).toHaveLength(1);
 
+    const preference = makeEvent({ eventId: '$mild-preference', text: '我平常不吃辣，點心通常比較合我胃口。' });
+    const nextMeal = makeEvent({ text: '那 Soho 有沒有一間中餐可以推薦？' });
+    const prefContext: RoomContext = {
+      ...dinnerContext,
+      recentHistory: [{
+        eventId: preference.eventId, senderId: nextMeal.senderId, isAgent: false,
+        timestampMs: nextMeal.timestampMs - 10_000, text: preference.text,
+      }],
+    };
+    expect(await fastRespondLcf(env, preference, oneDecision, emptyMem, prefContext)).toBe('[NO_REPLY]');
+    const prefReply = await fastRespondLcf(env, nextMeal, oneDecision, emptyMem, prefContext);
+    expect(prefReply).toContain('還沒核實哪些菜能做不辣');
+    const otherUser = { ...nextMeal, senderId: '@other:matrix.netmind.chat' };
+    expect(await fastRespondLcf(env, otherUser, oneDecision, emptyMem, prefContext))
+      .not.toContain('還沒核實哪些菜能做不辣');
+
     // Greetings in all 3 scripts
     const hiHant = await fastRespondLcf(
       env,

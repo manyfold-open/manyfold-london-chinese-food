@@ -464,6 +464,10 @@ const QUICK_MEAL_PICK_RE =
 const MILD_FOOD_REQUEST_RE =
   /(?:不(?:太|要)?辣|不吃辣|怕辣|少辣|清淡|免辣|無辣|无辣|\b(?:not spicy|non[- ]spicy|no (?:chili|chilli|spice)|mild food|mild dishes?)\b)/i;
 
+const PERSONAL_MILD_PREFERENCE_RE = /^(?:我(?:平常|平時|平时|通常|一般)?(?:都)?不吃辣|\bI (?:usually |normally )?(?:don't|do not) eat spicy food\b)/i;
+const MEAL_CONTINUATION_RE = /^(?:那|改去|改在|換到|换到|(?:what|how) about\b)/i;
+const EXPLICIT_SPICY_REQUEST_RE = /(?:想吃|要吃|改吃)(?:點|点|個|个)?(?:辣的|辣菜|麻辣)|\b(?:want|prefer|looking for) (?:something )?spicy\b/i;
+
 function unverifiedSpiceNote(lang: LangCode): string {
   if (lang === 'zh-Hant') return '我還沒核實哪些菜能做不辣。點餐前可以先問店家。';
   if (lang === 'zh-Hans') return '我还没核实哪些菜能做不辣。点餐前可以先问店家。';
@@ -1511,6 +1515,18 @@ export async function fastRespondLcf(
   const isUnmentionedGroup =
     event.chatType === 'group' && decision.reason !== 'explicit_mention' && decision.reason !== 'reply_to_self';
 
+  const personalMildPreference = PERSONAL_MILD_PREFERENCE_RE.test(cleanedText);
+  if (isUnmentionedGroup && personalMildPreference &&
+      !/[？?]|推薦|推荐|有沒有|有没有|幫我|帮我|\brecommend\b/i.test(cleanedText)) {
+    return '[NO_REPLY]';
+  }
+  const carriesMildPreference = event.chatType === 'group' && MEAL_CONTINUATION_RE.test(cleanedText) &&
+    !EXPLICIT_SPICY_REQUEST_RE.test(cleanedText) && context?.recentHistory.some((turn) =>
+      !turn.isAgent && turn.senderId === event.senderId && turn.eventId !== event.eventId &&
+      turn.timestampMs <= event.timestampMs && event.timestampMs - turn.timestampMs <= 180_000 &&
+      PERSONAL_MILD_PREFERENCE_RE.test(turn.text.trim()),
+    );
+
   if (event.kind === 'image' || event.kind === 'compound' || COMPOUND_RE.test(event.text)) {
     return compoundReply(lang);
   }
@@ -1850,7 +1866,7 @@ export async function fastRespondLcf(
             : `🍜 Found ${picked.length} open place${picked.length === 1 ? '' : 's'}${location ? ` near ${locationLabel}` : ''}:`;
 
       const lines = [header];
-      if (MILD_FOOD_REQUEST_RE.test(cleanedText)) lines.push(unverifiedSpiceNote(lang));
+      if (MILD_FOOD_REQUEST_RE.test(cleanedText) || carriesMildPreference) lines.push(unverifiedSpiceNote(lang));
       for (const m of picked) {
         const note = wantsNearestTube ? formatNearestStationNote(m.station ?? null, lang) : undefined;
         lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note, requestedCuisines: cuisines }));
