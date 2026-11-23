@@ -186,7 +186,7 @@ async function seedSamplePlaces(db: D1Database): Promise<void> {
           name_en: 'Soho Sichuan House',
           name_zh: '苏豪川菜馆',
           category: 'restaurant',
-          cuisines: ['sichuan', 'noodles'],
+          cuisines: ['noodles', 'dumplings', 'sichuan'],
           address: '12 Gerrard Street',
           postcode: 'W1D 6JW',
           outcode: 'W1D',
@@ -522,6 +522,14 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     const dinnerDecision = await routeEvent(dinner, dinnerContext, LCF_AGENT_SPEC);
     expect(await fastRespondLcf(env, dinner, dinnerDecision, emptyMem, dinnerContext))
       .toBe('你在哪一帶？我幫你找附近的中餐。');
+
+    const sichuan = makeEvent({
+      text: '@London Chinese Food Soho 晚上有什麼川菜推薦？',
+      mentions: [LCF_MATRIX_ID],
+    });
+    const sichuanDecision = await routeEvent(sichuan, dinnerContext, LCF_AGENT_SPEC);
+    expect(await fastRespondLcf(env, sichuan, sichuanDecision, emptyMem, dinnerContext))
+      .toContain('Soho Sichuan House / 蘇豪川菜館 (川菜 / 麵館');
 
     // Greetings in all 3 scripts
     const hiHant = await fastRespondLcf(

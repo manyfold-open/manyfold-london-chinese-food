@@ -1156,11 +1156,15 @@ function formatPlaceLine(
   env: Pick<Env, 'PUBLIC_URL'>,
   entry: IndexEntry,
   lang: LangCode,
-  extra?: { distKm?: number; note?: string },
+  extra?: { distKm?: number; note?: string; requestedCuisines?: readonly string[] },
 ): string[] {
   const nameZh = entry.z ? localizeZh(entry.z, lang) : entry.z;
   const name = [entry.n, nameZh].filter(Boolean).join(' / ') || entry.id;
-  const cuisineBits = entry.k.slice(0, 2).map((c) => labelFor(CUISINE_TEXT, c, lang));
+  const requestedCuisines = extra?.requestedCuisines ?? [];
+  const matchingCuisines = requestedCuisines.filter((cuisine) => entry.k.includes(cuisine));
+  const cuisineBits = [...new Set([...matchingCuisines, ...entry.k])]
+    .slice(0, 2)
+    .map((cuisine) => labelFor(CUISINE_TEXT, cuisine, lang));
   const categoryLabel = labelFor(CATEGORY_TEXT, entry.c, lang);
   const metaParts: string[] = [
     cuisineBits.length > 0 ? cuisineBits.join(' / ') : categoryLabel,
@@ -1813,7 +1817,7 @@ export async function fastRespondLcf(
       const lines = [header];
       for (const m of picked) {
         const note = wantsNearestTube ? formatNearestStationNote(m.station ?? null, lang) : undefined;
-        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note }));
+        lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note, requestedCuisines: cuisines }));
       }
       return lines.join('\n');
     }
