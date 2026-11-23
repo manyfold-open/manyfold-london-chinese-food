@@ -531,6 +531,13 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(await fastRespondLcf(env, sichuan, sichuanDecision, emptyMem, dinnerContext))
       .toContain('Soho Sichuan House / 蘇豪川菜館 (川菜 / 麵館');
 
+    const mildDinner = makeEvent({ text: '那週五在 Soho 先吃個不辣的中餐，飯後附近有免費展嗎？' });
+    const mildDecision = await routeEvent(mildDinner, dinnerContext, LCF_AGENT_SPEC);
+    expect(mildDecision.shouldReply).toBe(true);
+    const mildReply = await fastRespondLcf(env, mildDinner, mildDecision, emptyMem, dinnerContext);
+    expect(mildReply).toContain('Soho');
+    expect(mildReply).toContain('還沒核實哪些菜能做不辣');
+
     // Greetings in all 3 scripts
     const hiHant = await fastRespondLcf(
       env,

@@ -448,6 +448,15 @@ const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stat
 const QUICK_MEAL_PICK_RE =
   /(?:(?:今天|今晚|今早|中午|午餐|午飯|午饭|晚上|晚餐|晚飯|晚饭|宵夜|夜宵|等下|待會|待会|不知道|要).{0,6}(?:吃什麼|吃什么|吃啥|吃哪[間家個]|吃哪[间家个])|(?:隨便|随便|幫我|帮我|隨機|随机).{0,4}(?:推薦|推荐|挑|選|选)(?:一|兩|两|幾|几)?(?:間|家|個|个)?|\b(?:what\s+(?:should\s+(?:we|i)|to)\s+eat(?:\s+for\s+(?:lunch|dinner|supper|tonight))?|what'?s\s+for\s+(?:lunch|dinner)|pick\s+(?:me\s+|us\s+)?(?:a\s+)?(?:place|spot|somewhere)(?:\s+for\s+(?:lunch|dinner))?|surprise\s+me(?:\s+for\s+(?:lunch|dinner))?)\b)/i;
 
+const MILD_FOOD_REQUEST_RE =
+  /(?:不(?:太|要)?辣|不吃辣|怕辣|少辣|清淡|免辣|無辣|无辣|\b(?:not spicy|non[- ]spicy|no (?:chili|chilli|spice)|mild food|mild dishes?)\b)/i;
+
+function unverifiedSpiceNote(lang: LangCode): string {
+  if (lang === 'zh-Hant') return '這幾間符合地點或菜系，但我還沒核實哪些菜能做不辣。點餐前可以先問店家。';
+  if (lang === 'zh-Hans') return '这几家符合地点或菜系，但我还没核实哪些菜能做不辣。点餐前可以先问店家。';
+  return 'These match the location or cuisine. I haven’t verified which dishes can be made mild, so check with the restaurant before ordering.';
+}
+
 const COMPARATIVE_ADVICE_RE =
   /(?:最適合|最适合|比較適合|比较适合|哪一?[間家個个].{0,8}(?:適合|适合|比較好|比较好|推薦|推荐|不辣)|帶.{0,8}(?:朋友|小孩|孩子|長輩|长辈|父母|客戶|客户|同事)|包廂|包厢|約會|约会|適不適合|适不适合|\b(?:which\s+one\s+is\s+(?:best|better|most\s+suitable)|compare\s+(?:them|these)|kid[- ]?friendly|private\s+room|date\s+night|best\s+for)\b)/i;
 
@@ -1815,6 +1824,7 @@ export async function fastRespondLcf(
             : `🍜 Found ${picked.length} open place${picked.length === 1 ? '' : 's'}${location ? ` near ${locationLabel}` : ''}:`;
 
       const lines = [header];
+      if (MILD_FOOD_REQUEST_RE.test(cleanedText)) lines.push(unverifiedSpiceNote(lang));
       for (const m of picked) {
         const note = wantsNearestTube ? formatNearestStationNote(m.station ?? null, lang) : undefined;
         lines.push(...formatPlaceLine(env, m.entry, lang, { distKm: m.distKm, note, requestedCuisines: cuisines }));
