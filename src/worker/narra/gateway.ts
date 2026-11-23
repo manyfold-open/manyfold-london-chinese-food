@@ -449,6 +449,9 @@ const COMPOUND_RE = /^\[internal hint\]\s*process compound\b/i;
 const WHATS_NEW_RE =
   /(?:最近有什麼新|最近有什么新|新開|新开|新增|新店|what(?:'s| is)\s+new|new\s+places|newly\s+(?:added|verified))/i;
 
+const REFERENCED_HOURS_RE =
+  /(?:[這这那][間间家]|剛才那[間间家]).{0,24}(?:有開|有开|開門|开门|營業|营业|開到|开到)|\b(?:is|does) (?:it|that (?:place|restaurant)) (?:open|close)\b/i;
+
 const FOOD_FOLLOWUP_RE =
   /(?:哪一?[間间家個个]|[這这][幾几]?[間间家個个]|地址|菜單|菜单|價格|价格|人均|(?:開到|开到|營業到|营业到)\s*(?:幾點|几点)|幾點(?:開門|开门|關門|关门|營業|营业|打烊)|几点(?:开门|关门|营业|打烊)|開門|开门|怎麼去|怎么去|怎麼走|怎么走|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|地鐵|地铁|站近|近一點|近一点|步行|走路|最近|離.{0,5}站|离.{0,5}站|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend|tube|stations?|walk(?:ing)?|nearest|nearby)\b)/i;
 
@@ -1542,6 +1545,18 @@ export async function fastRespondLcf(
     return hasA2ACredential(env) ? null : offTopicRedirect(lang);
   }
 
+  if (
+    REFERENCED_HOURS_RE.test(cleanedText) &&
+    !hasAntiHit &&
+    (decision.reason === 'active_session' || !isUnmentionedGroup)
+  ) {
+    const ids = extractRecentPlaceIds(context, 2);
+    if (ids.length === 1) {
+      const doc = await loadPlaceDocOrSynthesize(env.DB, ids[0]!);
+      if (doc) return formatReferencedHours(env, doc, lang);
+    }
+  }
+
   const allEntries = await loadPublicEntries(env.DB);
   const openEntries = allEntries.filter((e) => e.t === 'open');
   let dishes = extractDishes(cleanedText);
@@ -1942,6 +1957,21 @@ function extractRecentPlaceIds(context?: RoomContext, limit = 4): string[] {
     }
   }
   return ids;
+}
+
+function formatReferencedHours(env: Env, doc: PlaceDoc, lang: LangCode): string {
+  const name = String(doc.place.name_en || doc.place.name_zh || doc.id);
+  const hours = [doc.place.hours, doc.place.opening_hours].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  )?.trim();
+  const url = placeUrl(env, lang, doc.id, doc.slug);
+  if (lang === 'zh-Hant') {
+    return `${name}。${hours ? `店家資料列的營業時間是 ${localizeZh(hours, lang)}。` : ''}你問的時段我還沒核實，出發前可以跟店家確認。\n${url}`;
+  }
+  if (lang === 'zh-Hans') {
+    return `${name}。${hours ? `店家资料列的营业时间是 ${localizeZh(hours, lang)}。` : ''}你问的时段我还没核实，出发前可以跟店家确认。\n${url}`;
+  }
+  return `${name}. ${hours ? `Listed hours: ${hours}. ` : ''}I haven’t verified the time you asked about. Check with the restaurant before going.\n${url}`;
 }
 
 function formatPrefetchedPlaceDoc(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, lang: LangCode): string {

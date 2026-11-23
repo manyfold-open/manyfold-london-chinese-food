@@ -1897,6 +1897,21 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
         },
       ],
     };
+    const followup = makeEvent({ text: '對了，那間星期六中午有開嗎？' });
+    const singlePlaceCtx: RoomContext = {
+      ...prefetchCtx,
+      activeSession: { active: true },
+      recentHistory: [{ ...prefetchCtx.recentHistory[0]!,
+        text: 'https://app.manyfold.ai/london-chinese-food/zh/place/rec_01m4fc98epc5fkgpz83w426dzk/holborn-noodle-bar',
+      }],
+    };
+    const hoursDecision = await routeEvent(followup, singlePlaceCtx, LCF_AGENT_SPEC);
+    expect(hoursDecision.shouldReply).toBe(true);
+    const hoursReply = await fastRespondLcf(env, followup, hoursDecision, emptyMem, singlePlaceCtx);
+    expect(hoursReply).toContain('Holborn Noodle Bar');
+    expect(hoursReply).toContain('11:30-22:00');
+    expect(hoursReply).toContain('你問的時段我還沒核實');
+
     const extra = await buildLcfExtraEnvelopeFields(
       env,
       makeEvent({ text: '這兩間哪間適合帶長輩去？' }),
