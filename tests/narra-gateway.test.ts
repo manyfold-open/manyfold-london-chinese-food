@@ -3047,3 +3047,37 @@ it('takes its own part of the mixed dinner and exhibition request after a peer a
   expect(await routeEvent(event, { ...context, members: [], recentHistory: [] }, LCF_AGENT_SPEC, { nowMs: nowMs + 10 }))
     .not.toHaveProperty('independentGroupReply');
 });
+
+describe('plain food asks in a group (zack test, 2026-11-24)', () => {
+  // Every agent left these unanswered: Food now claims them and asks where the person is.
+  it.each([
+    ['肚子餓了', '餓了嗎？你在哪一帶？我幫你找附近的中餐。'],
+    ['肚子好餓', '餓了嗎？你在哪一帶？我幫你找附近的中餐。'],
+    ['好餓', '餓了嗎？你在哪一帶？我幫你找附近的中餐。'],
+    ['晚上有啥可以吃', '你在哪一帶？我幫你找附近的中餐。'],
+    ['有啥可以吃', '你在哪一帶？我幫你找附近的中餐。'],
+    ['有啥中餐好吃', '你在哪一帶？我幫你找附近的中餐。'],
+    ['晚上能吃啥', '你在哪一帶？我幫你找附近的中餐。'],
+  ])('answers "%s" with a location question', async (text, expected) => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+    const run = vi.fn();
+    const triageModel = createLcfGatewayConfig().triageModel?.({ ...env, AI: { run } } as unknown as Env);
+    const event = makeEvent({ text, chatType: 'group', mentions: [] });
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+    const decision = await routeEvent(event, context, LCF_AGENT_SPEC, { triageModel });
+    expect(decision.shouldReply).toBe(true);
+    expect(run).not.toHaveBeenCalled();
+    expect(await fastRespondLcf(env, event, decision, { userMemories: [], roomMemories: [], promptSafeLines: [] }, context)).toBe(expected);
+  });
+
+  it.each(['今天 AI 圈有啥新聞', '有啥新聞可以看', '晚上可以幹嘛', '昨天吃火鍋超爽', '我吃飽了', '剛剛付了100磅'])(
+    'does not claim "%s"',
+    async (text) => {
+      const event = makeEvent({ text, chatType: 'group', mentions: [] });
+      const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [] };
+      expect((await routeEvent(event, context, LCF_AGENT_SPEC)).shouldReply).toBe(false);
+    },
+  );
+});
