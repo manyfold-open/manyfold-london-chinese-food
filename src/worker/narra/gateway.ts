@@ -50,6 +50,21 @@ const DEFAULT_NARRA_API = 'https://api.netmind.chat';
 
 const CASUAL_MEAL_QUESTION_RE = /^(?:今天|今晚|中午|午餐|晚上|晚餐)?[ \t]*(?:能|可以|要|該|该)?吃(?:啥|什麼|什么)[呀啊呢嗎吗]?[？?！!。]*$/;
 
+// Plain food asks with no place named, which every agent used to leave unanswered in a group
+// (zack test, 2026-11-24): hunger (肚子餓了 / 好餓), colloquial meal asks (晚上有啥可以吃 /
+// 有啥可以吃) and a bare Chinese-food ask (有啥中餐好吃). Food claims them and asks where the
+// person is, instead of going silent because no place matched.
+const HUNGER_RE = /^(?:肚子|我)?(?:好|很|超|有點|有点|快)?(?:餓|饿)(?:了|啊|喔|哦|死了|扁了)?[!！。~～…\s]*$/;
+const MEAL_ASK_RE =
+  /^(?:今天|今晚|中午|午餐|晚上|晚餐|等下|待會|待会)?[ \t]*(?:有啥|有什麼|有什么|能|可以|要|該|该)?[ \t]*(?:可以|能)?吃(?:啥|什麼|什么|點什麼|点什么)?[呀啊呢嗎吗喔]?[？?！!。]*$/;
+const PLAIN_CHINESE_FOOD_ASK_RE =
+  /^(?:有啥|有什麼|有什么|哪[裡里]有|推薦|推荐)?[ \t]*(?:好吃的)?(?:中餐|中菜|中國菜|中国菜)(?:廳|厅)?[ \t]*(?:好吃|推薦|推荐|可以吃)?[嗎吗呢啊？?！!。]*$/;
+
+function isPlainFoodAsk(text: string): boolean {
+  const t = text.trim();
+  return CASUAL_MEAL_QUESTION_RE.test(t) || HUNGER_RE.test(t) || MEAL_ASK_RE.test(t) || PLAIN_CHINESE_FOOD_ASK_RE.test(t);
+}
+
 // Two explicit requests, with the exhibition anchored to the dinner area.
 const DINNER_AND_NEARBY_EXHIBITION_RE =
   /先吃[^。！？?，,]{0,24}(?:中餐|中菜)[，,；;。]\s*(?:飯後|饭后|吃完)[^。！？?]{0,14}附近[^。！？?]{0,16}(?:展覽|展览|免費展|免费展)[^。！？?]{0,10}[？?]$/;
@@ -239,6 +254,9 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     'bbq skewers',
     'skewers',
     CASUAL_MEAL_QUESTION_RE,
+    HUNGER_RE,
+    MEAL_ASK_RE,
+    PLAIN_CHINESE_FOOD_ASK_RE,
     '中午吃什麼',
     '中午吃什么',
     '午餐吃什麼',
@@ -1607,7 +1625,10 @@ export async function fastRespondLcf(
       : { location: null, dishes: [], cuisines: [], categories: [] };
   const location = explicitLocation ?? activeHints.location ?? resolveMemoryLocationHint(memories, lang, allEntries);
 
-  if (isUnmentionedGroup && !location && CASUAL_MEAL_QUESTION_RE.test(cleanedText)) {
+  if (isUnmentionedGroup && !location && isPlainFoodAsk(cleanedText)) {
+    if (HUNGER_RE.test(cleanedText.trim())) {
+      return lang === 'zh-Hans' ? '饿了吗？你在哪一带？我帮你找附近的中餐。' : '餓了嗎？你在哪一帶？我幫你找附近的中餐。';
+    }
     return lang === 'zh-Hans' ? '你在哪一带？我帮你找附近的中餐。' : '你在哪一帶？我幫你找附近的中餐。';
   }
 
@@ -2135,7 +2156,7 @@ export function createLcfGatewayConfig(
           if (isRecentRestaurantHoursFollowup(input.event, input.context)) {
             return { score: 0.95, reason: 'recent_restaurant_hours' };
           }
-          if (model && CASUAL_MEAL_QUESTION_RE.test(input.event.text.trim())) {
+          if (model && isPlainFoodAsk(input.event.text)) {
             return { score: 0.7, reason: 'domain_match' };
           }
           return model?.score(input) ?? { score: heuristicDomainScore(input.event, input.spec, input.context) };
