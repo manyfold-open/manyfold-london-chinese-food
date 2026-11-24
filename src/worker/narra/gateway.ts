@@ -13,7 +13,7 @@
  */
 
 import {
-  createWorkersAiTriageModel,
+  createDefaultTriageModel,
   heuristicDomainScore,
   stripAgentMentions,
   toZhHant,
@@ -2144,9 +2144,8 @@ export function createLcfGatewayConfig(
   return {
     spec: LCF_AGENT_SPEC,
     triageModel: (env) => {
-      const model = env.AI && (env.NARRA_AI_TRIAGE ?? '').trim() !== 'off'
-        ? createWorkersAiTriageModel(env.AI, { model: env.AI_TRIAGE_MODEL })
-        : undefined;
+      // Ask-aware (any language) when NARRA_GROUP_TRIAGE=ask, else the keyword-gated triage.
+      const model = createDefaultTriageModel(env);
       return {
         ...model,
         score: async (input) => {
