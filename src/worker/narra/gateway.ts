@@ -56,9 +56,10 @@ const DINNER_AND_NEARBY_EXHIBITION_RE =
 
 export const LCF_AGENT_SPEC: AgentSpec = {
   matchesIndependentGroupRequest: (text, context) =>
-    DINNER_AND_NEARBY_EXHIBITION_RE.test(text.trim()) &&
-    context.members.some((member) => member.isAgent &&
-      (member.matrixId === '@agent-f9388b28:matrix.netmind.chat' || member.displayName === 'Spotted London')),
+    Boolean(recentFoodLocationQuestion(text, context, Date.now())) ||
+    (DINNER_AND_NEARBY_EXHIBITION_RE.test(text.trim()) &&
+      context.members.some((member) => member.isAgent &&
+        (member.matrixId === '@agent-f9388b28:matrix.netmind.chat' || member.displayName === 'Spotted London'))),
 
   id: LCF_AGENT_ID,
   matrixId: LCF_MATRIX_ID,
@@ -456,6 +457,8 @@ const REFERENCED_HOURS_RE =
 const FOOD_FOLLOWUP_RE =
   /(?:哪一?[間间家個个]|[這这][幾几]?[間间家個个]|地址|菜單|菜单|價格|价格|人均|(?:開到|开到|營業到|营业到)\s*(?:幾點|几点)|幾點(?:開門|开门|關門|关门|營業|营业|打烊)|几点(?:开门|关门|营业|打烊)|開門|开门|怎麼去|怎么去|怎麼走|怎么走|還有|还有|別[間家]|别[间家]|附近|推薦|推荐|辣|素|預算|预算|地鐵|地铁|站近|近一點|近一点|步行|走路|最近|離.{0,5}站|离.{0,5}站|\b(?:which|menu|address|hours|closer|cheaper|another|more|recommend|tube|stations?|walk(?:ing)?|nearest|nearby)\b)/i;
 
+const NAMED_NEARBY_RE = /(?:[離离距]\s*(?:Bank|[A-Za-z][A-Za-z '&-]{4,25})\s*近(?:一[點点])?|\bcloser\s+to\s+[A-Za-z][A-Za-z '&-]{3,25})/i;
+const SHORT_BANK_STATION_RE = /(?:[離离距]\s*bank\b|\bbank\s*(?:station|地[鐵铁]站|站)|\b(?:near|to)\s+bank\b)/i;
 const TUBE_NEAREST_RE = /地鐵|地铁|站近|近一點|近一点|\b(?:tube|stations?|closer|nearest)\b/i;
 
 const QUICK_MEAL_PICK_RE =
@@ -725,7 +728,7 @@ export function extractLocation(text: string, lang: LangCode, entries: readonly 
   // 4. London Tube/rail stations (longest match first to avoid short collisions like "Bank")
   const stationsSorted = [...STATIONS].sort((a, b) => b[0].length - a[0].length);
   for (const [stationName, lat, lng] of stationsSorted) {
-    if (stationName.length < 5) continue;
+    if (stationName.length < 5 && (stationName !== 'Bank' || !SHORT_BANK_STATION_RE.test(text))) continue;
     if (matchKeywordToken(lower, stationName)) {
       return {
         label: stationName,
@@ -1548,7 +1551,13 @@ export async function fastRespondLcf(
 
   const baseLimit = event.isVoice ? 2 : event.chatType === 'group' ? 3 : 5;
   const requestedLimit = parseRequestedLimit(cleanedText);
-  const limit = requestedLimit !== null ? Math.min(baseLimit, requestedLimit) : baseLimit;
+  const locationQuestion = recentFoodLocationQuestion(cleanedText, context, event.timestampMs);
+  const previousFoodQuestion = locationQuestion?.senderId === event.senderId ? locationQuestion : undefined;
+  const effectiveLimit = requestedLimit ?? (previousFoodQuestion ? parseRequestedLimit(previousFoodQuestion.text) : null);
+  const limit = effectiveLimit !== null ? Math.min(baseLimit, effectiveLimit) : baseLimit;
+  if (isUnmentionedGroup && decision.independentGroupReply && locationQuestion && !previousFoodQuestion) {
+    return '[NO_REPLY]';
+  }
 
   // 1. "What's new" queries -> recent verified open places (without marking broadcast watermark)
   if (WHATS_NEW_RE.test(cleanedText) && env.DB) {
@@ -1580,16 +1589,16 @@ export async function fastRespondLcf(
   let cuisines = extractCuisines(cleanedText);
   let categories = extractCategories(cleanedText);
   const explicitLocation = extractLocation(cleanedText, lang, allEntries);
-  const wantsNearestTube = TUBE_NEAREST_RE.test(cleanedText);
+  const wantsNearestTube = TUBE_NEAREST_RE.test(cleanedText) && !(explicitLocation && NAMED_NEARBY_RE.test(cleanedText));
   const isDmFollowup =
     (decision.reason === 'dm' || event.chatType === 'dm') &&
     (FOOD_FOLLOWUP_RE.test(cleanedText) || wantsNearestTube);
 
   const activeHints =
-    decision.reason === 'active_session' || isDmFollowup
+    decision.reason === 'active_session' || previousFoodQuestion || isDmFollowup
       ? resolveActiveSessionHints(
           event,
-          context,
+          previousFoodQuestion && context ? { ...context, recentHistory: [previousFoodQuestion] } : context,
           lang,
           allEntries,
           !explicitLocation,
@@ -1774,7 +1783,7 @@ export async function fastRespondLcf(
 
   // Inherit prior turn's dish/cuisine/category for active-session or DM follow-ups (e.g. "有沒有離地鐵站近一點的？").
   if (
-    (decision.reason === 'active_session' || (isDmFollowup && (!explicitLocation || wantsNearestTube))) &&
+    (decision.reason === 'active_session' || previousFoodQuestion || (isDmFollowup && (!explicitLocation || wantsNearestTube))) &&
     dishes.length === 0 &&
     cuisines.length === 0 &&
     categories.length === 0
@@ -2083,6 +2092,20 @@ export async function resolveLcfA2ACredential(env: Env): Promise<NarraA2ACredent
   return null;
 }
 
+function recentFoodLocationQuestion(text: string, context: RoomContext | undefined, now: number) {
+  if (context?.chatType !== 'group' || !NAMED_NEARBY_RE.test(text) || hasAntiKeywordHit(text)) return undefined;
+  const history = [...context.recentHistory].reverse().filter((turn) => turn.timestampMs <= now);
+  const answerIndex = history.findIndex((turn) => turn.isAgent || turn.isSelf);
+  if (answerIndex < 0) return undefined;
+  const answer = history[answerIndex]!;
+  if (!(answer.isSelf || answer.senderId === LCF_MATRIX_ID) ||
+      now - answer.timestampMs > 180_000 || ![...answer.text.matchAll(PLACE_ID_RE)].length) return undefined;
+  const question = history.slice(answerIndex + 1).find((turn) => !turn.isAgent && !turn.isSelf);
+  if (!question) return undefined;
+  return extractDishes(question.text).length || extractCuisines(question.text).length || extractCategories(question.text).length
+    ? question : undefined;
+}
+
 function isRecentRestaurantHoursFollowup(event: InboundEvent, context: RoomContext): boolean {
   const text = stripMentions(event.text);
   if (event.chatType !== 'group' || !REFERENCED_HOURS_RE.test(text) || hasAntiKeywordHit(text)) return false;
@@ -2106,6 +2129,9 @@ export function createLcfGatewayConfig(
       return {
         ...model,
         score: async (input) => {
+          if (recentFoodLocationQuestion(input.event.text, input.context, input.event.timestampMs)?.senderId === input.event.senderId) {
+            return { score: 0.95, reason: 'recent_food_location' };
+          }
           if (isRecentRestaurantHoursFollowup(input.event, input.context)) {
             return { score: 0.95, reason: 'recent_restaurant_hours' };
           }
