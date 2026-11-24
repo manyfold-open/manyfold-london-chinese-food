@@ -36,6 +36,7 @@ import {
   BaseNarraRoomCoordinator,
   getNarraGatewayStatus,
   kickNarraGateway,
+  handleNarraPushRequest,
 } from '@manyfold/narra-agent-kit/worker';
 import { KINDS, normName, type Kind } from '../shared/kinds';
 import type { IndexEntry, PlaceDoc } from '../shared/place-doc';
@@ -888,8 +889,11 @@ export class NarraRoomCoordinator extends BaseNarraRoomCoordinator<Env> {
 
 export { app };
 
+const mounted = withMount<Env>(app.fetch);
+
 export default {
-  fetch: withMount<Env>(app.fetch),
+  // Synapse wakes the Narra sync Durable Object at /_matrix/push/v1/notify (push mode).
+  fetch: async (request, env, ctx) => (await handleNarraPushRequest(request, env)) ?? mounted(request, env, ctx),
   async scheduled(_controller, env, ctx) {
     const now = new Date();
     ctx.waitUntil(
