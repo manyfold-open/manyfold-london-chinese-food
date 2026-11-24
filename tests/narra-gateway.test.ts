@@ -1076,6 +1076,37 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(findRating(reply!)).toBeNull();
   });
 
+  it('keeps the cuisine and distance origin on a Bank follow-up to a recent restaurant list', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const event = makeEvent({ eventId: '$bank', text: '離 Bank 近一點的有嗎？' });
+    const context: RoomContext = {
+      roomId: event.roomId, chatType: 'group', members: [],
+      peers: [{ matrixId: '@agent-peer:matrix.netmind.chat', displayName: 'Spotted London' }],
+      recentHistory: [
+        { eventId: '$dinner', senderId: event.senderId, isAgent: false,
+          text: '活動先放著，晚上想吃川菜，推薦兩家就好。', timestampMs: event.timestampMs - 2000 },
+        { eventId: '$dinner-answer', senderId: LCF_MATRIX_ID, isAgent: true, isSelf: true,
+          text: 'https://app.manyfold.ai/london-chinese-food/zh/place/rec_lcf_00000000000000000001',
+          timestampMs: event.timestampMs - 1000 },
+      ],
+    };
+    expect(extractLocation(event.text, 'zh-Hant', [])?.label).toBe('Bank');
+    expect(extractLocation('I need to change my bank account', 'en', [])).toBeNull();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(event.timestampMs);
+    try {
+      const decision = await routeEvent(event, context, LCF_AGENT_SPEC, { nowMs: event.timestampMs });
+      expect(decision.independentGroupReply).toBe(true);
+      const reply = await fastRespondLcf(makeEnv(db), event, decision,
+        { userMemories: [], roomMemories: [], promptSafeLines: [] }, context);
+      expect(reply).toContain('Bank');
+      expect(reply).toContain('Soho Sichuan House');
+      expect(reply).not.toContain('Bloomsbury Dumpling House');
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('10. resolves Soho on implicit eating prompt and returns [NO_REPLY] on unmentioned group bottom fallback', async () => {
     const db = createD1();
     await seedSamplePlaces(db);
