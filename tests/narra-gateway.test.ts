@@ -3082,6 +3082,25 @@ describe('plain food asks in a group (zack test, 2026-11-24)', () => {
     expect(await fastRespondLcf(env, event, decision, { userMemories: [], roomMemories: [], promptSafeLines: [] }, context)).toBe(expected);
   });
 
+  it('does not ask "你在哪一帶" again a few minutes after asking it (Netmind London, 2026-11-24)', async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    const env = makeEnv(db);
+    const event = makeEvent({ text: '肚子餓了', chatType: 'group', mentions: [] });
+    const asked = {
+      eventId: '$asked',
+      senderId: LCF_AGENT_SPEC.matrixId,
+      isAgent: true,
+      isSelf: true,
+      text: '餓了嗎？你在哪一帶？我幫你找附近的中餐。',
+      timestampMs: event.timestampMs - 140_000,
+    };
+    const context = { roomId: event.roomId, chatType: 'group' as const, members: [], recentHistory: [asked] };
+    const decision = await routeEvent(event, { ...context, recentHistory: [] }, LCF_AGENT_SPEC);
+    const reply = await fastRespondLcf(env, event, decision, { userMemories: [], roomMemories: [], promptSafeLines: [] }, context);
+    expect(reply ?? '').not.toContain('你在哪一帶');
+  });
+
   it.each(['今天 AI 圈有啥新聞', '有啥新聞可以看', '晚上可以幹嘛', '昨天吃火鍋超爽', '我吃飽了', '剛剛付了100磅'])(
     'does not claim "%s"',
     async (text) => {
