@@ -3089,7 +3089,7 @@ describe('plain food asks in a group (zack test, 2026-11-24)', () => {
     const event = makeEvent({ text: '肚子餓了', chatType: 'group', mentions: [] });
     const asked = {
       eventId: '$asked',
-      senderId: LCF_AGENT_SPEC.matrixId,
+      senderId: LCF_AGENT_SPEC.matrixId ?? '@agent-b2b526f3:matrix.netmind.chat',
       isAgent: true,
       isSelf: true,
       text: '餓了嗎？你在哪一帶？我幫你找附近的中餐。',
