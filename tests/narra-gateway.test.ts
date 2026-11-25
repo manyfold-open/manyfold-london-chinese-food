@@ -20,6 +20,7 @@ import workerDefault, {
 } from '../src/worker/index';
 import {
   buildLcfExtraEnvelopeFields,
+  buildLcfV2SearchFields,
   createLcfGatewayConfig,
   extractLocation,
   fastRespondLcf,
@@ -3112,4 +3113,106 @@ describe('plain food asks in a group (zack test, 2026-11-24)', () => {
       expect((await routeEvent(event, context, LCF_AGENT_SPEC)).shouldReply).toBe(false);
     },
   );
+});
+
+describe('chat-native (v2) prefetch in zack test', () => {
+  const ZACK_TEST = '!ttLCzSZsdFiPSEPDyO:matrix.netmind.chat';
+  const emptyMem: RecallTurnResult = { userMemories: [], roomMemories: [], promptSafeLines: [] };
+  const v2Vars = { NARRA_PIPELINE: 'v2', NARRA_PIPELINE_ROOMS: ZACK_TEST } as Partial<Env>;
+  const dec = (lang: TriageDecision['detectedLang'] = 'zh-Hant'): TriageDecision => ({
+    shouldReply: true,
+    tier: 1,
+    reason: 'v2_relevant',
+    confidence: 0.9,
+    detectedLang: lang,
+    shouldQuote: false,
+  });
+  const turn = (text: string, agoMs: number, now: number, self = false) => ({
+    eventId: `$t${agoMs}`,
+    senderId: self ? LCF_MATRIX_ID : '@alice:matrix.netmind.chat',
+    senderName: self ? 'London Chinese Food' : 'Alice',
+    isAgent: self,
+    isSelf: self,
+    text,
+    timestampMs: now - agoMs,
+  });
+  const setup = async () => {
+    const db = createD1();
+    await seedSamplePlaces(db);
+    return makeEnv(db, v2Vars);
+  };
+
+  it('looks up a cuisine near a station with distance, nearest station and walking minutes', async () => {
+    const env = await setup();
+    const event = makeEvent({ roomId: ZACK_TEST, text: 'Holborn 附近有好吃的拉麵嗎' });
+    const ctx: RoomContext = { roomId: ZACK_TEST, chatType: 'group', members: [], recentHistory: [] };
+    const extra = await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx);
+    expect(extra?.d1_search_context).toContain('location: Holborn, from this message');
+    expect(extra?.d1_search_context).toContain('noodles');
+    expect(extra?.d1_matching_places).toContain('Soho Sichuan House');
+    expect(extra?.d1_matching_places).toMatch(/km \/ ~\d+ min walk from Holborn/);
+    expect(extra?.d1_matching_places).toMatch(/nearest station [A-Za-z' ]+ ~\d+ min walk/);
+    expect(extra?.d1_matching_places).not.toContain('Closed Canary Tea');
+    expect(findRating(extra?.d1_matching_places ?? '')).toBeNull();
+  });
+
+  it('takes the dish from the same person\'s earlier message when they answer with a place', async () => {
+    const env = await setup();
+    const event = makeEvent({ roomId: ZACK_TEST, text: 'Goodge Street' });
+    const now = event.timestampMs;
+    const ctx: RoomContext = {
+      roomId: ZACK_TEST,
+      chatType: 'group',
+      members: [],
+      recentHistory: [turn('想吃小籠包', 60_000, now), turn('你在哪一帶？', 30_000, now, true)],
+    };
+    const extra = await buildLcfV2SearchFields(env, event, dec(), emptyMem, ctx);
+    expect(extra?.d1_search_context).toContain("from the sender's earlier message");
+    expect(extra?.d1_matching_places).toContain('Bloomsbury Dumpling House');
+    expect(extra?.d1_matching_places).toContain('£8.50');
+    expect(extra?.d1_matching_places).toContain('from Goodge Street');
+  });
+
+  it('takes the place from the same person\'s earlier message on a plain hunger ask', async () => {
+    const env = await setup();
+    const event = makeEvent({ roomId: ZACK_TEST, text: '肚子餓了' });
+    const now = event.timestampMs;
+    const ctx: RoomContext = {
+      roomId: ZACK_TEST,
+      chatType: 'group',
+      members: [],
+      recentHistory: [turn('我在 Goodge Street', 120_000, now)],
+    };
+    const extra = await buildLcfV2SearchFields(env, event, dec(), emptyMem, ctx);
+    expect(extra?.d1_search_context).toContain("location: Goodge Street, from the sender's earlier message");
+    expect(extra?.d1_matching_places).toContain('Bloomsbury Dumpling House');
+
+    // Another person's place is not theirs.
+    const other = { ...ctx, recentHistory: [{ ...ctx.recentHistory[0]!, senderId: '@bob:matrix.netmind.chat' }] };
+    const unknown = await buildLcfV2SearchFields(env, event, dec(), emptyMem, other);
+    expect(unknown?.d1_search_context).toContain('location: unknown');
+    expect(unknown?.d1_matching_places).toBeUndefined();
+  });
+
+  it('keeps a requested number of places', async () => {
+    const env = await setup();
+    const event = makeEvent({ roomId: ZACK_TEST, text: '中國城附近推薦1間中餐' });
+    const ctx: RoomContext = { roomId: ZACK_TEST, chatType: 'group', members: [], recentHistory: [] };
+    const extra = await buildLcfV2SearchFields(env, event, dec(), emptyMem, ctx);
+    expect(extra?.d1_search_context).toContain('requested number of places: 1');
+    expect((extra?.d1_matching_places ?? '').match(/\[rec_/g)?.length).toBe(1);
+  });
+
+  it('leaves v1 rooms (Netmind London) as before', async () => {
+    const env = await setup();
+    const event = makeEvent({ text: 'Holborn 附近有好吃的拉麵嗎' });
+    const ctx: RoomContext = { roomId: event.roomId, chatType: 'group', members: [], recentHistory: [] };
+    expect(await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx)).toBeNull();
+  });
+
+  it('configures v2 wake examples', () => {
+    const examples = createLcfGatewayConfig().v2?.wakeExamples ?? [];
+    expect(examples.length).toBeGreaterThanOrEqual(10);
+    expect(examples).toContain('晚餐吃啥好');
+  });
 });
