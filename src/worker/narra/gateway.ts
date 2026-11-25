@@ -15,7 +15,6 @@
 import {
   createDefaultTriageModel,
   heuristicDomainScore,
-  pipelineForRoom,
   stripAgentMentions,
   toZhHant,
   type AgentSpec,
@@ -2312,11 +2311,12 @@ export async function buildLcfExtraEnvelopeFields(
   decision: TriageDecision,
   memories: RecallTurnResult,
   context: RoomContext,
+  info?: { pipeline: 'v1' | 'v2' },
 ): Promise<Record<string, string> | null> {
   if (!env.DB) return null;
-  // v1 rooms: fastRespond already answered every search, so only the places just mentioned.
+  // v1 turns: fastRespond already answered every search, so only the places just mentioned.
   const search =
-    pipelineForRoom(env, event.roomId) === 'v2'
+    info?.pipeline === 'v2'
       ? await buildLcfV2SearchFields(env, event, decision, memories, context).catch(() => null)
       : null;
   const ids = extractRecentPlaceIds(context, 4);
@@ -2425,6 +2425,16 @@ export function createLcfGatewayConfig(
         'Any good Chinese food near Liverpool Street?',
         "I'm starving, where should we eat tonight?",
         'Where can I get spicy Sichuan food in London?',
+      ],
+      // Other agents' requests in the same rooms: closer to these than to the food profile, no wake.
+      notExamples: [
+        '這週末有什麼快閃活動？',
+        'Things to do in Covent Garden tonight?',
+        '周末有什么市集可以逛',
+        '今天有什麼 AI 新聞？',
+        "What's the latest AI news?",
+        '幫我抽一張塔羅牌',
+        '我想求個籤看看運勢',
       ],
     },
     ...overrides,
