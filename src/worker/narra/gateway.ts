@@ -1567,6 +1567,14 @@ export async function fastRespondLcf(
   }
 
   const isMultiMention = decision.reason === 'multi_mention_domain_match';
+  if (isUnmentionedGroup && /^(?:在|去|near\s+)?[A-Za-z][A-Za-z '\-]{1,40}(?:附近|一帶|一带|周邊|周边)?[。.!！\s]*$/i.test(cleanedText.trim())) {
+    const previous = [...(context?.recentHistory ?? [])]
+      .filter((turn) => turn.eventId !== event.eventId && turn.timestampMs <= event.timestampMs)
+      .sort((a, b) => b.timestampMs - a.timestampMs)[0];
+    if (previous?.isAgent && !previous.isSelf && previous.senderId !== LCF_MATRIX_ID &&
+        event.timestampMs - previous.timestampMs <= 180_000) return '[NO_REPLY]';
+  }
+
   const hasAntiHit = hasAntiKeywordHit(cleanedText);
 
   const baseLimit = event.isVoice ? 2 : event.chatType === 'group' ? 3 : 5;

@@ -524,6 +524,15 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     expect(await fastRespondLcf(env, dinner, dinnerDecision, emptyMem, dinnerContext))
       .toBe('你在哪一帶？我幫你找附近的中餐。');
 
+    const areaAnswer = makeEvent({ text: 'Soho 附近' });
+    const peerContext: RoomContext = {
+      roomId: areaAnswer.roomId, chatType: 'group', members: [],
+      recentHistory: [{ eventId: '$spotted', senderId: '@agent-f9388b28:matrix.netmind.chat',
+        isAgent: true, timestampMs: areaAnswer.timestampMs - 1000, text: '你下班后想去哪一带？' }],
+    };
+    const areaDecision = { ...dinnerDecision, shouldReply: true, reason: 'active_session' };
+    expect(await fastRespondLcf(env, areaAnswer, areaDecision, emptyMem, peerContext)).toBe('[NO_REPLY]');
+
     const sichuan = makeEvent({
       text: '@London Chinese Food Soho 晚上有什麼川菜推薦？',
       mentions: [LCF_MATRIX_ID],
