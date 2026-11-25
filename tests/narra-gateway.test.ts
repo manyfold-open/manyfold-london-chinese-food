@@ -533,6 +533,9 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
     const areaDecision = { ...dinnerDecision, shouldReply: true, reason: 'active_session' };
     expect(await fastRespondLcf(env, areaAnswer, areaDecision, emptyMem, peerContext)).toBe('[NO_REPLY]');
 
+    const freeAnswer = makeEvent({ text: '太贵了，有免费的吗？' });
+    expect(await fastRespondLcf(env, freeAnswer, areaDecision, emptyMem, peerContext)).toBe('[NO_REPLY]');
+
     const sichuan = makeEvent({
       text: '@London Chinese Food Soho 晚上有什麼川菜推薦？',
       mentions: [LCF_MATRIX_ID],

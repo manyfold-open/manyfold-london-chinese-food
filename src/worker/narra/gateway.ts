@@ -1567,7 +1567,7 @@ export async function fastRespondLcf(
   }
 
   const isMultiMention = decision.reason === 'multi_mention_domain_match';
-  if (isUnmentionedGroup && /^(?:在|去|near\s+)?[A-Za-z][A-Za-z '\-]{1,40}(?:附近|一帶|一带|周邊|周边)?[。.!！\s]*$/i.test(cleanedText.trim())) {
+  if (isUnmentionedGroup && (/^(?:太貴了|太贵了|有點貴|有点贵)[，,\s]*(?:有)?(?:免費|免费)(?:的|嗎|吗|呢|的嗎|的吗)?[？?。.!！\s]*$/i.test(cleanedText.trim()) || /^(?:在|去|near\s+)?[A-Za-z][A-Za-z '\-]{1,40}(?:附近|一帶|一带|周邊|周边)?[。.!！\s]*$/i.test(cleanedText.trim()))) {
     const previous = [...(context?.recentHistory ?? [])]
       .filter((turn) => turn.eventId !== event.eventId && turn.timestampMs <= event.timestampMs)
       .sort((a, b) => b.timestampMs - a.timestampMs)[0];
