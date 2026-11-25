@@ -1013,6 +1013,9 @@ export interface RecentOpenPlaceUpdate {
  * Queries newly verified open places from D1 after `sinceIso`, strictly preserving
  * the no-ratings invariant (no stars, scores, or quality rankings).
  */
+const ASKED_AREA_RE = /你在哪一[帶带]/;
+const ASKED_AREA_WINDOW_MS = 15 * 60_000;
+
 export async function queryRecentOpenPlaceUpdates(
   env: Pick<Env, 'DB'>,
   sinceIso: string,
@@ -1635,7 +1638,15 @@ export async function fastRespondLcf(
       : { location: null, dishes: [], cuisines: [], categories: [] };
   const location = explicitLocation ?? activeHints.location ?? resolveMemoryLocationHint(memories, lang, allEntries);
 
-  if (isUnmentionedGroup && !location && isPlainFoodAsk(cleanedText)) {
+  // Asked "你在哪一帶" a moment ago and got no area: don't ask again, suggest open places instead.
+  const askedAreaRecently = (context?.recentHistory ?? []).some(
+    (turn) =>
+      turn.isSelf &&
+      event.timestampMs - turn.timestampMs < ASKED_AREA_WINDOW_MS &&
+      turn.timestampMs <= event.timestampMs &&
+      ASKED_AREA_RE.test(turn.text ?? ''),
+  );
+  if (isUnmentionedGroup && !location && isPlainFoodAsk(cleanedText) && !askedAreaRecently) {
     if (HUNGER_RE.test(cleanedText.trim())) {
       return lang === 'zh-Hans' ? '饿了吗？你在哪一带？我帮你找附近的中餐。' : '餓了嗎？你在哪一帶？我幫你找附近的中餐。';
     }
