@@ -15,6 +15,7 @@
 import {
   createDefaultTriageModel,
   heuristicDomainScore,
+  pipelineForRoom,
   stripAgentMentions,
   toZhHant,
   type AgentSpec,
@@ -1525,6 +1526,27 @@ async function respondForDishQuery(
   return lines.join('\n');
 }
 
+/** Places whose name (English or Chinese) appears in the message, or null when the text is too short to look up. */
+function matchPlacesByName(cleanedText: string, allEntries: readonly IndexEntry[]): IndexEntry[] | null {
+  const nameQuery = cleanedText
+    .replace(/^(?:請問|请问|幫我查|帮我查|想問|想问)\s*/u, '')
+    .replace(/(?:where is|tell me about|menu of|address of|在哪里|在哪裡|怎麼去|怎么去|菜單|菜单|地址)/gi, '')
+    .replace(/(?:^[的\s?？!！。.,，、:：]+|[的\s?？!！。.,，、:：]+$)/g, '')
+    .trim();
+  if (nameQuery.length < 2) return null;
+  const normalizedQuery = toZhHant(nameQuery);
+  return allEntries.filter(
+    (e) =>
+      (e.n && e.n.toLowerCase().includes(nameQuery.toLowerCase())) ||
+      (e.z &&
+        (e.z.includes(nameQuery) ||
+          toZhHant(e.z).includes(nameQuery) ||
+          e.z.includes(normalizedQuery) ||
+          toZhHant(e.z).includes(normalizedQuery))) ||
+      (nameQuery.length >= 4 && matchesText(e, nameQuery)),
+  );
+}
+
 /**
  * Fast D1-backed responder for London Chinese Food (`lcf-guide`).
  * Returns `null` when Manyfold A2A should handle the turn.
@@ -1675,23 +1697,8 @@ export async function fastRespondLcf(
 
   // 3. Direct place name lookup (if user named a specific restaurant/shop in D1)
   let hasNameMatches = false;
-  const nameQuery = cleanedText
-    .replace(/^(?:請問|请问|幫我查|帮我查|想問|想问)\s*/u, '')
-    .replace(/(?:where is|tell me about|menu of|address of|在哪里|在哪裡|怎麼去|怎么去|菜單|菜单|地址)/gi, '')
-    .replace(/(?:^[的\s?？!！。.,，、:：]+|[的\s?？!！。.,，、:：]+$)/g, '')
-    .trim();
-  if (nameQuery.length >= 2) {
-    const normalizedQuery = toZhHant(nameQuery);
-    const nameMatches = allEntries.filter(
-      (e) =>
-        (e.n && e.n.toLowerCase().includes(nameQuery.toLowerCase())) ||
-        (e.z &&
-          (e.z.includes(nameQuery) ||
-            toZhHant(e.z).includes(nameQuery) ||
-            e.z.includes(normalizedQuery) ||
-            toZhHant(e.z).includes(normalizedQuery))) ||
-        (nameQuery.length >= 4 && matchesText(e, nameQuery)),
-    );
+  const nameMatches = matchPlacesByName(cleanedText, allEntries);
+  if (nameMatches) {
     hasNameMatches = nameMatches.length > 0;
     if (nameMatches.length === 1) {
       const doc = await loadPlaceDocOrSynthesize(env.DB, nameMatches[0]!.id);
@@ -2092,30 +2099,242 @@ function formatPrefetchedPlaceDoc(env: Pick<Env, 'PUBLIC_URL'>, doc: PlaceDoc, l
   return parts.join(' · ');
 }
 
-export async function buildLcfExtraEnvelopeFields(
+/* ───────── chat-native (v2) prefetch ───────── */
+
+const MAX_SEARCH_PREFETCH_CHARS = 1_800;
+const V2_SEARCH_RESULTS = 5;
+/** How far back an earlier message may supply the place or the dish for this ask. */
+const V2_CONTEXT_WINDOW_MS = 15 * 60_000;
+
+function searchLine(
+  env: Pick<Env, 'PUBLIC_URL'>,
+  entry: IndexEntry,
+  lang: LangCode,
+  extra: { distKm?: number; from?: string; dish?: string },
+): string {
+  const name = [entry.n, entry.z ? localizeZh(entry.z, lang) : null].filter(Boolean).join(' / ') || entry.id;
+  const what = entry.k.length > 0 ? entry.k.slice(0, 3).join(', ') : entry.c;
+  const parts = [`[${entry.id}] ${name} (${what}; ${entry.pc ?? entry.o ?? 'no postcode'})`];
+  if (extra.dish) parts.push(extra.dish);
+  if (extra.distKm !== undefined) {
+    parts.push(`${extra.distKm.toFixed(1)} km / ~${walkMinutes(extra.distKm)} min walk${extra.from ? ` from ${extra.from}` : ''}`);
+  }
+  const station = nearestStationForEntry(entry);
+  if (station) parts.push(`nearest station ${station.name} ~${walkMinutes(station.km)} min walk`);
+  parts.push(placeUrl(env, lang, entry.id, entry.s));
+  return parts.join(' · ');
+}
+
+/**
+ * In chat-native (v2) rooms fastRespond does not run: the Manyfold brain writes every reply. This
+ * gives it what fastRespond used to look up in D1 for the newest message, so it can answer without
+ * a tool call: the place (this message, the sender's earlier messages, or memory), dish / cuisine /
+ * category, matching open places nearest first with nearest station and walking minutes, places
+ * named in the message, new places, and a requested number of picks. It only reuses the existing
+ * place, station, campus, dish and cuisine vocabularies; deciding what the person meant is the brain's.
+ */
+export async function buildLcfV2SearchFields(
   env: Env,
-  _event: InboundEvent,
+  event: InboundEvent,
   decision: TriageDecision,
-  _memories: RecallTurnResult,
+  memories: RecallTurnResult,
   context: RoomContext,
 ): Promise<Record<string, string> | null> {
   if (!env.DB) return null;
+  const lang = decision.detectedLang;
+  const text = stripMentions(event.text ?? '');
+  if (!text) return null;
+
+  const allEntries = await loadPublicEntries(env.DB);
+  const openEntries = allEntries.filter((e) => e.t === 'open');
+
+  let dishes = extractDishes(text);
+  let cuisines = extractCuisines(text);
+  let categories = extractCategories(text);
+  let location = extractLocation(text, lang, allEntries);
+  let locationSource = location ? 'this message' : '';
+  let topicSource = dishes.length || cuisines.length || categories.length ? 'this message' : '';
+
+  // An answer like "Holborn" to "where are you?": the dish or the area came in the same person's
+  // earlier message. Other people's places are not theirs; the brain still sees the whole chat.
+  const recentContext: RoomContext = {
+    ...context,
+    recentHistory: (context.recentHistory ?? []).filter(
+      (t) =>
+        !t.isAgent &&
+        t.senderId === event.senderId &&
+        t.timestampMs <= event.timestampMs &&
+        event.timestampMs - t.timestampMs <= V2_CONTEXT_WINDOW_MS,
+    ),
+  };
+  const needTopic = !topicSource;
+  const hints = resolveActiveSessionHints(event, recentContext, lang, allEntries, !location, needTopic);
+  if (!location && hints.location) {
+    location = hints.location;
+    locationSource = "the sender's earlier message";
+  }
+  if (needTopic && (hints.dishes.length || hints.cuisines.length || hints.categories.length)) {
+    dishes = hints.dishes;
+    cuisines = hints.cuisines;
+    categories = hints.categories;
+    topicSource = "the sender's earlier message";
+  }
+  if (!location) {
+    location = resolveMemoryLocationHint(memories, lang, allEntries);
+    if (location) locationSource = "the sender's saved memory";
+  }
+
+  const senderEarlier = recentContext.recentHistory.filter((t) => t.eventId !== event.eventId).reverse();
+  const requestedLimit =
+    parseRequestedLimit(text) ??
+    senderEarlier.map((t) => parseRequestedLimit(stripMentions(t.text))).find((n) => n !== null) ??
+    null;
+  const count = Math.min(V2_SEARCH_RESULTS, requestedLimit ?? V2_SEARCH_RESULTS);
+
+  const fields: Record<string, string> = {};
+  const label = location ? localizeZh(location.label, lang) : '';
+  const from = location?.point ? label : undefined;
+  const lines: string[] = [];
+  let heading = '';
+
+  if (dishes.length > 0) {
+    const dish = dishes[0]!;
+    const servedAt = await findPlacesServingDish(env.DB, dish, openEntries);
+    let ranked = servedAt.map((item) => ({
+      ...item,
+      distKm:
+        location?.point && item.entry.la !== null && item.entry.lo !== null
+          ? distanceKm(location.point, { lat: item.entry.la, lng: item.entry.lo })
+          : undefined,
+    }));
+    if (location?.point) {
+      const local = ranked.filter((r) => r.distKm !== undefined && r.distKm <= Math.max(location!.km ?? 1.5, 3.5));
+      if (local.length > 0) ranked = local;
+      ranked.sort((a, b) => (a.distKm ?? 999) - (b.distKm ?? 999));
+    } else {
+      ranked.sort((a, b) => b.entry.r + b.entry.m - (a.entry.r + a.entry.m));
+    }
+    heading = `Open places serving ${dish.en} (${dish.zh})${from ? `, nearest to ${from} first` : ''}`;
+    for (const item of ranked.slice(0, count)) {
+      const dishNote =
+        item.via === 'menu' && item.itemName ? `menu: ${item.itemName} ${formatPricePence(item.pricePence)}`.trim() : undefined;
+      lines.push(searchLine(env, item.entry, lang, { distKm: item.distKm, from, dish: dishNote }));
+    }
+  }
+
+  if (lines.length === 0 && (location || cuisines.length > 0 || categories.length > 0)) {
+    let matches: Array<{ entry: IndexEntry; distKm?: number }> = [];
+    if (location?.point) {
+      const point = location.point;
+      const filterNearby = (radius: number, useCategories: boolean) =>
+        placesNear(openEntries, point, radius).filter(
+          (n) =>
+            (!cuisines.length || cuisines.some((c) => n.entry.k.includes(c))) &&
+            (!useCategories || !categories.length || categories.includes(n.entry.c)),
+        );
+      let nearby = filterNearby(location.km ?? 1.5, true);
+      if (nearby.length === 0) nearby = filterNearby(3.5, true);
+      if (nearby.length === 0 && cuisines.length > 0 && categories.length > 0) nearby = filterNearby(3.5, false);
+      matches = nearby.map((n) => ({ entry: n.entry, distKm: n.km }));
+    } else {
+      let filtered = queryPlaces(openEntries, {
+        ...(location?.postcode ? { postcode: location.postcode } : {}),
+        ...(cuisines.length ? { cuisines } : {}),
+        ...(categories.length ? { categories } : {}),
+        openOnly: true,
+        sort: 'recent',
+      });
+      if (filtered.length === 0 && cuisines.length > 0 && categories.length > 0) {
+        filtered = queryPlaces(openEntries, {
+          ...(location?.postcode ? { postcode: location.postcode } : {}),
+          cuisines,
+          openOnly: true,
+          sort: 'recent',
+        });
+      }
+      matches = filtered.map((entry) => ({ entry }));
+    }
+    // A plain "somewhere to eat near X" means a meal: shops and drinks only if nothing else is there.
+    if (!cuisines.length && !categories.length) {
+      const meals = matches.filter((m) => !isNonMealEntry(m.entry));
+      if (meals.length > 0) matches = meals;
+    }
+    const topic = [...cuisines, ...categories].join(', ');
+    heading = `Open places${topic ? ` for ${topic}` : ''}${label ? ` near ${label}` : ''}${from ? ', nearest first' : ''}`;
+    for (const m of matches.slice(0, count)) lines.push(searchLine(env, m.entry, lang, { distKm: m.distKm, from }));
+  }
+
+  if (lines.length === 0) {
+    const named = (matchPlacesByName(text, allEntries) ?? []).slice(0, 3);
+    if (named.length > 0) {
+      heading = 'Places on the site whose name is in the message';
+      const docs = await Promise.all(named.map((e) => loadPlaceDocOrSynthesize(env.DB, e.id).catch(() => null)));
+      for (const doc of docs) if (doc) lines.push(formatPrefetchedPlaceDoc(env, doc, lang));
+    }
+  }
+
+  if (lines.length === 0 && WHATS_NEW_RE.test(text)) {
+    const recent = await queryRecentOpenPlaceUpdates(env, '', Math.min(count, 3));
+    if (recent.length > 0) {
+      fields.d1_new_places = formatPlaceUpdatesMessage(env, recent, lang);
+    }
+  }
+
+  const facts: string[] = [];
+  facts.push(
+    location
+      ? `location: ${label}${location.postcode && location.postcode !== label ? ` (${location.postcode})` : ''}, from ${locationSource}`
+      : 'location: unknown (not in this message, the sender\'s recent messages, or memory)',
+  );
+  if (topicSource) {
+    const topic = [...dishes.map((d) => `${d.en} (${d.zh})`), ...cuisines, ...categories].join(', ');
+    facts.push(`asked for: ${topic}, from ${topicSource}`);
+  }
+  if (requestedLimit !== null) facts.push(`requested number of places: ${requestedLimit}`);
+  facts.push('spice level of dishes is not recorded on the site; if asked for mild or spicy food, say it is unverified');
+  fields.d1_search_context = facts.join('; ');
+
+  if (lines.length > 0) {
+    const combined = [`${heading}:`, ...lines].join('\n');
+    fields.d1_matching_places =
+      combined.length <= MAX_SEARCH_PREFETCH_CHARS
+        ? combined
+        : `${combined.slice(0, MAX_SEARCH_PREFETCH_CHARS - 1).trimEnd()}…`;
+  } else if (topicSource || location) {
+    fields.d1_matching_places = `No open place on the site matches this yet. Suggest-a-place link: ${contributeUrl(env, lang)}`;
+  }
+  return fields;
+}
+
+export async function buildLcfExtraEnvelopeFields(
+  env: Env,
+  event: InboundEvent,
+  decision: TriageDecision,
+  memories: RecallTurnResult,
+  context: RoomContext,
+): Promise<Record<string, string> | null> {
+  if (!env.DB) return null;
+  // v1 rooms: fastRespond already answered every search, so only the places just mentioned.
+  const search =
+    pipelineForRoom(env, event.roomId) === 'v2'
+      ? await buildLcfV2SearchFields(env, event, decision, memories, context).catch(() => null)
+      : null;
   const ids = extractRecentPlaceIds(context, 4);
-  if (ids.length === 0) return null;
+  if (ids.length === 0) return search;
 
   await ensureSchema(env.DB);
   const docs = await Promise.all(ids.map((id) => loadPlaceDocOrSynthesize(env.DB, id).catch(() => null)));
   const lines = docs
     .filter((d): d is PlaceDoc => d !== null)
     .map((d) => formatPrefetchedPlaceDoc(env, d, decision.detectedLang));
-  if (lines.length === 0) return null;
+  if (lines.length === 0) return search;
 
   const combined = lines.join('\n');
   const trimmed =
     combined.length <= MAX_PREFETCH_CHARS
       ? combined
       : `${combined.slice(0, MAX_PREFETCH_CHARS - 1).trimEnd()}…`;
-  return { d1_prefetched_records: trimmed };
+  return { ...(search ?? {}), d1_prefetched_records: trimmed };
 }
 
 export const lcfThinkingMessage = (lang: LangCode): string =>
@@ -2189,6 +2408,25 @@ export function createLcfGatewayConfig(
     buildExtraEnvelopeFields: buildLcfExtraEnvelopeFields,
     thinkingMessage: lcfThinkingMessage,
     enableA2AFailureReply: true,
+    // Chat-native pipeline (rooms in NARRA_PIPELINE_ROOMS): example asks, in any language, that the
+    // relevance scorer compares group messages with instead of keyword lists. fastRespond does not
+    // run there; buildExtraEnvelopeFields hands the brain the D1 places instead.
+    v2: {
+      wakeExamples: [
+        '肚子餓了',
+        '晚餐吃啥好',
+        '今晚吃什么？',
+        'Holborn 附近有好吃的拉麵嗎',
+        'UCL 附近有什麼川菜推薦',
+        '唐人街哪里有好吃的点心？',
+        '想吃火鍋，King’s Cross 附近有嗎',
+        '这家店几点关门？',
+        '有沒有不辣的中餐可以帶朋友去',
+        'Any good Chinese food near Liverpool Street?',
+        "I'm starving, where should we eat tonight?",
+        'Where can I get spicy Sichuan food in London?',
+      ],
+    },
     ...overrides,
   };
 }

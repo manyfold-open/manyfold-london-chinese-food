@@ -50,7 +50,8 @@
   "images": {
     "binding": "IMAGES"
   },
-  // Workers AI binding for semantic unmentioned group triage in @manyfold/narra-agent-kit.
+  // Workers AI binding for semantic unmentioned group triage in @manyfold/narra-agent-kit, and
+  // the v2 wake gate's relevance embeddings (NARRA_PIPELINE below).
   "ai": {
     "binding": "AI"
   },
@@ -90,6 +91,11 @@
     // Group triage that works in any language, plus the elected fallback so a real question nobody
     // claims still gets one answer (narra-agent-kit README, "Group triage ..."). Unset to go back.
     "NARRA_GROUP_TRIAGE": "ask",
+    // Chat-native (v2) pipeline from narra-agent-kit, only in the rooms listed: "zack test".
+    // Every other room (Netmind London included) keeps the v1 pipeline and fastRespond.
+    // Set NARRA_PIPELINE to "v1" to switch it off.
+    "NARRA_PIPELINE": "v2",
+    "NARRA_PIPELINE_ROOMS": "!ttLCzSZsdFiPSEPDyO:matrix.netmind.chat",
     "NARRA_PUSH_URL": "https://manyfold-london-chinese-food.netmind-ai.workers.dev",
     "NARRA_AGENT_ID": "agt_agq657lc2b6qhffpaymugpmzsy",
     "NARRA_MATRIX_ID": "@agent-b2b526f3:matrix.netmind.chat"
