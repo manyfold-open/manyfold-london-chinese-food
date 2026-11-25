@@ -302,6 +302,8 @@ export const LCF_AGENT_SPEC: AgentSpec = {
     'coupons',
     'promo code',
     'discount code',
+    '優惠',
+    '优惠',
     '優惠碼',
     '优惠码',
     '折扣碼',

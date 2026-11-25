@@ -501,6 +501,7 @@ describe('manyfold-london-chinese-food Narra gateway', () => {
       'Draw a tarot card for my career please',
       '幫我求一籤看看今天運勢',
       'Any Boots voucher code or promo code?',
+      'Boots 有什么非学生也能用的护肤优惠？',
       'What is today AI news in AI in 5?',
       'We paid £80 at a restaurant in London, split 4 ways',
       'What pop-up market is on in London this weekend?',
