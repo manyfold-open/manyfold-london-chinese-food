@@ -3146,7 +3146,7 @@ describe('chat-native (v2) prefetch in zack test', () => {
     const env = await setup();
     const event = makeEvent({ roomId: ZACK_TEST, text: 'Holborn 附近有好吃的拉麵嗎' });
     const ctx: RoomContext = { roomId: ZACK_TEST, chatType: 'group', members: [], recentHistory: [] };
-    const extra = await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx);
+    const extra = await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx, { pipeline: 'v2' });
     expect(extra?.d1_search_context).toContain('location: Holborn, from this message');
     expect(extra?.d1_search_context).toContain('noodles');
     expect(extra?.d1_matching_places).toContain('Soho Sichuan House');
@@ -3203,10 +3203,11 @@ describe('chat-native (v2) prefetch in zack test', () => {
     expect((extra?.d1_matching_places ?? '').match(/\[rec_/g)?.length).toBe(1);
   });
 
-  it('leaves v1 rooms (Netmind London) as before', async () => {
+  it('leaves v1 turns (Netmind London) as before', async () => {
     const env = await setup();
     const event = makeEvent({ text: 'Holborn 附近有好吃的拉麵嗎' });
     const ctx: RoomContext = { roomId: event.roomId, chatType: 'group', members: [], recentHistory: [] };
+    expect(await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx, { pipeline: 'v1' })).toBeNull();
     expect(await buildLcfExtraEnvelopeFields(env, event, dec(), emptyMem, ctx)).toBeNull();
   });
 
@@ -3214,5 +3215,6 @@ describe('chat-native (v2) prefetch in zack test', () => {
     const examples = createLcfGatewayConfig().v2?.wakeExamples ?? [];
     expect(examples.length).toBeGreaterThanOrEqual(10);
     expect(examples).toContain('晚餐吃啥好');
+    expect(createLcfGatewayConfig().v2?.notExamples?.length).toBeGreaterThanOrEqual(6);
   });
 });
